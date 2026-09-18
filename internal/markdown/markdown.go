@@ -1,0 +1,177 @@
+package markdown
+
+import (
+	"bytes"
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"historic/internal/domain"
+
+	"github.com/yuin/goldmark"
+	"gopkg.in/yaml.v3"
+)
+
+var (
+	ErrMissingFrontmatter = errors.New("missing frontmatter")
+	ErrInvalidFrontmatter = errors.New("invalid frontmatter")
+)
+
+const dateLayout = "2006-01-02"
+
+// Document is a Markdown document with validated frontmatter and body.
+type Document struct {
+	Frontmatter domain.Frontmatter
+	Body        string
+}
+
+// Parse decodes a Markdown document from UTF-8 bytes.
+func Parse(path string, input []byte) (Document, error) {
+	if !utf8Valid(input) {
+		return Document{}, documentError(path, "encoding", errors.New("file is not valid UTF-8"))
+	}
+	frontmatter, body, err := splitFrontmatter(input)
+	if err != nil {
+		return Document{}, documentError(path, "frontmatter", err)
+	}
+
+	var metadata domain.Frontmatter
+	if err := yaml.Unmarshal(frontmatter, &metadata); err != nil {
+		return Document{}, documentError(path, "frontmatter", fmt.Errorf("%w: %v", ErrInvalidFrontmatter, err))
+	}
+	if err := ValidateFrontmatter(metadata); err != nil {
+		return Document{}, documentError(path, "metadata", err)
+	}
+	return Document{Frontmatter: metadata, Body: body}, nil
+}
+
+// ParseFile reads and parses a Markdown document from disk.
+func ParseFile(path string) (Document, error) {
+	input, err := os.ReadFile(path)
+	if err != nil {
+		return Document{}, fmt.Errorf("%s: read: %w", path, err)
+	}
+	return Parse(path, input)
+}
+
+// ValidateFrontmatter checks all required and optional frontmatter fields.
+func ValidateFrontmatter(metadata domain.Frontmatter) error {
+	if !metadata.ID.Valid() {
+		return fmt.Errorf("%w: field %q must be a five-digit ID", ErrInvalidFrontmatter, "id")
+	}
+	if strings.TrimSpace(metadata.Title) == "" {
+		return fmt.Errorf("%w: field %q is required", ErrInvalidFrontmatter, "title")
+	}
+	if !metadata.Status.IsValid() {
+		return fmt.Errorf("%w: field %q has invalid value %q", ErrInvalidFrontmatter, "status", metadata.Status)
+	}
+	if _, err := time.Parse(dateLayout, metadata.Created); err != nil {
+		return fmt.Errorf("%w: field %q must use YYYY-MM-DD", ErrInvalidFrontmatter, "created")
+	}
+	if metadata.Updated != "" {
+		if _, err := time.Parse(dateLayout, metadata.Updated); err != nil {
+			return fmt.Errorf("%w: field %q must use YYYY-MM-DD", ErrInvalidFrontmatter, "updated")
+		}
+	}
+	for index, related := range metadata.Related {
+		if !related.Valid() {
+			return fmt.Errorf("%w: field %q item %d is not a five-digit ID", ErrInvalidFrontmatter, "related", index)
+		}
+	}
+	return nil
+}
+
+// Write serializes a document to UTF-8 Markdown bytes.
+func Write(document Document) ([]byte, error) {
+	if err := ValidateFrontmatter(document.Frontmatter); err != nil {
+		return nil, err
+	}
+	metadata, err := yaml.Marshal(document.Frontmatter)
+	if err != nil {
+		return nil, fmt.Errorf("marshal frontmatter: %w", err)
+	}
+	body := strings.TrimPrefix(document.Body, "\n")
+	var output bytes.Buffer
+	output.WriteString("---\n")
+	output.Write(metadata)
+	output.WriteString("---\n")
+	if body != "" {
+		output.WriteString(body)
+		if !strings.HasSuffix(body, "\n") {
+			output.WriteByte('\n')
+		}
+	}
+	return output.Bytes(), nil
+}
+
+// WriteFile writes a document atomically, preserving the destination on errors.
+func WriteFile(path string, document Document) error {
+	data, err := Write(document)
+	if err != nil {
+		return fmt.Errorf("%s: %w", path, err)
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("%s: create parent: %w", path, err)
+	}
+	file, err := os.CreateTemp(filepath.Dir(path), ".historic-*.tmp")
+	if err != nil {
+		return fmt.Errorf("%s: create temporary file: %w", path, err)
+	}
+	temporary := file.Name()
+	defer func() {
+		_ = os.Remove(temporary)
+	}()
+	if err := file.Chmod(0o644); err == nil {
+		_, err = file.Write(data)
+	}
+	if err == nil {
+		err = file.Sync()
+	}
+	if closeErr := file.Close(); err == nil {
+		err = closeErr
+	}
+	if err != nil {
+		return fmt.Errorf("%s: write temporary file: %w", path, err)
+	}
+	if err := os.Rename(temporary, path); err != nil {
+		return fmt.Errorf("%s: replace file: %w", path, err)
+	}
+	return nil
+}
+
+// RenderMarkdown validates body syntax using Goldmark before writing it.
+func RenderMarkdown(body string) (string, error) {
+	var rendered bytes.Buffer
+	if err := goldmark.New().Convert([]byte(body), &rendered); err != nil {
+		return "", fmt.Errorf("parse Markdown: %w", err)
+	}
+	return rendered.String(), nil
+}
+
+func splitFrontmatter(input []byte) ([]byte, string, error) {
+	text := string(input)
+	if !strings.HasPrefix(text, "---\n") && !strings.HasPrefix(text, "---\r\n") {
+		return nil, "", ErrMissingFrontmatter
+	}
+	text = strings.ReplaceAll(text, "\r\n", "\n")
+	end := strings.Index(text[4:], "\n---\n")
+	if end < 0 {
+		return nil, "", ErrInvalidFrontmatter
+	}
+	end += 4
+	return []byte(text[4:end]), text[end+5:], nil
+}
+
+func documentError(path, field string, err error) error {
+	if path == "" {
+		return fmt.Errorf("field %s: %w", field, err)
+	}
+	return fmt.Errorf("%s: field %s: %w", path, field, err)
+}
+
+func utf8Valid(input []byte) bool {
+	return strings.ToValidUTF8(string(input), "") == string(input)
+}
