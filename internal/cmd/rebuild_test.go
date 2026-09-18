@@ -11,7 +11,7 @@ import (
 func TestRebuildCommandJSON(t *testing.T) {
 	root := t.TempDir()
 	t.Chdir(root)
-	workspace := filepath.Join(root, ".histories", "00001-topic")
+	workspace := filepath.Join(root, ".historic", "00001-topic")
 	if err := os.MkdirAll(workspace, 0o755); err != nil {
 		t.Fatal(err)
 	}

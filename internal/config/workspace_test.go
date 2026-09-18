@@ -57,6 +57,31 @@ func TestInitializeRejectsHistoriesFile(t *testing.T) {
 	}
 }
 
+func TestInitializeRejectsLegacyWorkspace(t *testing.T) {
+	root := t.TempDir()
+	if err := os.Mkdir(filepath.Join(root, LegacyHistoriesDirName), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Initialize(root)
+	if !errors.Is(err, ErrLegacyWorkspace) {
+		t.Fatalf("error = %v, want ErrLegacyWorkspace", err)
+	}
+}
+
+func TestInitializeRejectsCanonicalAndLegacyWorkspace(t *testing.T) {
+	root := t.TempDir()
+	if err := os.Mkdir(filepath.Join(root, HistoricDirName), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(root, LegacyHistoriesDirName), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Initialize(root)
+	if !errors.Is(err, ErrWorkspaceConflict) {
+		t.Fatalf("error = %v, want ErrWorkspaceConflict", err)
+	}
+}
+
 func TestDiscoverRootFindsInitializedAncestor(t *testing.T) {
 	root := t.TempDir()
 	if _, err := Initialize(root); err != nil {

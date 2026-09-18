@@ -11,7 +11,7 @@ import (
 func TestCreateCommandCreatesTopicAndJSON(t *testing.T) {
 	root := t.TempDir()
 	t.Chdir(root)
-	if err := os.MkdirAll(filepath.Join(root, ".histories"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(root, ".historic"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	command := NewRootCommand()
@@ -34,7 +34,7 @@ func TestCreateCommandCreatesTopicAndJSON(t *testing.T) {
 	if !response.OK || response.Command != "create" || response.Data.ID != "00014" {
 		t.Fatalf("response = %#v", response)
 	}
-	if _, err := os.Stat(filepath.Join(root, ".histories", "00014-admin-dashboard", "_meta.md")); err != nil {
+	if _, err := os.Stat(filepath.Join(root, ".historic", "00014-admin-dashboard", "_meta.md")); err != nil {
 		t.Fatalf("metadata: %v", err)
 	}
 }
@@ -56,7 +56,7 @@ func TestCreateCommandRejectsDuplicateWithoutPartialDirectory(t *testing.T) {
 	if err := command.Execute(); err == nil {
 		t.Fatal("duplicate create succeeded")
 	}
-	if _, err := os.Stat(filepath.Join(root, ".histories", "00001-second")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(root, ".historic", "00001-second")); !os.IsNotExist(err) {
 		t.Fatalf("partial duplicate directory exists: %v", err)
 	}
 }

@@ -34,7 +34,7 @@ func TestAddCommandCreatesEntry(t *testing.T) {
 	if err := json.Unmarshal(output.Bytes(), &result); err != nil {
 		t.Fatal(err)
 	}
-	if !result.OK || result.Data.File != ".histories/00001-topic/wos/01-scaffold.md" {
+	if !result.OK || result.Data.File != ".historic/00001-topic/wos/01-scaffold.md" {
 		t.Fatalf("response = %#v", result)
 	}
 	if _, err := os.Stat(filepath.Join(root, result.Data.File)); err != nil {

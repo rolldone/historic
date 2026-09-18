@@ -35,7 +35,7 @@ func TestLifecycleCommandUpdatesStatus(t *testing.T) {
 	if err := json.Unmarshal(output.Bytes(), &response); err != nil || !response.OK || response.Data.Previous != "create" || response.Data.Current != "progress" {
 		t.Fatalf("response = %q, %v", output.String(), err)
 	}
-	metadata, err := os.ReadFile(filepath.Join(root, ".histories", "00001-topic", "_meta.md"))
+	metadata, err := os.ReadFile(filepath.Join(root, ".historic", "00001-topic", "_meta.md"))
 	if err != nil || !bytes.Contains(metadata, []byte("status: progress")) {
 		t.Fatalf("metadata = %q err=%v", metadata, err)
 	}

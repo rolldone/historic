@@ -32,10 +32,10 @@ func TestCompleteCommandArchivesTopic(t *testing.T) {
 			Path     string `json:"path"`
 		} `json:"data"`
 	}
-	if err := json.Unmarshal(output.Bytes(), &response); err != nil || !response.OK || !response.Data.Archived || response.Data.Path != ".histories/.database/00001-archive-topic" {
+	if err := json.Unmarshal(output.Bytes(), &response); err != nil || !response.OK || !response.Data.Archived || response.Data.Path != ".historic/.database/00001-archive-topic" {
 		t.Fatalf("response = %q, %v", output.String(), err)
 	}
-	if _, err := os.Stat(filepath.Join(root, ".histories", ".database", "00001-archive-topic")); err != nil {
+	if _, err := os.Stat(filepath.Join(root, ".historic", ".database", "00001-archive-topic")); err != nil {
 		t.Fatal(err)
 	}
 }

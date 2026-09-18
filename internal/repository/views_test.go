@@ -53,7 +53,7 @@ func TestShowTopicIncludesFilesAndRejectsMissing(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(view.Files) != 1 || view.Files[0].Path != ".histories/00014-topic/prd.md" {
+	if len(view.Files) != 1 || view.Files[0].Path != ".historic/00014-topic/prd.md" {
 		t.Fatalf("files = %#v", view.Files)
 	}
 	if _, err := store.ShowTopic(domain.ID("00099"), false); !errors.Is(err, domain.ErrTopicMissing) {

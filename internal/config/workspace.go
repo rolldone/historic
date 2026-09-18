@@ -14,12 +14,19 @@ import (
 )
 
 const (
-	HistoriesDirName = ".histories"
+	HistoricDirName        = ".historic"
+	LegacyHistoriesDirName = ".histories"
+	// HistoriesDirName is retained as the internal name for the canonical root.
+	HistoriesDirName = HistoricDirName
 	DatabaseDirName  = ".database"
 	IndexFileName    = ".index.sqlite"
 )
 
-var ErrNotDirectory = errors.New("path exists but is not a directory")
+var (
+	ErrNotDirectory      = errors.New("path exists but is not a directory")
+	ErrWorkspaceConflict = errors.New("workspace conflict")
+	ErrLegacyWorkspace   = errors.New("legacy .histories workspace is unsupported; rename it to .historic manually")
+)
 
 // Workspace describes the filesystem locations used by Historic.
 type Workspace struct {
@@ -54,15 +61,30 @@ func DiscoverRoot(start string) (string, error) {
 	}
 
 	for current := root; ; current = filepath.Dir(current) {
-		candidate := filepath.Join(current, HistoriesDirName)
-		info, statErr := os.Stat(candidate)
-		switch {
-		case statErr == nil && info.IsDir():
+		canonical := filepath.Join(current, HistoricDirName)
+		legacy := filepath.Join(current, LegacyHistoriesDirName)
+		canonicalInfo, canonicalErr := os.Stat(canonical)
+		legacyInfo, legacyErr := os.Stat(legacy)
+		if canonicalErr != nil && !errors.Is(canonicalErr, os.ErrNotExist) {
+			return "", fmt.Errorf("inspect %s: %w", canonical, canonicalErr)
+		}
+		if legacyErr != nil && !errors.Is(legacyErr, os.ErrNotExist) {
+			return "", fmt.Errorf("inspect %s: %w", legacy, legacyErr)
+		}
+		if canonicalErr == nil && legacyErr == nil {
+			return "", fmt.Errorf("%w: both %s and %s exist", ErrWorkspaceConflict, canonical, legacy)
+		}
+		if legacyErr == nil {
+			if !legacyInfo.IsDir() {
+				return "", fmt.Errorf("%w: %s", ErrNotDirectory, legacy)
+			}
+			return "", fmt.Errorf("%w: %s", ErrLegacyWorkspace, legacy)
+		}
+		if canonicalErr == nil {
+			if !canonicalInfo.IsDir() {
+				return "", fmt.Errorf("%w: %s", ErrNotDirectory, canonical)
+			}
 			return current, nil
-		case statErr == nil && !info.IsDir():
-			return "", fmt.Errorf("%w: %s", ErrNotDirectory, candidate)
-		case statErr != nil && !errors.Is(statErr, os.ErrNotExist):
-			return "", fmt.Errorf("inspect %s: %w", candidate, statErr)
 		}
 		parent := filepath.Dir(current)
 		if parent == current {
@@ -77,6 +99,17 @@ func Initialize(root string) (Workspace, error) {
 	workspace := NewWorkspace(root)
 	if err := ensureDirectory(workspace.Root); err != nil {
 		return Workspace{}, err
+	}
+	legacy := filepath.Join(workspace.Root, LegacyHistoriesDirName)
+	legacyInfo, legacyErr := os.Stat(legacy)
+	if legacyErr != nil && !errors.Is(legacyErr, os.ErrNotExist) {
+		return Workspace{}, fmt.Errorf("inspect %s: %w", legacy, legacyErr)
+	}
+	if _, err := os.Stat(workspace.Histories); err == nil && legacyErr == nil {
+		return Workspace{}, fmt.Errorf("%w: both %s and %s exist", ErrWorkspaceConflict, workspace.Histories, legacy)
+	}
+	if legacyErr == nil && legacyInfo != nil {
+		return Workspace{}, fmt.Errorf("%w: %s", ErrLegacyWorkspace, legacy)
 	}
 	if info, err := os.Stat(workspace.Histories); err == nil && !info.IsDir() {
 		return Workspace{}, fmt.Errorf("%w: %s", ErrNotDirectory, workspace.Histories)

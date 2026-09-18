@@ -18,7 +18,7 @@ func TestFindCommandJSONAndFilters(t *testing.T) {
 	if err := command.Execute(); err != nil {
 		t.Fatal(err)
 	}
-	entry := filepath.Join(root, ".histories", "00001-topic", "note.md")
+	entry := filepath.Join(root, ".historic", "00001-topic", "note.md")
 	if err := os.WriteFile(entry, []byte("---\nid: 00001\ntitle: Search Note\nstatus: progress\ncreated: 2026-09-18\n---\nneedle in body\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -39,7 +39,7 @@ func TestFindCommandJSONAndFilters(t *testing.T) {
 	if err := json.Unmarshal(output.Bytes(), &response); err != nil || !response.OK || response.Command != "find" || len(response.Data) != 1 {
 		t.Fatalf("response = %q, %v", output.String(), err)
 	}
-	if response.Data[0].Path != ".histories/00001-topic/note.md" {
+	if response.Data[0].Path != ".historic/00001-topic/note.md" {
 		t.Fatalf("path = %q", response.Data[0].Path)
 	}
 }

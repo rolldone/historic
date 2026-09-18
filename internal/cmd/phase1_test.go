@@ -71,7 +71,7 @@ func TestPhase1RejectsInvalidInputAndCorruptFrontmatter(t *testing.T) {
 	if _, err := executeCommand(t, "create", "Topic", "--id", "14"); !errors.Is(err, domain.ErrInvalidID) {
 		t.Fatalf("invalid ID error=%v, want ErrInvalidID", err)
 	}
-	broken := filepath.Join(root, ".histories", "00001-broken.md")
+	broken := filepath.Join(root, ".historic", "00001-broken.md")
 	if err := os.WriteFile(broken, []byte("not frontmatter\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}

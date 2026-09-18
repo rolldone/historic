@@ -18,7 +18,7 @@ func TestImportCommandCopiesArchivedTopic(t *testing.T) {
 	if err := command.Execute(); err != nil {
 		t.Fatal(err)
 	}
-	archive := filepath.Join(root, ".histories", ".database", "00001-topic")
+	archive := filepath.Join(root, ".historic", ".database", "00001-topic")
 	if err := os.MkdirAll(archive, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -41,7 +41,7 @@ func TestImportCommandCopiesArchivedTopic(t *testing.T) {
 	if err := json.Unmarshal(output.Bytes(), &response); err != nil || !response.OK || response.Data.Status != "progress" {
 		t.Fatalf("response = %q, %v", output.String(), err)
 	}
-	if _, err := os.Stat(filepath.Join(root, ".histories", "00001-topic", "_meta.md")); err != nil {
+	if _, err := os.Stat(filepath.Join(root, ".historic", "00001-topic", "_meta.md")); err != nil {
 		t.Fatal(err)
 	}
 }

@@ -20,9 +20,9 @@ func TestInitCommandCreatesWorkspace(t *testing.T) {
 		t.Fatalf("execute init: %v", err)
 	}
 	for _, path := range []string{
-		filepath.Join(root, ".histories"),
-		filepath.Join(root, ".histories", ".database"),
-		filepath.Join(root, ".histories", ".index.sqlite"),
+		filepath.Join(root, ".historic"),
+		filepath.Join(root, ".historic", ".database"),
+		filepath.Join(root, ".historic", ".index.sqlite"),
 	} {
 		if _, err := os.Stat(path); err != nil {
 			t.Errorf("stat %s: %v", path, err)

@@ -32,7 +32,7 @@ func TestArchiveStatusMovesCloseTopicAndPreservesFiles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !change.Archived || change.Current != domain.StatusComplete || change.Path != ".histories/.database/00001-topic" {
+	if !change.Archived || change.Current != domain.StatusComplete || change.Path != ".historic/.database/00001-topic" {
 		t.Fatalf("change = %#v", change)
 	}
 	if _, err := os.Stat(source); !errors.Is(err, os.ErrNotExist) {
