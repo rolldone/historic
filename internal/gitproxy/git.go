@@ -106,3 +106,32 @@ func (repository Repository) Restore(snapshot, path string) error {
 	_, err := repository.run("restore", "--source", snapshot, "--", path)
 	return err
 }
+
+// SnapshotArchive returns a tar archive for a snapshot subtree.
+func (repository Repository) SnapshotArchive(snapshot, path string) ([]byte, error) {
+	command := exec.Command("git", "archive", "--format=tar", snapshot, "--", path)
+	command.Dir = repository.Root
+	output, err := command.Output()
+	if err != nil {
+		if errors.Is(err, exec.ErrNotFound) {
+			return nil, ErrGitUnavailable
+		}
+		return nil, fmt.Errorf("git archive: %w", err)
+	}
+	return output, nil
+}
+
+// SnapshotPaths lists files and directories recorded by a snapshot.
+func (repository Repository) SnapshotPaths(snapshot string) ([]string, error) {
+	output, err := repository.run("ls-tree", "-r", "--name-only", snapshot)
+	if err != nil {
+		return nil, err
+	}
+	paths := make([]string, 0)
+	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
+		if strings.TrimSpace(line) != "" {
+			paths = append(paths, filepath.ToSlash(strings.TrimSpace(line)))
+		}
+	}
+	return paths, nil
+}
