@@ -128,5 +128,5 @@ func writeCommandError(cmd *cobra.Command, name string, jsonOutput bool, err err
 	if encodeErr := json.NewEncoder(cmd.OutOrStdout()).Encode(response); encodeErr != nil {
 		return encodeErr
 	}
-	return err
+	return SilentError{Err: err}
 }
