@@ -84,6 +84,7 @@ func Rebuild(workspace config.Workspace) (int, error) {
 	if _, err := transaction.Exec("DELETE FROM index_records"); err != nil {
 		return 0, fmt.Errorf("clear index: %w", err)
 	}
+	seenPaths := make(map[string]struct{}, len(records))
 	statement, err := transaction.Prepare(`INSERT INTO index_records
 		(num, num_padded, type, title, status, tags, related, created_at, updated_at, path, folder_id, folder_slug,
 		subfolder, filename, file_order, content, word_count, mtime, hash)
@@ -93,6 +94,10 @@ func Rebuild(workspace config.Workspace) (int, error) {
 	}
 	defer statement.Close()
 	for _, record := range records {
+		if _, exists := seenPaths[record.Path]; exists {
+			continue
+		}
+		seenPaths[record.Path] = struct{}{}
 		tags, _ := json.Marshal(record.Tags)
 		related, _ := json.Marshal(record.Related)
 		if _, err := statement.Exec(record.Num, record.NumPadded, record.Type, record.Title, record.Status.String(), string(tags), string(related), record.CreatedAt, nullable(record.UpdatedAt), record.Path, record.FolderID.String(), record.FolderSlug, record.Subfolder, record.Filename, record.FileOrder, record.Content, record.WordCount, record.Mtime, record.Hash); err != nil {

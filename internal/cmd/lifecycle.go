@@ -25,7 +25,12 @@ func newLifecycleCommand(status domain.Status) *cobra.Command {
 			if err != nil {
 				return writeCommandError(cmd, string(status), jsonOutput, err)
 			}
-			change, err := lifecycle.NewService(workspace).ChangeStatus(id, status)
+			var change lifecycle.Change
+			if status.IsClose() {
+				change, err = lifecycle.NewService(workspace).ArchiveStatus(id, status)
+			} else {
+				change, err = lifecycle.NewService(workspace).ChangeStatus(id, status)
+			}
 			if err != nil {
 				return writeCommandError(cmd, string(status), jsonOutput, err)
 			}
