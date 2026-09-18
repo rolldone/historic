@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"io"
 
+	"historic/internal/domain"
+
 	"github.com/spf13/cobra"
 )
 
@@ -30,6 +32,9 @@ func NewRootCommand() *cobra.Command {
 	root.AddCommand(newShowCommand())
 	root.AddCommand(newFindCommand())
 	root.AddCommand(newRebuildCommand())
+	for _, status := range []domain.Status{domain.StatusProgress, domain.StatusPending, domain.StatusReview, domain.StatusBlocked, domain.StatusComplete, domain.StatusFailed, domain.StatusCancelled, domain.StatusArchived} {
+		root.AddCommand(newLifecycleCommand(status))
+	}
 	return root
 }
 
