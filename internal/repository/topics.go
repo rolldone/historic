@@ -16,7 +16,10 @@ import (
 	"historic/internal/markdown"
 )
 
-var topicFolderPattern = regexp.MustCompile(`^([0-9]{5})-(.+)$`)
+var (
+	topicFolderPattern = regexp.MustCompile(`^([0-9]{5})-(.+)$`)
+	workOrderPattern   = regexp.MustCompile(`^([0-9]{2})-(.+)$`)
+)
 
 // TopicStore creates and reads topic directories in the working workspace.
 type TopicStore struct {
@@ -64,6 +67,145 @@ func (store TopicStore) CreateTopic(title string, requestedID string) (domain.To
 		return domain.Topic{}, fmt.Errorf("create topic metadata: %w", err)
 	}
 	return domain.Topic{ID: id, Title: title, Status: domain.StatusCreate, Created: parseDate(created), Path: topicPath, Slug: slug}, nil
+}
+
+// AddEntry creates a Markdown entry in an active topic and updates _meta.md.
+func (store TopicStore) AddEntry(topicID domain.ID, name string, force bool) (domain.Entry, error) {
+	if !topicID.Valid() {
+		return domain.Entry{}, fmt.Errorf("%w: %q", domain.ErrInvalidID, topicID)
+	}
+	topicPath, err := store.activeTopicPath(topicID)
+	if err != nil {
+		return domain.Entry{}, err
+	}
+	relativeName, err := normalizeEntryName(name)
+	if err != nil {
+		return domain.Entry{}, err
+	}
+	if strings.HasPrefix(relativeName, "wos/") && !workOrderPattern.MatchString(filepath.Base(relativeName)) {
+		relativeName, err = store.nextWorkOrderPath(topicPath, relativeName)
+		if err != nil {
+			return domain.Entry{}, err
+		}
+	}
+	entryPath := filepath.Join(topicPath, filepath.FromSlash(relativeName))
+	if _, err := os.Stat(entryPath); err == nil && !force {
+		return domain.Entry{}, fmt.Errorf("%w: file already exists: %s (use --force to overwrite)", domain.ErrConflict, store.Workspace.RelativePath(entryPath))
+	} else if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return domain.Entry{}, fmt.Errorf("inspect entry path %s: %w", entryPath, err)
+	}
+
+	metaPath := filepath.Join(topicPath, "_meta.md")
+	meta, err := markdown.ParseFile(metaPath)
+	if err != nil {
+		return domain.Entry{}, fmt.Errorf("read topic metadata: %w", err)
+	}
+	created := dateToday()
+	metadata := domain.Frontmatter{ID: topicID, Title: entryTitle(relativeName), Status: meta.Frontmatter.Status, Created: created}
+	document, err := markdown.NewDocument(metadata, "# "+metadata.Title+"\n")
+	if err != nil {
+		return domain.Entry{}, fmt.Errorf("create entry metadata: %w", err)
+	}
+	if err := markdown.WriteFile(entryPath, document); err != nil {
+		return domain.Entry{}, fmt.Errorf("write entry: %w", err)
+	}
+	updatedMeta := meta
+	updatedMeta.Body = addFileToMeta(meta.Body, relativeName)
+	if err := markdown.WriteFile(metaPath, updatedMeta); err != nil {
+		if !force {
+			_ = os.Remove(entryPath)
+		}
+		return domain.Entry{}, fmt.Errorf("update topic metadata: %w", err)
+	}
+	return domain.Entry{ID: topicID, Title: metadata.Title, Status: metadata.Status, Created: parseDate(created), Path: entryPath, Filename: relativeName, Content: document.Body}, nil
+}
+
+func (store TopicStore) activeTopicPath(id domain.ID) (string, error) {
+	prefix := id.String() + "-"
+	entries, err := os.ReadDir(store.Workspace.Histories)
+	if errors.Is(err, os.ErrNotExist) {
+		return "", fmt.Errorf("%w: %s", domain.ErrTopicMissing, id)
+	}
+	if err != nil {
+		return "", fmt.Errorf("scan active topics: %w", err)
+	}
+	for _, entry := range entries {
+		if entry.IsDir() && strings.HasPrefix(entry.Name(), prefix) {
+			return filepath.Join(store.Workspace.Histories, entry.Name()), nil
+		}
+	}
+	return "", fmt.Errorf("%w: %s", domain.ErrTopicMissing, id)
+}
+
+func normalizeEntryName(name string) (string, error) {
+	name = strings.TrimSpace(strings.ReplaceAll(name, "\\\\", "/"))
+	if name == "" {
+		return "", fmt.Errorf("%w: entry name is empty", domain.ErrConflict)
+	}
+	if filepath.IsAbs(name) || strings.HasPrefix(name, "/") {
+		return "", fmt.Errorf("%w: absolute entry path is not allowed", domain.ErrConflict)
+	}
+	clean := filepath.ToSlash(filepath.Clean(name))
+	if clean == "." || clean == ".." || strings.HasPrefix(clean, "../") || strings.Contains(clean, "/../") {
+		return "", fmt.Errorf("%w: path traversal is not allowed", domain.ErrConflict)
+	}
+	if strings.HasPrefix(clean, ".") && clean != ".md" {
+		return "", fmt.Errorf("%w: hidden entry path is not allowed", domain.ErrConflict)
+	}
+	if !strings.HasSuffix(strings.ToLower(clean), ".md") {
+		clean += ".md"
+	}
+	return clean, nil
+}
+
+func (store TopicStore) nextWorkOrderPath(topicPath, path string) (string, error) {
+	directory := filepath.Join(topicPath, filepath.FromSlash(filepath.Dir(path)))
+	entries, err := os.ReadDir(directory)
+	if errors.Is(err, os.ErrNotExist) {
+		return fmt.Sprintf("%s/%02d-%s", filepath.ToSlash(filepath.Dir(path)), 1, filepath.Base(path)), nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("scan work orders: %w", err)
+	}
+	used := make(map[int]struct{})
+	for _, entry := range entries {
+		match := workOrderPattern.FindStringSubmatch(entry.Name())
+		if len(match) == 3 {
+			number, _ := strconv.Atoi(match[1])
+			used[number] = struct{}{}
+		}
+	}
+	for number := 1; number <= 99; number++ {
+		if _, exists := used[number]; !exists {
+			return fmt.Sprintf("%s/%02d-%s", filepath.ToSlash(filepath.Dir(path)), number, filepath.Base(path)), nil
+		}
+	}
+	return "", fmt.Errorf("%w: no available work order number", domain.ErrConflict)
+}
+
+func entryTitle(path string) string {
+	base := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
+	base = strings.ReplaceAll(base, "-", " ")
+	return strings.TrimSpace(base)
+}
+
+func addFileToMeta(body, relativeName string) string {
+	link := "- [" + filepath.Base(relativeName) + "](./" + filepath.ToSlash(relativeName) + ")"
+	if strings.Contains(body, link) {
+		return body
+	}
+	const heading = "## Files"
+	start := strings.Index(body, heading)
+	if start < 0 {
+		body = strings.TrimRight(body, "\\n") + "\\n\\n" + heading + "\\n\\n"
+		return body + link + "\\n"
+	}
+	sectionEnd := len(body)
+	if next := strings.Index(body[start+len(heading):], "\\n## "); next >= 0 {
+		sectionEnd = start + len(heading) + next + 1
+	}
+	addition := "\\n" + link + "\\n"
+	return body[:sectionEnd] + addition + body[sectionEnd:]
 }
 
 func (store TopicStore) nextID(requested string) (domain.ID, error) {
