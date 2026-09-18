@@ -197,14 +197,14 @@ func addFileToMeta(body, relativeName string) string {
 	const heading = "## Files"
 	start := strings.Index(body, heading)
 	if start < 0 {
-		body = strings.TrimRight(body, "\\n") + "\\n\\n" + heading + "\\n\\n"
-		return body + link + "\\n"
+		body = strings.TrimRight(body, "\n") + "\n\n" + heading + "\n\n"
+		return body + link + "\n"
 	}
 	sectionEnd := len(body)
-	if next := strings.Index(body[start+len(heading):], "\\n## "); next >= 0 {
+	if next := strings.Index(body[start+len(heading):], "\n## "); next >= 0 {
 		sectionEnd = start + len(heading) + next + 1
 	}
-	addition := "\\n" + link + "\\n"
+	addition := "\n" + link + "\n"
 	return body[:sectionEnd] + addition + body[sectionEnd:]
 }
 

@@ -33,6 +33,9 @@ func TestAddEntryCreatesMarkdownAndUpdatesMeta(t *testing.T) {
 	if !strings.Contains(string(meta), "./prd.md") {
 		t.Fatalf("meta missing entry link: %s", meta)
 	}
+	if strings.Contains(string(meta), `\n`) {
+		t.Fatalf("meta contains literal escaped newline: %q", meta)
+	}
 }
 
 func TestAddEntryNumbersWorkOrder(t *testing.T) {
@@ -51,6 +54,17 @@ func TestAddEntryNumbersWorkOrder(t *testing.T) {
 	}
 	if first.Filename != "wos/01-scaffold.md" || second.Filename != "wos/02-review.md" {
 		t.Fatalf("files = %q, %q", first.Filename, second.Filename)
+	}
+	meta, err := os.ReadFile(filepath.Join(topic.Path, "_meta.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := string(meta)
+	if !strings.Contains(content, "\n- [01-scaffold.md](./wos/01-scaffold.md)\n") || !strings.Contains(content, "\n- [02-review.md](./wos/02-review.md)\n") {
+		t.Fatalf("work orders not formatted as Markdown list: %q", content)
+	}
+	if strings.Contains(content, `\n`) {
+		t.Fatalf("meta contains literal escaped newline: %q", content)
 	}
 }
 
