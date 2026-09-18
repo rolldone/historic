@@ -7,9 +7,11 @@ Markdown files remain the source of truth. Archive and import use staging direct
 ## Detecting partial operations
 
 1. Run `historic rebuild --json`.
-2. Inspect `.histories/` and `.histories/.database/` for `.staging-*` directories.
+2. Inspect `.historic/` and `.historic/.database/` for `.staging-*` directories.
 3. A staging directory may be removed only after confirming its source and destination are intact.
 4. If a topic exists in both active and archive roots, do not overwrite either copy. Resolve the conflict manually, then rebuild.
+5. If search reports that the FTS5 index is unavailable, run `historic rebuild`. The rebuild scans Markdown first and replaces `index_records` and `historic_fts` transactionally.
+6. If rebuild reports invalid Markdown, the previous SQLite/FTS index remains available. Fix the reported file, then retry rebuild.
 
 ## Recovery commands
 
@@ -19,7 +21,8 @@ historic list --archived
 historic show 00014 --archived
 ```
 
-If an import fails, the archive remains intact and a partial active destination is removed. If an archive move fails, the source remains active unless the final move has completed. Rebuild the index after manual recovery.
+- If a rebuild reports invalid Markdown, do not delete `.historic/.index.sqlite`; the previous index is preserved by the transaction. Correct the source file and retry.
+- Search uses SQLite FTS5 only. If `historic find` reports `FTS5 index unavailable`, run `historic rebuild`; there is no silent filesystem fallback.
 
 ## Safety policy
 

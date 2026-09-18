@@ -1,26 +1,27 @@
 package search
 
 import (
-	"bufio"
+	"database/sql"
 	"fmt"
-	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 
 	"historic/internal/config"
 	"historic/internal/domain"
-	"historic/internal/markdown"
+
+	_ "modernc.org/sqlite"
 )
 
-// Options controls a filesystem search.
+// Options controls a FTS5 search.
 type Options struct {
-	Keyword         string
-	Status          domain.Status
-	Folder          string
-	ActiveOnly      bool
-	ArchivedOnly    bool
-	IncludeArchived bool
+	Keyword      string
+	Status       domain.Status
+	Folder       string
+	Type         string
+	ID           domain.ID
+	ActiveOnly   bool
+	ArchivedOnly bool
 }
 
 // Result is one matching Markdown entry or topic metadata file.
@@ -33,7 +34,7 @@ type Result struct {
 	Active  bool   `json:"active"`
 }
 
-// Find scans Markdown source files without invoking a shell or external command.
+// Find queries the rebuildable SQLite FTS5 index without invoking a shell.
 func Find(workspace config.Workspace, options Options) ([]Result, error) {
 	keyword := strings.TrimSpace(options.Keyword)
 	if keyword == "" {
@@ -42,89 +43,146 @@ func Find(workspace config.Workspace, options Options) ([]Result, error) {
 	if options.ActiveOnly && options.ArchivedOnly {
 		return nil, fmt.Errorf("active and archived filters cannot be combined")
 	}
-	roots := []struct {
-		path   string
-		active bool
-	}{
-		{workspace.Histories, true},
+	if options.Type != "" && !validType(options.Type) {
+		return nil, fmt.Errorf("invalid type %q", options.Type)
 	}
-	if !options.ActiveOnly {
-		roots = append(roots, struct {
-			path   string
-			active bool
-		}{workspace.Database, false})
+	database, err := sql.Open("sqlite", workspace.Index)
+	if err != nil {
+		return nil, fmt.Errorf("open search index: %w", err)
+	}
+	defer database.Close()
+	if err := database.Ping(); err != nil {
+		return nil, fmt.Errorf("search index unavailable: run historic rebuild: %w", err)
+	}
+	var ftsTable string
+	if err := database.QueryRow("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'historic_fts'").Scan(&ftsTable); err != nil {
+		return nil, fmt.Errorf("FTS5 index unavailable: run historic rebuild: %w", err)
+	}
+	var recordsTable string
+	if err := database.QueryRow("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'index_records'").Scan(&recordsTable); err != nil {
+		return nil, fmt.Errorf("SQLite index unavailable: run historic rebuild: %w", err)
+	}
+	query, err := prepareQuery(keyword)
+	if err != nil {
+		return nil, err
+	}
+	where := []string{"historic_fts MATCH ?"}
+	args := []any{query}
+	if options.Status != "" {
+		where = append(where, "r.status = ?")
+		args = append(args, options.Status.String())
+	}
+	if options.Type != "" {
+		where = append(where, "r.type = ?")
+		args = append(args, options.Type)
+	}
+	if options.ID != "" {
+		where = append(where, "r.num_padded = ?")
+		args = append(args, options.ID.String())
+	}
+	if options.Folder != "" {
+		folder := strings.Trim(filepath.ToSlash(strings.TrimSpace(options.Folder)), "/")
+		if folder == "" || filepath.IsAbs(options.Folder) || strings.Contains(folder, "..") {
+			return nil, fmt.Errorf("invalid folder filter %q", options.Folder)
+		}
+		where = append(where, "(r.path = ? OR r.path LIKE ?)")
+		args = append(args, folder, folder+"/%")
+	}
+	if options.ActiveOnly {
+		where = append(where, "r.path NOT LIKE '.historic/.database/%'")
 	}
 	if options.ArchivedOnly {
-		roots = roots[1:]
+		where = append(where, "r.path LIKE '.historic/.database/%'")
 	}
+	statement := `SELECT r.num_padded, r.title, r.status, r.path, r.content, r.type,
+		r.path LIKE '.historic/.database/%' AS archived, bm25(historic_fts) AS rank
+		FROM historic_fts JOIN index_records AS r ON r.id = historic_fts.rowid
+		WHERE ` + strings.Join(where, " AND ") + ` ORDER BY rank ASC, r.path ASC`
+	rows, err := database.Query(statement, args...)
+	if err != nil {
+		return nil, fmt.Errorf("invalid FTS query: %w", err)
+	}
+	defer rows.Close()
 	results := make([]Result, 0)
-	for _, root := range roots {
-		err := walkRoot(workspace, root.path, root.active, options, keyword, &results)
-		if err != nil {
-			return nil, err
+	for rows.Next() {
+		var result Result
+		var body, recordType string
+		var archived bool
+		var rank float64
+		if err := rows.Scan(&result.ID, &result.Title, &result.Status, &result.Path, &body, &recordType, &archived, &rank); err != nil {
+			return nil, fmt.Errorf("read search result: %w", err)
 		}
+		result.Snippet = snippet(body, keyword)
+		result.Active = !archived
+		results = append(results, result)
 	}
-	sort.Slice(results, func(i, j int) bool { return results[i].Path < results[j].Path })
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate search results: %w", err)
+	}
 	return results, nil
 }
 
-func walkRoot(workspace config.Workspace, root string, active bool, options Options, keyword string, results *[]Result) error {
-	return filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if entry.IsDir() || filepath.Ext(path) != ".md" {
-			return nil
-		}
-		document, err := markdown.ParseFile(path)
-		if err != nil {
-			return fmt.Errorf("read %s: %w", workspace.RelativePath(path), err)
-		}
-		if options.Status != "" && document.Frontmatter.Status != options.Status {
-			return nil
-		}
-		relative := workspace.RelativePath(path)
-		if options.Folder != "" && !folderMatches(relative, options.Folder) {
-			return nil
-		}
-		if !containsMatch(keyword, relative, document.Frontmatter.Title, document.Body) {
-			return nil
-		}
-		*results = append(*results, Result{
-			ID: document.Frontmatter.ID.String(), Title: document.Frontmatter.Title,
-			Status: document.Frontmatter.Status.String(), Path: relative,
-			Snippet: snippet(document.Body, keyword), Active: active,
-		})
-		return nil
-	})
-}
-
-func folderMatches(path, folder string) bool {
-	folder = filepath.ToSlash(strings.Trim(strings.TrimSpace(folder), "/"))
-	path = filepath.ToSlash(path)
-	return folder != "" && (path == folder || strings.HasPrefix(path, folder+"/"))
-}
-
-func containsMatch(keyword string, values ...string) bool {
-	keyword = strings.ToLower(keyword)
-	for _, value := range values {
-		if strings.Contains(strings.ToLower(value), keyword) {
-			return true
-		}
+func prepareQuery(keyword string) (string, error) {
+	parts := strings.Fields(keyword)
+	if len(parts) == 0 {
+		return "", fmt.Errorf("keyword must not be empty")
 	}
-	return false
+	quoted := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		quoted = append(quoted, `"`+strings.ReplaceAll(part, `"`, `""`)+`"`)
+	}
+	if len(quoted) == 0 {
+		return "", fmt.Errorf("keyword must not be empty")
+	}
+	return strings.Join(quoted, " AND "), nil
+}
+
+func validType(value string) bool {
+	switch value {
+	case "meta", "prd", "spec", "issue", "note", "decision", "task", "file":
+		return true
+	default:
+		return false
+	}
 }
 
 func snippet(body, keyword string) string {
-	lines := strings.Split(body, "\n")
-	for _, line := range lines {
-		if strings.Contains(strings.ToLower(line), strings.ToLower(keyword)) {
-			return strings.TrimSpace(line)
+	body = strings.TrimSpace(body)
+	if body == "" {
+		return ""
+	}
+	words := strings.Fields(keyword)
+	if len(words) == 0 {
+		return firstLine(body)
+	}
+	lowerBody := strings.ToLower(body)
+	lowerKeyword := strings.ToLower(words[0])
+	if index := strings.Index(lowerBody, lowerKeyword); index >= 0 {
+		start := index - 80
+		if start < 0 {
+			start = 0
 		}
+		end := index + len(lowerKeyword) + 120
+		if end > len(body) {
+			end = len(body)
+		}
+		return strings.TrimSpace(body[start:end])
 	}
-	scanner := bufio.NewScanner(strings.NewReader(body))
-	if scanner.Scan() {
-		return strings.TrimSpace(scanner.Text())
+	return firstLine(body)
+}
+
+func firstLine(body string) string {
+	if index := strings.IndexByte(body, '\n'); index >= 0 {
+		return strings.TrimSpace(body[:index])
 	}
-	return ""
+	return strings.TrimSpace(body)
+}
+
+// Keep deterministic sorting available to callers/tests that combine result sets.
+func sortResults(results []Result) {
+	sort.Slice(results, func(i, j int) bool { return results[i].Path < results[j].Path })
 }

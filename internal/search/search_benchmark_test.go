@@ -1,17 +1,31 @@
 package search
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"historic/internal/config"
 	"historic/internal/domain"
+	"historic/internal/indexer"
 	"historic/internal/markdown"
 )
 
 func BenchmarkFind1000Files(b *testing.B) {
+	benchmarkFindFiles(b, 1000)
+}
+
+func BenchmarkFind10000Files(b *testing.B) {
+	benchmarkFindFiles(b, 10000)
+}
+
+func BenchmarkFind100000Files(b *testing.B) {
+	benchmarkFindFiles(b, 100000)
+}
+
+func benchmarkFindFiles(b *testing.B, total int) {
+	b.Helper()
 	workspace, err := config.Initialize(b.TempDir())
 	if err != nil {
 		b.Fatal(err)
@@ -20,25 +34,25 @@ func BenchmarkFind1000Files(b *testing.B) {
 	if err := os.MkdirAll(topic, 0o755); err != nil {
 		b.Fatal(err)
 	}
-	for index := 0; index < 1000; index++ {
-		metadata := domain.Frontmatter{ID: "00001", Title: "Benchmark Note", Status: domain.StatusProgress, Created: "2026-09-18"}
+	metadata := domain.Frontmatter{ID: "00001", Title: "Benchmark Note", Status: domain.StatusProgress, Created: "2026-09-18"}
+	for index := 0; index < total; index++ {
 		document, err := markdown.NewDocument(metadata, "benchmark content")
 		if err != nil {
 			b.Fatal(err)
 		}
-		if err := markdown.WriteFile(filepath.Join(topic, filepath.Base(filepath.Join("files", formatBenchmarkName(index)))), document); err != nil {
+		path := filepath.Join(topic, fmt.Sprintf("%05d-benchmark.md", index))
+		if err := markdown.WriteFile(path, document); err != nil {
 			b.Fatal(err)
 		}
+	}
+	if _, err := indexer.Rebuild(workspace); err != nil {
+		b.Fatal(err)
 	}
 	b.ResetTimer()
 	for index := 0; index < b.N; index++ {
 		results, err := Find(workspace, Options{Keyword: "benchmark", ActiveOnly: true})
-		if err != nil || len(results) != 1000 {
-			b.Fatalf("Find = %d, %v", len(results), err)
+		if err != nil || len(results) != total {
+			b.Fatalf("Find = %d, want %d: %v", len(results), total, err)
 		}
 	}
-}
-
-func formatBenchmarkName(index int) string {
-	return time.Unix(int64(index), 0).UTC().Format("150405") + "-" + string(rune('a'+index%26)) + ".md"
 }

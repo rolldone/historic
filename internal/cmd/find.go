@@ -11,11 +11,11 @@ import (
 )
 
 func newFindCommand() *cobra.Command {
-	var status, folder string
+	var status, folder, searchType, id string
 	var activeOnly, archivedOnly, jsonOutput bool
 	command := &cobra.Command{
 		Use:   "find <keyword>",
-		Short: "Find text in Historic Markdown files",
+		Short: "Find text in the Historic FTS5 index",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			workspace, err := commandWorkspace()
@@ -29,8 +29,15 @@ func newFindCommand() *cobra.Command {
 					return writeCommandError(cmd, "find", jsonOutput, err)
 				}
 			}
+			var parsedID domain.ID
+			if id != "" {
+				parsedID, err = domain.ParseID(id)
+				if err != nil {
+					return writeCommandError(cmd, "find", jsonOutput, err)
+				}
+			}
 			results, err := search.Find(workspace, search.Options{
-				Keyword: args[0], Status: parsedStatus, Folder: folder,
+				Keyword: args[0], Status: parsedStatus, Folder: folder, Type: searchType, ID: parsedID,
 				ActiveOnly: activeOnly, ArchivedOnly: archivedOnly,
 			})
 			if err != nil {
@@ -54,6 +61,8 @@ func newFindCommand() *cobra.Command {
 	}
 	command.Flags().StringVar(&status, "status", "", "filter by lifecycle status")
 	command.Flags().StringVar(&folder, "folder", "", "filter by workspace-relative folder")
+	command.Flags().StringVar(&searchType, "type", "", "filter by inferred file type")
+	command.Flags().StringVar(&id, "id", "", "filter by five-digit topic ID")
 	command.Flags().BoolVar(&activeOnly, "active", false, "search active topics only")
 	command.Flags().BoolVar(&archivedOnly, "archived", false, "search archived topics only")
 	command.Flags().BoolVar(&jsonOutput, "json", false, "output stable JSON")

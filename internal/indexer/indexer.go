@@ -47,6 +47,8 @@ type Record struct {
 	Hash       string
 }
 
+const FTS5TableName = "historic_fts"
+
 // Rebuild scans Markdown source files and replaces the index in one transaction.
 func Rebuild(workspace config.Workspace) (int, error) {
 	records, err := scan(workspace)
@@ -81,8 +83,16 @@ func Rebuild(workspace config.Workspace) (int, error) {
 		CREATE INDEX IF NOT EXISTS idx_index_records_folder ON index_records(folder_id)`); err != nil {
 		return 0, fmt.Errorf("create index indexes: %w", err)
 	}
+	if _, err := transaction.Exec(`CREATE VIRTUAL TABLE IF NOT EXISTS historic_fts USING fts5(
+		path, filename, title, content, tokenize = 'unicode61'
+	)`); err != nil {
+		return 0, fmt.Errorf("create FTS5 table: %w", err)
+	}
 	if _, err := transaction.Exec("DELETE FROM index_records"); err != nil {
 		return 0, fmt.Errorf("clear index: %w", err)
+	}
+	if _, err := transaction.Exec("DELETE FROM historic_fts"); err != nil {
+		return 0, fmt.Errorf("clear FTS5 index: %w", err)
 	}
 	seenPaths := make(map[string]struct{}, len(records))
 	statement, err := transaction.Prepare(`INSERT INTO index_records
@@ -93,6 +103,12 @@ func Rebuild(workspace config.Workspace) (int, error) {
 		return 0, fmt.Errorf("prepare index insert: %w", err)
 	}
 	defer statement.Close()
+	ftsStatement, err := transaction.Prepare(`INSERT INTO historic_fts(rowid, path, filename, title, content) VALUES (?, ?, ?, ?, ?)`)
+	if err != nil {
+		return 0, fmt.Errorf("prepare FTS5 insert: %w", err)
+	}
+	defer ftsStatement.Close()
+	indexed := 0
 	for _, record := range records {
 		if _, exists := seenPaths[record.Path]; exists {
 			continue
@@ -100,14 +116,23 @@ func Rebuild(workspace config.Workspace) (int, error) {
 		seenPaths[record.Path] = struct{}{}
 		tags, _ := json.Marshal(record.Tags)
 		related, _ := json.Marshal(record.Related)
-		if _, err := statement.Exec(record.Num, record.NumPadded, record.Type, record.Title, record.Status.String(), string(tags), string(related), record.CreatedAt, nullable(record.UpdatedAt), record.Path, record.FolderID.String(), record.FolderSlug, record.Subfolder, record.Filename, record.FileOrder, record.Content, record.WordCount, record.Mtime, record.Hash); err != nil {
+		result, err := statement.Exec(record.Num, record.NumPadded, record.Type, record.Title, record.Status.String(), string(tags), string(related), record.CreatedAt, nullable(record.UpdatedAt), record.Path, record.FolderID.String(), record.FolderSlug, record.Subfolder, record.Filename, record.FileOrder, record.Content, record.WordCount, record.Mtime, record.Hash)
+		if err != nil {
 			return 0, fmt.Errorf("insert %s: %w", record.Path, err)
 		}
+		rowID, err := result.LastInsertId()
+		if err != nil {
+			return 0, fmt.Errorf("read index row ID for %s: %w", record.Path, err)
+		}
+		if _, err := ftsStatement.Exec(rowID, record.Path, record.Filename, record.Title, record.Content); err != nil {
+			return 0, fmt.Errorf("insert FTS5 record %s: %w", record.Path, err)
+		}
+		indexed++
 	}
 	if err := transaction.Commit(); err != nil {
 		return 0, fmt.Errorf("commit index rebuild: %w", err)
 	}
-	return len(records), nil
+	return indexed, nil
 }
 
 func scan(workspace config.Workspace) ([]Record, error) {

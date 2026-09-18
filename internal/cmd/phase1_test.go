@@ -49,13 +49,13 @@ func TestPhase1EndToEndWorkflow(t *testing.T) {
 	if err != nil || !jsonHasOK(showOutput) || !strings.Contains(showOutput, "prd.md") || !strings.Contains(showOutput, "01-scaffold.md") {
 		t.Fatalf("show output=%q err=%v", showOutput, err)
 	}
-	findOutput, err := executeCommand(t, "find", "scaffold", "--active", "--json")
-	if err != nil || !jsonHasOK(findOutput) || !strings.Contains(findOutput, "01-scaffold.md") {
-		t.Fatalf("find output=%q err=%v", findOutput, err)
-	}
 	rebuildOutput, err := executeCommand(t, "rebuild", "--json")
 	if err != nil || !jsonHasOK(rebuildOutput) || !strings.Contains(rebuildOutput, `"records":3`) {
 		t.Fatalf("rebuild output=%q err=%v", rebuildOutput, err)
+	}
+	findOutput, err := executeCommand(t, "find", "scaffold", "--active", "--json")
+	if err != nil || !jsonHasOK(findOutput) || !strings.Contains(findOutput, "01-scaffold.md") {
+		t.Fatalf("find output=%q err=%v", findOutput, err)
 	}
 }
 
@@ -84,6 +84,9 @@ func TestPhase1EmptyResultsAreSuccessful(t *testing.T) {
 	root := t.TempDir()
 	t.Chdir(root)
 	if _, err := executeCommand(t, "init"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := executeCommand(t, "rebuild", "--json"); err != nil {
 		t.Fatal(err)
 	}
 	output, err := executeCommand(t, "list", "--json")

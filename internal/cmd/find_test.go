@@ -25,6 +25,13 @@ func TestFindCommandJSONAndFilters(t *testing.T) {
 	command = NewRootCommand()
 	output.Reset()
 	ConfigureOutput(command, &output, &output)
+	command.SetArgs([]string{"rebuild"})
+	if err := command.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	command = NewRootCommand()
+	output.Reset()
+	ConfigureOutput(command, &output, &output)
 	command.SetArgs([]string{"find", "needle", "--active", "--json"})
 	if err := command.Execute(); err != nil {
 		t.Fatalf("find: %v", err)
@@ -51,6 +58,13 @@ func TestFindCommandEmptyResultSucceeds(t *testing.T) {
 	var output bytes.Buffer
 	ConfigureOutput(command, &output, &output)
 	command.SetArgs([]string{"init"})
+	if err := command.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	command = NewRootCommand()
+	output.Reset()
+	ConfigureOutput(command, &output, &output)
+	command.SetArgs([]string{"rebuild"})
 	if err := command.Execute(); err != nil {
 		t.Fatal(err)
 	}
