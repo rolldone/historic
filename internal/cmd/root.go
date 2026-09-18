@@ -32,6 +32,11 @@ func NewRootCommand() *cobra.Command {
 	root.AddCommand(newShowCommand())
 	root.AddCommand(newFindCommand())
 	root.AddCommand(newRebuildCommand())
+	root.AddCommand(newImportCommand())
+	root.AddCommand(newSaveCommand())
+	root.AddCommand(newLogCommand())
+	root.AddCommand(newDiffCommand())
+	root.AddCommand(newRestoreCommand())
 	for _, status := range []domain.Status{domain.StatusProgress, domain.StatusPending, domain.StatusReview, domain.StatusBlocked, domain.StatusComplete, domain.StatusFailed, domain.StatusCancelled, domain.StatusArchived} {
 		root.AddCommand(newLifecycleCommand(status))
 	}

@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"historic/internal/gitproxy"
+
 	_ "modernc.org/sqlite"
 )
 
@@ -93,6 +95,9 @@ func Initialize(root string) (Workspace, error) {
 	}
 	if err := initializeIndex(workspace.Index); err != nil {
 		return Workspace{}, err
+	}
+	if _, err := gitproxy.Open(workspace.Database); err != nil {
+		return Workspace{}, fmt.Errorf("initialize internal git repository: %w", err)
 	}
 	return workspace, nil
 }
