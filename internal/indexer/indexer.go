@@ -142,12 +142,19 @@ func scan(workspace config.Workspace) ([]Record, error) {
 			if walkErr != nil {
 				return walkErr
 			}
+			if entry.Type()&os.ModeSymlink != 0 {
+				return nil
+			}
 			if entry.IsDir() || filepath.Ext(path) != ".md" {
 				return nil
 			}
 			record, err := scanFile(workspace, path)
 			if err != nil {
-				if filepath.Base(path) != "_meta.md" && filepath.Ext(path) == ".md" {
+				if filepath.Base(path) == "_meta.md" {
+					// A broken topic metadata file is not indexed, allowing batch operations to continue.
+					return nil
+				}
+				if filepath.Ext(path) == ".md" {
 					// Markdown without valid Historic frontmatter is an asset, not an index error.
 					return nil
 				}
