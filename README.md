@@ -47,7 +47,7 @@ historic find "phase 4" --type task --id 00014 --json
 
 `historic find` uses the SQLite FTS5 index built by `historic rebuild`. Search covers path, filename, title, and Markdown body. Filters can be combined with `--status`, `--folder`, `--active`, `--archived`, `--type`, and `--id`. If the index is missing or stale, run `historic rebuild`; the command does not silently fall back to a filesystem scan.
 
-FTS results are ranked by relevance with ascending path as a deterministic tie-breaker. Human output includes a contextual snippet; JSON output contains plain data without terminal highlight codes. Empty results are successful JSON responses with `ok: true`. Query terms are treated as literal terms, so punctuation and FTS operators do not execute shell commands or alter the source Markdown.
+FTS results are ranked by relevance with ascending path as a deterministic tie-breaker. Human output includes a contextual snippet with yellow ANSI emphasis (`ESC[1;33m...ESC[0m`) around matched terms; JSON output contains plain data without terminal highlight codes. Empty results are successful JSON responses with `ok: true`. Query terms are treated as literal terms, so punctuation and FTS operators do not execute shell commands or alter the source Markdown.
 
 If a rebuild encounters invalid Markdown, it fails before changing the existing index. Fix the file and run `historic rebuild` again.
 

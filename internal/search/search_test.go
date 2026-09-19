@@ -113,3 +113,14 @@ func TestFindSuggestsRebuildWhenIndexMissing(t *testing.T) {
 		t.Fatalf("missing index error = %v", err)
 	}
 }
+
+func TestHighlightHumanOnlyAddsTerminalEmphasis(t *testing.T) {
+	const text = "Search keyword appears twice: search."
+	highlighted := HighlightHuman(text, "search")
+	if highlighted == text || !strings.Contains(highlighted, "\x1b[1;33mSearch\x1b[0m") || !strings.Contains(highlighted, "\x1b[1;33msearch\x1b[0m") {
+		t.Fatalf("highlighted = %q", highlighted)
+	}
+	if plain := HighlightHuman(text, ""); plain != text {
+		t.Fatalf("empty keyword changed text: %q", plain)
+	}
+}

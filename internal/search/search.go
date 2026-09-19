@@ -4,8 +4,10 @@ import (
 	"database/sql"
 	"fmt"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
+	"unicode"
 
 	"historic/internal/config"
 	"historic/internal/domain"
@@ -173,6 +175,26 @@ func snippet(body, keyword string) string {
 		return strings.TrimSpace(body[start:end])
 	}
 	return firstLine(body)
+}
+
+// HighlightHuman adds terminal-safe emphasis to matching terms for human output.
+// It is intentionally not used in Result.Snippet, keeping JSON plain text.
+func HighlightHuman(text, keyword string) string {
+	if text == "" || strings.TrimSpace(keyword) == "" {
+		return text
+	}
+	terms := make([]string, 0)
+	for _, term := range strings.Fields(keyword) {
+		term = strings.TrimFunc(term, func(r rune) bool { return unicode.IsSpace(r) || unicode.IsPunct(r) })
+		if term != "" {
+			terms = append(terms, regexp.QuoteMeta(term))
+		}
+	}
+	if len(terms) == 0 {
+		return text
+	}
+	pattern := regexp.MustCompile(`(?i)(` + strings.Join(terms, "|") + `)`)
+	return pattern.ReplaceAllString(text, "\x1b[1;33m$1\x1b[0m")
 }
 
 func firstLine(body string) string {

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -49,6 +50,9 @@ func TestFindCommandJSONAndFilters(t *testing.T) {
 	if response.Data[0].Path != ".historic/00001-topic/note.md" {
 		t.Fatalf("path = %q", response.Data[0].Path)
 	}
+	if strings.Contains(output.String(), "\x1b[") {
+		t.Fatalf("JSON output contains terminal formatting: %q", output.String())
+	}
 }
 
 func TestFindCommandEmptyResultSucceeds(t *testing.T) {
@@ -78,5 +82,38 @@ func TestFindCommandEmptyResultSucceeds(t *testing.T) {
 	var response map[string]any
 	if err := json.Unmarshal(output.Bytes(), &response); err != nil || response["ok"] != true {
 		t.Fatalf("response = %q, %v", output.String(), err)
+	}
+}
+
+func TestFindHumanOutputHighlightsMatches(t *testing.T) {
+	root := t.TempDir()
+	t.Chdir(root)
+	if output, err := executeCommand(t, "init"); err != nil || output == "" {
+		t.Fatalf("init output=%q err=%v", output, err)
+	}
+	if _, err := executeCommand(t, "create", "Highlight Topic", "--id", "00001"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := executeCommand(t, "add", "note", "--id", "00001"); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(root, ".historic", "00001-highlight-topic", "note.md")
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	content = append(content, []byte("\nSearch keyword\n")...)
+	if err := os.WriteFile(path, content, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := executeCommand(t, "rebuild"); err != nil {
+		t.Fatal(err)
+	}
+	output, err := executeCommand(t, "find", "search")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(output, "\x1b[1;33mSearch\x1b[0m") {
+		t.Fatalf("human output missing highlight: %q", output)
 	}
 }

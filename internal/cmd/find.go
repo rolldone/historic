@@ -52,7 +52,8 @@ func newFindCommand() *cobra.Command {
 				return err
 			}
 			for _, result := range results {
-				if _, err = fmt.Fprintf(cmd.OutOrStdout(), "%s  %-10s  %s  %s\n", result.ID, result.Status, result.Path, result.Snippet); err != nil {
+				line := fmt.Sprintf("%s  %-10s  %s  %s\n", result.ID, result.Status, result.Path, search.HighlightHuman(result.Snippet, args[0]))
+				if _, err = fmt.Fprint(cmd.OutOrStdout(), line); err != nil {
 					return err
 				}
 			}
