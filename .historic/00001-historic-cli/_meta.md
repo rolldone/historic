@@ -37,13 +37,18 @@ Implementasi terencana untuk mencapai Phase 1 Foundation, Phase 2 Lifecycle, dan
 - [WO 20: Advanced Query and Filters](./wos/20-advanced-query-filters.md)
 - [WO 21: Ranking, Snippet, and Highlight](./wos/21-ranking-snippet-highlight.md)
 - [WO 22: Search Benchmark and Quality Gate](./wos/22-search-quality-gate.md)
+- [WO 23: Sync Topic Metadata](./wos/23-sync-meta.md)
+- [WO 24: Interactive Search TUI](./wos/24-interactive-search-tui.md)
+- [Interactive Search TUI SPEC](./spec-interactive-search-tui.md)
 
 ## Progress
 - Phase 1 Foundation: WO 01–10 complete
 - Phase 2 Lifecycle: WO 11–14 complete
 - Phase 3 Versioning: WO 15–18 complete
-- Phase 4 Advanced Search: WO 19 in progress; WO 20–22 planned
-- Handoff: Phase 1–3 ready; Phase 4 active
+- Phase 4 Advanced Search: WO 19–22 complete
+- Maintenance: WO 23 sync-meta in progress
+- Phase 5 Interactive Search TUI: WO 24 in progress
+- Handoff: Phase 1–4 ready; Phase 5 active
 
 ## Decision Notes
 - Transition matrix WO 02 dipertahankan sesuai implementasi saat ini.
