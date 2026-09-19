@@ -231,28 +231,103 @@ func (m model) pageCount() int {
 func (m model) View() string {
 	accent := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#7D56F4"))
 	muted := lipgloss.NewStyle().Foreground(lipgloss.Color("#777777"))
-	header := accent.Render("Historic Search") + "\n" + fmt.Sprintf("Query: %s | status=%s scope=%s type=%s limit=%d | page %d/%d", m.input.View(), statusName(m.status), m.scope, m.typeNameOrAll(), m.limit, m.page+1, m.pageCount())
+	width := m.width
+	if width <= 0 {
+		width = 120
+	}
+	height := m.height
+	if height <= 0 {
+		height = 30
+	}
+	headerLines := 2
+	if m.focus == focusFilter || m.errorText != "" {
+		headerLines++
+	}
+	footerLines := 2
+	contentHeight := height - headerLines - footerLines
+	if contentHeight < 3 {
+		contentHeight = 3
+	}
+	header := accent.Render("Historic Search") + "\n" + truncate(fmt.Sprintf("Query: %s | status=%s scope=%s type=%s limit=%d | page %d/%d", m.input.View(), statusName(m.status), m.scope, m.typeNameOrAll(), m.limit, m.page+1, m.pageCount()), width)
 	if m.focus == focusFilter {
 		header += "\n" + muted.Render("Filter focus: s scope; v status; t type; Esc/f closes")
 	}
 	if m.errorText != "" {
-		header += "\n" + lipgloss.NewStyle().Foreground(lipgloss.Color("#FF5F56")).Render(m.errorText)
+		header += "\n" + lipgloss.NewStyle().Foreground(lipgloss.Color("#FF5F56")).Render(truncate(m.errorText, width))
+	}
+	leftWidth := width / 2
+	if leftWidth < 24 {
+		leftWidth = width - 2
+	}
+	rightWidth := width - leftWidth - 2
+	if rightWidth < 24 {
+		rightWidth = 24
+	}
+	rows := m.currentPage()
+	visible := contentHeight - 2
+	if visible < 1 {
+		visible = 1
+	}
+	start := 0
+	if m.selected >= visible {
+		start = m.selected - visible + 1
+	}
+	if start+visible > len(rows) {
+		start = len(rows) - visible
+		if start < 0 {
+			start = 0
+		}
 	}
 	left := "Results\n"
-	for index, result := range m.currentPage() {
+	for index := start; index < len(rows) && index < start+visible; index++ {
+		result := rows[index]
 		marker := "  "
 		if index == m.selected {
 			marker = "> "
 		}
-		left += fmt.Sprintf("%s%s %s\n", marker, result.ID, result.Title)
+		left += truncate(fmt.Sprintf("%s%s %s", marker, result.ID, result.Title), leftWidth) + "\n"
 	}
-	if len(m.currentPage()) == 0 {
+	if len(rows) == 0 {
 		left += muted.Render("No matches") + "\n"
 	}
-	right := "Preview\n" + m.preview
-	body := lipgloss.JoinHorizontal(lipgloss.Top, lipgloss.NewStyle().Width(42).Render(left), lipgloss.NewStyle().Width(72).Render(right))
-	footer := muted.Render("↑↓ navigate  Enter preview  / query  f filter(s scope/v status/t type)  n/p page  r refresh  q quit")
-	return header + "\n\n" + body + "\n\n" + footer
+	right := "Preview\n" + truncateLines(m.preview, rightWidth, visible)
+	var body string
+	if width < 72 {
+		body = truncateLines(left, width, contentHeight) + "\n" + truncateLines(right, width, contentHeight)
+	} else {
+		body = lipgloss.JoinHorizontal(lipgloss.Top, lipgloss.NewStyle().Width(leftWidth).Render(left), lipgloss.NewStyle().Width(rightWidth).Render(right))
+	}
+	footer := muted.Render(truncate("↑↓ navigate  Enter preview  / query  f filter(s scope/v status/t type)  n/p page  r refresh  q quit", width))
+	return truncateLines(header, width, headerLines) + "\n" + truncateLines(body, width, contentHeight) + "\n" + footer
+}
+
+func truncate(value string, width int) string {
+	value = strings.ReplaceAll(strings.ReplaceAll(value, "\n", " "), "\r", " ")
+	if width < 1 {
+		return ""
+	}
+	if len([]rune(value)) <= width {
+		return value
+	}
+	runes := []rune(value)
+	if width <= 3 {
+		return string(runes[:width])
+	}
+	return string(runes[:width-3]) + "..."
+}
+
+func truncateLines(value string, width, lines int) string {
+	if lines < 1 {
+		return ""
+	}
+	parts := strings.Split(value, "\n")
+	if len(parts) > lines {
+		parts = parts[:lines]
+	}
+	for index := range parts {
+		parts[index] = truncate(parts[index], width)
+	}
+	return strings.Join(parts, "\n")
 }
 
 func (m *model) typeNameOrAll() string {
