@@ -1,0 +1,5 @@
+# Historic generated/cache artifacts
+.historic/.index.sqlite
+.historic/.database/.git/
+.historic/.staging-*/
+.historic/.database/.staging-*/
