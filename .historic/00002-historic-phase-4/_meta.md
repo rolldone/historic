@@ -20,5 +20,8 @@ updated: "2026-09-18"
 - [note-dogfooding.md](./note-dogfooding.md)
 
 - [note-dogfooding-findings.md](./note-dogfooding-findings.md)
+## Assets
+
+
 ## Progress
 

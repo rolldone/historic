@@ -1,13 +1,17 @@
 ---
-id: 00001
+id: "00001"
 title: Historic CLI Foundation, Lifecycle, and Versioning
 status: progress
-created: 2026-09-18
-updated: 2026-09-18
-tags: [historic, cli, mvp, phase-1, phase-2, phase-3]
-related: []
+created: "2026-09-18"
+updated: "2026-09-18"
+tags:
+    - historic
+    - cli
+    - mvp
+    - phase-1
+    - phase-2
+    - phase-3
 ---
-
 # Historic CLI Foundation, Lifecycle, and Versioning
 
 ## Deskripsi
@@ -39,16 +43,23 @@ Implementasi terencana untuk mencapai Phase 1 Foundation, Phase 2 Lifecycle, dan
 - [WO 22: Search Benchmark and Quality Gate](./wos/22-search-quality-gate.md)
 - [WO 23: Sync Topic Metadata](./wos/23-sync-meta.md)
 - [WO 24: Interactive Search TUI](./wos/24-interactive-search-tui.md)
+- [WO 25: Batch Sync Topic Metadata](./wos/25-batch-sync-meta.md)
 - [Interactive Search TUI SPEC](./spec-interactive-search-tui.md)
+
+## Assets
+
+- [spec-interactive-search-tui.md](./spec-interactive-search-tui.md)
+- [24-interactive-search-tui.md](./wos/24-interactive-search-tui.md)
+- [25-batch-sync-meta.md](./wos/25-batch-sync-meta.md)
 
 ## Progress
 - Phase 1 Foundation: WO 01–10 complete
 - Phase 2 Lifecycle: WO 11–14 complete
 - Phase 3 Versioning: WO 15–18 complete
 - Phase 4 Advanced Search: WO 19–22 complete
-- Maintenance: WO 23 sync-meta in progress
+- Maintenance: WO 23 sync-meta in progress; WO 25 batch sync-meta complete
 - Phase 5 Interactive Search TUI: WO 24 in progress
-- Handoff: Phase 1–4 ready; Phase 5 active
+- Handoff: Phase 1–4 ready; maintenance and Phase 5 active
 
 ## Decision Notes
 - Transition matrix WO 02 dipertahankan sesuai implementasi saat ini.

@@ -95,6 +95,7 @@ Validasi transition harus menolak ID tidak ditemukan, status tidak dikenal, dan 
 - `historic show <id> [--json]`: menampilkan metadata dan daftar file topik.
 - `historic find <keyword> [--json]`: mencari nama dan isi file.
 - `historic rebuild`: scan Markdown dan membangun ulang index.
+- `historic sync-meta <id|path> [--json]`: menyelaraskan section `Files` dan `Assets` pada `_meta.md`.
 
 ## 6. Kontrak command Phase 2
 
@@ -113,7 +114,21 @@ Operasi perubahan file harus atomic sejauh platform memungkinkan. Jika langkah k
 
 Tidak ada push ke remote pada Phase 3.
 
-## 8. Model index
+## 8. Kontrak command `sync-meta`
+
+- `historic sync-meta <id>`: menyelaraskan section `Files` dan `Assets` pada `_meta.md` topic aktif.
+- `historic sync-meta <path>`: menyelaraskan topic berdasarkan path topic atau `_meta.md`.
+- `--json` menggunakan envelope standar `{ "command", "ok", "data", "error" }`.
+- Markdown dengan frontmatter Historic valid diklasifikasikan sebagai managed file dan masuk `Files`.
+- Markdown tanpa frontmatter valid, binary, gambar, PDF, Word, spreadsheet, archive, dan file lain diklasifikasikan sebagai asset dan masuk `Assets`.
+- File asset bukan error dan tidak menghasilkan warning; file tetap tidak diubah.
+- `_meta.md` dikecualikan dari `Files` dan `Assets`.
+- Link existing dipertahankan; link stale tidak dihapus otomatis; link baru tidak digandakan.
+- `_meta.md` ditulis secara atomic dan index direbuild setelah sukses.
+- Path absolute/traversal, topic ambiguous, dan `_meta.md` invalid ditolak.
+- Command tidak memindahkan atau mengarsipkan topic.
+
+## 9. Model index
 
 Index minimal menyimpan: `num`, `num_padded`, `type`, `title`, `status`, `tags`, `related`, `created_at`, `updated_at`, `path`, `folder_id`, `folder_slug`, `subfolder`, `filename`, `file_order`, `content`, `word_count`, `mtime`, dan `hash`.
 
