@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 
 	"historic/internal/config"
@@ -41,6 +42,8 @@ func SyncMeta(workspace config.Workspace, input string) (SyncChange, error) {
 	if err != nil {
 		return SyncChange{}, err
 	}
+	sort.Strings(managed)
+	sort.Strings(assets)
 	body := meta.Body
 	body = syncMetaSection(body, "## Files", managed)
 	body = syncMetaSection(body, "## Assets", assets)
@@ -100,73 +103,35 @@ func syncMetaSection(body, heading string, paths []string) string {
 			break
 		}
 	}
+	generated := heading + "\n\n"
+	for _, path := range paths {
+		generated += metaLink(path)
+	}
+	generated += "\n"
 	if start < 0 {
 		insert := len(lines)
 		for index, line := range lines {
-			if strings.HasPrefix(strings.TrimSpace(line), "## ") && strings.TrimSpace(line) == "## Progress" {
+			if strings.TrimSpace(line) == "## Progress" {
 				insert = index
 				break
 			}
 		}
-		block := heading + "\n\n"
-		for _, path := range paths {
-			block += metaLink(path)
-		}
-		block += "\n"
 		lines = append(lines, "")
 		copy(lines[insert+1:], lines[insert:])
-		lines[insert] = block
+		lines[insert] = generated
 		return strings.Join(lines, "")
 	}
 	end := start + 1
 	for end < len(lines) && !strings.HasPrefix(strings.TrimSpace(lines[end]), "## ") {
 		end++
 	}
-	existing := strings.Join(lines[start+1:end], "")
-	seen := linkTargets(existing)
-	addition := ""
-	for _, path := range paths {
-		href := "./" + filepath.ToSlash(path)
-		if _, ok := seen[href]; ok {
-			continue
-		}
-		addition += metaLink(path)
-		seen[href] = struct{}{}
-	}
-	if addition == "" {
-		return body
-	}
-	if existing != "" && !strings.HasSuffix(existing, "\n") {
-		existing += "\n"
-	}
-	block := existing + addition
-	lines = append(lines[:start+1], append([]string{block}, lines[end:]...)...)
+	lines = append(lines[:start], append([]string{generated}, lines[end:]...)...)
 	return strings.Join(lines, "")
 }
 
 func metaLink(path string) string {
 	path = filepath.ToSlash(path)
 	return fmt.Sprintf("- [%s](./%s)\n", filepath.Base(path), path)
-}
-
-func linkTargets(section string) map[string]struct{} {
-	seen := make(map[string]struct{})
-	for _, line := range strings.Split(section, "\n") {
-		open := strings.Index(line, "](")
-		if open < 0 {
-			continue
-		}
-		close := strings.Index(line[open+2:], ")")
-		if close < 0 {
-			continue
-		}
-		href := line[open+2 : open+2+close]
-		if !strings.HasPrefix(href, "./") {
-			continue
-		}
-		seen[href] = struct{}{}
-	}
-	return seen
 }
 
 func resolveSyncTopic(workspace config.Workspace, input string) (string, domain.ID, error) {
