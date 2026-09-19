@@ -44,6 +44,7 @@ Implementasi terencana untuk mencapai Phase 1 Foundation, Phase 2 Lifecycle, dan
 - [WO 23: Sync Topic Metadata](./wos/23-sync-meta.md)
 - [WO 24: Interactive Search TUI](./wos/24-interactive-search-tui.md)
 - [WO 25: Batch Sync Topic Metadata](./wos/25-batch-sync-meta.md)
+- [WO 26: Reconcile Sync Topic Metadata](./wos/26-reconcile-sync-meta.md)
 - [Interactive Search TUI SPEC](./spec-interactive-search-tui.md)
 
 ## Assets
@@ -57,7 +58,7 @@ Implementasi terencana untuk mencapai Phase 1 Foundation, Phase 2 Lifecycle, dan
 - Phase 2 Lifecycle: WO 11–14 complete
 - Phase 3 Versioning: WO 15–18 complete
 - Phase 4 Advanced Search: WO 19–22 complete
-- Maintenance: WO 23 sync-meta in progress; WO 25 batch sync-meta complete
+- Maintenance: WO 23 sync-meta in progress; WO 25 batch sync-meta complete; WO 26 reconcile sync-meta complete
 - Phase 5 Interactive Search TUI: WO 24 in progress
 - Handoff: Phase 1–4 ready; maintenance and Phase 5 active
 
