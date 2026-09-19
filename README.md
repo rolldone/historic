@@ -34,6 +34,15 @@ historic status .historic/00001-historic-cli/wos/20-advanced-query-filters.md re
 
 `historic status` changes only the target Markdown frontmatter, sets `updated`, rejects absolute/traversal paths, and rebuilds the SQLite/FTS index. It accepts `create`, `pending`, `progress`, `review`, `blocked`, `complete`, `failed`, `cancelled`, and `archived`. Use it for individual Work Orders; use topic lifecycle commands only when the entire topic should change or be archived.
 
+Synchronize manually created topic files into `_meta.md`:
+
+```sh
+historic sync-meta 00014 --json
+historic sync-meta .historic/00014-admin-dashboard --json
+```
+
+`historic sync-meta` adds valid Historic Markdown to `## Files` and all other files (plain Markdown, images, PDFs, office files, archives, and binaries) to `## Assets`. It excludes `_meta.md`, preserves existing and stale links, uses relative POSIX links, avoids duplicates on repeat runs, and rebuilds the index. Assets are not errors; only managed Markdown files are accepted by `historic status`.
+
 Read topics:
 
 ```sh

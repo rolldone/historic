@@ -68,8 +68,8 @@ func TestRebuildPreservesOldIndexWhenScanFails(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(topic, "broken.md"), []byte("no frontmatter"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Rebuild(workspace); err == nil {
-		t.Fatal("invalid Markdown rebuild succeeded")
+	if _, err := Rebuild(workspace); err != nil {
+		t.Fatalf("rebuild with Markdown asset failed: %v", err)
 	}
 	count, err := Count(workspace)
 	if err != nil || count != 1 {
@@ -148,8 +148,8 @@ func TestRebuildPreservesFTSIndexWhenScanFails(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(topic, "broken.md"), []byte("invalid"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Rebuild(workspace); err == nil {
-		t.Fatal("invalid rebuild succeeded")
+	if _, err := Rebuild(workspace); err != nil {
+		t.Fatal("invalid Markdown asset should not fail rebuild")
 	}
 	database, err := sql.Open("sqlite", workspace.Index)
 	if err != nil {

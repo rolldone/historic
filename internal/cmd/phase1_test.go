@@ -75,8 +75,8 @@ func TestPhase1RejectsInvalidInputAndCorruptFrontmatter(t *testing.T) {
 	if err := os.WriteFile(broken, []byte("not frontmatter\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := executeCommand(t, "rebuild"); err == nil || !strings.Contains(err.Error(), "00001-broken.md") {
-		t.Fatalf("corrupt rebuild error=%v", err)
+	if _, err := executeCommand(t, "rebuild"); err != nil {
+		t.Fatalf("rebuild with regular Markdown asset failed: %v", err)
 	}
 }
 

@@ -147,6 +147,10 @@ func scan(workspace config.Workspace) ([]Record, error) {
 			}
 			record, err := scanFile(workspace, path)
 			if err != nil {
+				if filepath.Base(path) != "_meta.md" && filepath.Ext(path) == ".md" {
+					// Markdown without valid Historic frontmatter is an asset, not an index error.
+					return nil
+				}
 				return err
 			}
 			records = append(records, record)

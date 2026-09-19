@@ -36,7 +36,13 @@ func ChangeFileStatus(workspace config.Workspace, inputPath string, next domain.
 	}
 	document, err := markdown.ParseFile(path)
 	if err != nil {
-		return FileChange{}, fmt.Errorf("read file status target: %w", err)
+		if strings.HasSuffix(strings.ToLower(path), ".md") {
+			return FileChange{}, fmt.Errorf("file status unsupported: target is a regular asset without Historic frontmatter: %w", err)
+		}
+		return FileChange{}, fmt.Errorf("file status unsupported: target must be a Markdown file")
+	}
+	if document.Frontmatter.ID != topicIDFromPath(workspace, path) {
+		return FileChange{}, fmt.Errorf("file status unsupported: target frontmatter ID does not match topic")
 	}
 	previous := document.Frontmatter.Status
 	updated := time.Now().UTC().Format("2006-01-02")
@@ -105,7 +111,7 @@ func resolveMarkdownPath(workspace config.Workspace, inputPath string) (string, 
 		return "", fmt.Errorf("%w: file path %q matches multiple Markdown files", domain.ErrConflict, inputPath)
 	}
 	if filepath.Ext(candidates[0]) != ".md" {
-		return "", fmt.Errorf("%w: target must be a Markdown file", domain.ErrConflict)
+		return "", fmt.Errorf("file status unsupported: target is a regular asset without Historic frontmatter")
 	}
 	return candidates[0], nil
 }
@@ -116,4 +122,17 @@ func isInside(root, path string) bool {
 		return false
 	}
 	return relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator))
+}
+
+func topicIDFromPath(workspace config.Workspace, path string) domain.ID {
+	relative := filepath.ToSlash(workspace.RelativePath(path))
+	parts := strings.Split(relative, "/")
+	for _, part := range parts {
+		if len(part) > 6 && part[5] == '-' {
+			if id, err := domain.ParseID(part[:5]); err == nil {
+				return id
+			}
+		}
+	}
+	return ""
 }
