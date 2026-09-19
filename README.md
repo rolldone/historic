@@ -25,6 +25,15 @@ historic add issue-login-bug --id 00014
 historic add wos/scaffold --id 00014
 ```
 
+Update one file's lifecycle status without archiving its topic:
+
+```sh
+historic status 19-fts5-index.md complete --json
+historic status .historic/00001-historic-cli/wos/20-advanced-query-filters.md review
+```
+
+`historic status` changes only the target Markdown frontmatter, sets `updated`, rejects absolute/traversal paths, and rebuilds the SQLite/FTS index. It accepts `create`, `pending`, `progress`, `review`, `blocked`, `complete`, `failed`, `cancelled`, and `archived`. Use it for individual Work Orders; use topic lifecycle commands only when the entire topic should change or be archived.
+
 Read topics:
 
 ```sh

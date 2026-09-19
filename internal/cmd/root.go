@@ -33,6 +33,7 @@ func NewRootCommand() *cobra.Command {
 	root.AddCommand(newFindCommand())
 	root.AddCommand(newRebuildCommand())
 	root.AddCommand(newImportCommand())
+	root.AddCommand(newFileStatusCommand())
 	root.AddCommand(newSaveCommand())
 	root.AddCommand(newLogCommand())
 	root.AddCommand(newDiffCommand())
