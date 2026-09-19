@@ -32,6 +32,7 @@ func NewRootCommand() *cobra.Command {
 	root.AddCommand(newShowCommand())
 	root.AddCommand(newFindCommand())
 	root.AddCommand(newRebuildCommand())
+	root.AddCommand(newSearchCommand())
 	root.AddCommand(newImportCommand())
 	root.AddCommand(newFileStatusCommand())
 	root.AddCommand(newSyncMetaCommand())

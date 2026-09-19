@@ -36,6 +36,53 @@ type Result struct {
 	Active  bool   `json:"active"`
 }
 
+// RecentTopics returns active or archived topic metadata in deterministic order.
+// It shares the indexed topic records used by Find and is intended for the TUI's empty query.
+func RecentTopics(workspace config.Workspace, options Options) ([]Result, error) {
+	if options.ActiveOnly && options.ArchivedOnly {
+		return nil, fmt.Errorf("active and archived filters cannot be combined")
+	}
+	database, err := sql.Open("sqlite", workspace.Index)
+	if err != nil {
+		return nil, fmt.Errorf("open search index: %w", err)
+	}
+	defer database.Close()
+	if err := database.Ping(); err != nil {
+		return nil, fmt.Errorf("search index unavailable: run historic rebuild: %w", err)
+	}
+	where := []string{"r.filename = '_meta.md'"}
+	args := make([]any, 0)
+	if options.Status != "" {
+		where = append(where, "r.status = ?")
+		args = append(args, options.Status.String())
+	}
+	if options.ActiveOnly {
+		where = append(where, "r.path NOT LIKE '.historic/.database/%'")
+	}
+	if options.ArchivedOnly {
+		where = append(where, "r.path LIKE '.historic/.database/%'")
+	}
+	rows, err := database.Query(`SELECT r.num_padded, r.title, r.status, r.path, r.content,
+		r.path LIKE '.historic/.database/%' AS archived FROM index_records AS r WHERE `+strings.Join(where, " AND ")+` ORDER BY r.path ASC`, args...)
+	if err != nil {
+		return nil, fmt.Errorf("query recent topics: %w", err)
+	}
+	defer rows.Close()
+	results := make([]Result, 0)
+	for rows.Next() {
+		var result Result
+		var body string
+		var archived bool
+		if err := rows.Scan(&result.ID, &result.Title, &result.Status, &result.Path, &body, &archived); err != nil {
+			return nil, fmt.Errorf("read recent topic: %w", err)
+		}
+		result.Snippet = firstLine(body)
+		result.Active = !archived
+		results = append(results, result)
+	}
+	return results, rows.Err()
+}
+
 // Find queries the rebuildable SQLite FTS5 index without invoking a shell.
 func Find(workspace config.Workspace, options Options) ([]Result, error) {
 	keyword := strings.TrimSpace(options.Keyword)

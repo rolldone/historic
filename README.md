@@ -43,6 +43,14 @@ historic sync-meta .historic/00014-admin-dashboard --json
 
 `historic sync-meta` adds valid Historic Markdown to `## Files` and all other files (plain Markdown, images, PDFs, office files, archives, and binaries) to `## Assets`. It excludes `_meta.md`, preserves existing and stale links, uses relative POSIX links, avoids duplicates on repeat runs, and rebuilds the index. Assets are not errors; only managed Markdown files are accepted by `historic status`.
 
+Interactive read-only search:
+
+```sh
+historic search
+```
+
+`historic search` is a Bubble Tea TUI over the same FTS5/search service used by `historic find`. It uses a default limit of 20, empty query shows recent active topics, and supports `/` query focus, `f` filter focus, `↑/↓` navigation, `Enter` preview, `n/p` pagination, `r` refresh, `Esc`, and `q`/`Ctrl+C` exit. MVP filters use status, scope (`active`, `archived`, `all`), and existing type inference (`work-order` maps to `task`). Markdown previews are read-only; assets/binary files are represented by metadata. `historic search --json` is rejected; use `historic find --json` for automation.
+
 Read topics:
 
 ```sh
