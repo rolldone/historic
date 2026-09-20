@@ -2,6 +2,9 @@
 
 Historic stores work history as portable Markdown files. Markdown is the source of truth; SQLite is a rebuildable cache.
 
+- [Command reference](docs/commands.md)
+- [Agent skill installation](docs/agent-skill.md)
+
 ## Phase 1 commands
 
 Initialize a workspace:
@@ -39,9 +42,10 @@ Synchronize manually created topic files into `_meta.md`:
 ```sh
 historic sync-meta 00014 --json
 historic sync-meta .historic/00014-admin-dashboard --json
+historic sync-meta --json
 ```
 
-`historic sync-meta` adds valid Historic Markdown to `## Files` and all other files (plain Markdown, images, PDFs, office files, archives, and binaries) to `## Assets`. It excludes `_meta.md`, preserves existing and stale links, uses relative POSIX links, avoids duplicates on repeat runs, and rebuilds the index. Assets are not errors; only managed Markdown files are accepted by `historic status`.
+`historic sync-meta` fully reconciles the generated `## Files` and `## Assets` sections from the current filesystem. Valid managed Markdown goes to `Files`; plain Markdown, images, PDFs, office files, archives, and binaries go to `Assets`. It excludes `_meta.md`, removes stale and duplicate links, reflects rename/move/delete and classification changes, uses deterministic relative POSIX links, preserves other metadata sections, and rebuilds the index. Without a target, it processes every active topic directly under `.historic/` and excludes `.historic/.database/`. Batch mode continues after per-topic errors and exits non-zero if any topic fails. Assets are not errors; only managed Markdown files are accepted by `historic status`.
 
 Interactive read-only search:
 
