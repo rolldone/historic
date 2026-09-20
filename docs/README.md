@@ -5,7 +5,6 @@ Historic is a local-first work-memory CLI. Markdown files are the source of trut
 ## Start here
 
 - [Command reference](commands.md)
-- [Agent skill installation](agent-skill.md)
 
 ## Quick start
 

@@ -3,7 +3,6 @@
 Historic stores work history as portable Markdown files. Markdown is the source of truth; SQLite is a rebuildable cache.
 
 - [Command reference](docs/commands.md)
-- [Agent skill installation](docs/agent-skill.md)
 
 ## Phase 1 commands
 

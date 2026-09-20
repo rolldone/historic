@@ -1,13 +1,15 @@
 ---
 name: historic
-description: "Use when working on the Historic CLI, its SPEC/Work Orders, Markdown history workspace, lifecycle/archive/import, internal Git snapshots, dogfooding, Phase 4 search, Phase 5 Interactive Search TUI, or sync-meta asset metadata, batch synchronization, and reconciliation. Keywords: historic, .historic, SPEC, Work Order, rebuild, archive, import, restore, save, log, diff, sync-meta, Assets, Files, batch, reconcile, rename, TUI, search."
+description: "Use when operating the installed Historic CLI as a user or AI assistant: creating topics and Work Orders, reading and searching Markdown history, using the interactive TUI, managing lifecycle, snapshots, and metadata synchronization."
 ---
 
-# Historic CLI Skill
+# Historic — User Operations Skill
 
-## Scope
+Use this skill with the installed or compiled `historic` command. The user only needs the binary and this skill; the source repository and Go toolchain are not required.
 
-Use this skill when developing, reviewing, testing, or dogfooding Historic. Historic stores work history as Markdown files. Markdown is the source of truth; SQLite/FTS5 is a rebuildable index/cache, and internal Git is local-only.
+## What Historic is
+
+Historic is a local-first work-memory CLI. Markdown is the source of truth. SQLite/FTS5 is a rebuildable search cache, and the internal Git repository is local-only.
 
 ## Workspace rules
 
@@ -26,6 +28,17 @@ Use this skill when developing, reviewing, testing, or dogfooding Historic. Hist
 - Markdown is the source of truth. Run `historic rebuild --json` after recovery or manual index-affecting filesystem changes.
 - JSON-capable commands preserve `{ "command", "ok", "data", "error" }`.
 - JSON errors must not be duplicated on stderr.
+
+## Getting started
+
+```sh
+historic init
+historic create "My Topic"
+historic list
+historic show 00001
+```
+
+Use `historic add` to create notes or Work Orders. When multiple topics are active, provide an explicit `--id` for commands that need to select a topic.
 
 ## Sync metadata
 
@@ -59,20 +72,55 @@ historic sync-meta [<id>|<topic-path>] [--json]
 - MVP supports status, scope (`active`, `archived`, `all`), and type (`all`, `topic`, `work-order`) filters, pagination, keyboard navigation, and read-only previews.
 - Layout must respect terminal viewport height, keep the active result visible, and never render results beneath the footer. Long titles/paths and small terminals require safe truncation or compact layout.
 
-## Validation
+## File and topic lifecycle
 
-Run the relevant checks:
+Update one managed Markdown file:
 
 ```sh
-gofmt -d <changed-go-files>
-go test ./...
-go vet ./...
-go build -o /tmp/historic .
-git diff --check
+historic status <path> progress
+historic status <path> complete
 ```
 
-Use isolated temporary directories for CLI filesystem tests. For `sync-meta`, cover managed Markdown, plain Markdown, binary/assets, rename, delete, move, classification changes, stale-link cleanup, deterministic ordering, idempotence, archived exclusion, and batch continue-on-error.
+Update a whole topic:
 
-## Coordination
+```sh
+historic progress 00001
+historic pending 00001
+historic review 00001
+historic blocked 00001
+historic complete 00001
+historic failed 00001
+historic cancelled 00001
+historic import 00001
+```
 
-For Historic tasks, inspect the relevant SPEC, `_meta.md`, and assigned Work Order first. Preserve Work Order numbering. Record dogfooding blockers as Markdown coordination notes. Commit only task-related files and never push unless explicitly requested.
+Closing operations may archive a topic under `.historic/.database/`. Before destructive actions, inspect the target and confirm the intended scope.
+
+## Local snapshots
+
+```sh
+historic save -m "snapshot message"
+historic log 00001
+historic diff 00001
+historic restore 00001 --snapshot <commit>
+```
+
+Snapshots are local-only. Never push the internal repository or configure a remote for it.
+
+## JSON output
+
+JSON-capable commands use:
+
+```json
+{"command":"...","ok":true,"data":{},"error":null}
+```
+
+Successful empty results use `ok: true`. JSON errors use the envelope and a non-zero exit status.
+
+## Recovery and safety
+
+- Keep Markdown as the authoritative record.
+- Treat SQLite and internal Git as secondary/rebuildable mechanisms.
+- Run `historic rebuild` after manual recovery or index-affecting filesystem changes.
+- Do not modify files outside `.historic/` for routine history operations.
+- Do not modify `PRD.md` unless the user explicitly asks.
