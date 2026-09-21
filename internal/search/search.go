@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 	"unicode"
 
 	"historic/internal/config"
@@ -37,21 +38,35 @@ type Options struct {
 
 // Result is an AI-friendly match from either the topic or file read model.
 type Result struct {
-	Type        string   `json:"type"`
-	TopicID     string   `json:"topic_id"`
+	Type        string       `json:"type"`
+	TopicID     string       `json:"topic_id"`
+	Title       string       `json:"title"`
+	Description string       `json:"description"`
+	Status      string       `json:"status"`
+	Storage     string       `json:"storage"`
+	Tags        []string     `json:"tags"`
+	Path        string       `json:"path"`
+	Score       float64      `json:"score"`
+	MatchedIn   []string     `json:"matched_in"`
+	Snippet     string       `json:"snippet"`
+	Topic       TopicContext `json:"topic"`
+
+	// Legacy fields retained for TUI and package compatibility. They are not
+	// part of the stable AI JSON contract.
+	ID     string `json:"-"`
+	Active bool   `json:"-"`
+}
+
+// TopicContext gives file matches enough surrounding topic information for an
+// AI caller to use a result without issuing a second query.
+type TopicContext struct {
+	ID          string   `json:"id"`
 	Title       string   `json:"title"`
 	Description string   `json:"description"`
 	Status      string   `json:"status"`
 	Storage     string   `json:"storage"`
-	Tags        []string `json:"tags"`
 	Path        string   `json:"path"`
-	Score       float64  `json:"score"`
-	MatchedIn   []string `json:"matched_in"`
-	Snippet     string   `json:"snippet"`
-
-	// Legacy fields retained for TUI and package compatibility.
-	ID     string `json:"id,omitempty"`
-	Active bool   `json:"active,omitempty"`
+	Tags        []string `json:"tags"`
 }
 
 func RecentTopics(workspace config.Workspace, options Options) ([]Result, error) {
@@ -103,14 +118,17 @@ func Find(workspace config.Workspace, options Options) ([]Result, error) {
 	predicates, predicateArgs := resultPredicates(options)
 	where = append(where, predicates...)
 	args = append(args, predicateArgs...)
-	statement := `SELECT historic_fts.entity_type, historic_fts.entity_id, COALESCE(t.id, f.topic_id),
+	statement := `SELECT CASE WHEN historic_fts.entity_type = 'topic' THEN 'topic' ELSE COALESCE(f.type, 'asset') END, historic_fts.entity_id, COALESCE(t.id, f.topic_id),
 		COALESCE(CASE WHEN historic_fts.entity_type = 'topic' THEN t.title ELSE f.title END, ''),
 		COALESCE(CASE WHEN historic_fts.entity_type = 'topic' THEN t.description ELSE f.description END, ''),
 		COALESCE(CASE WHEN historic_fts.entity_type = 'topic' THEN t.computed_status ELSE f.status END, ''),
 		COALESCE(t.storage, ''), CASE WHEN historic_fts.entity_type = 'topic' THEN t.path ELSE t.path || '/' || f.path END,
 		COALESCE(CASE WHEN historic_fts.entity_type = 'topic' THEN t.tags ELSE f.tags END, '[]'),
+		CASE WHEN historic_fts.entity_type = 'topic' THEN '_meta.yaml' ELSE f.filename END,
 		bm25(historic_fts, 1.0, 1.0, 10.0, 8.0, 10.0, 1.0) AS rank,
-		snippet(historic_fts, -1, '', '', ' … ', 24)
+		snippet(historic_fts, -1, '', '', ' … ', 24),
+		COALESCE(t.title, ''), COALESCE(t.description, ''), COALESCE(t.computed_status, ''),
+		COALESCE(t.storage, ''), COALESCE(t.path, ''), COALESCE(t.tags, '[]')
 		FROM historic_fts
 		LEFT JOIN files AS f ON historic_fts.entity_type = 'file' AND CAST(f.id AS TEXT) = historic_fts.entity_id
 		LEFT JOIN topics AS t ON t.id = CASE WHEN historic_fts.entity_type = 'topic' THEN historic_fts.entity_id ELSE f.topic_id END
@@ -118,27 +136,43 @@ func Find(workspace config.Workspace, options Options) ([]Result, error) {
 		ORDER BY rank ASC, historic_fts.entity_type ASC, historic_fts.entity_id ASC`
 	rows, err := database.Query(statement, args...)
 	if err != nil {
-		return nil, fmt.Errorf("invalid FTS query: %w", err)
+		return nil, fmt.Errorf("invalid FTS query: %w; try plain keywords and keep filters in their flags", err)
 	}
 	defer rows.Close()
 	results := make([]Result, 0)
+	seen := make(map[string]struct{})
 	for rows.Next() {
 		var result Result
-		var tagsJSON, snippetText string
+		var tagsJSON, topicTagsJSON, snippetText, filename string
+		var topicTitle, topicDescription, topicStatus, topicStorage, topicPath string
 		var rank float64
-		if err := rows.Scan(&result.Type, &result.ID, &result.TopicID, &result.Title, &result.Description, &result.Status, &result.Storage, &result.Path, &tagsJSON, &rank, &snippetText); err != nil {
+		if err := rows.Scan(&result.Type, &result.ID, &result.TopicID, &result.Title, &result.Description, &result.Status, &result.Storage, &result.Path, &tagsJSON, &filename, &rank, &snippetText, &topicTitle, &topicDescription, &topicStatus, &topicStorage, &topicPath, &topicTagsJSON); err != nil {
 			return nil, fmt.Errorf("read search result: %w", err)
 		}
+		logicalPath := filename
+		if result.Type == "historic_file" || result.Type == "asset" {
+			logicalPath = strings.TrimPrefix(result.Path, topicPath+"/")
+		}
+		key := result.Type + "\x00" + result.TopicID + "\x00" + logicalPath
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
 		result.Tags = decodeStrings(tagsJSON)
 		result.Score = -rank
-		result.MatchedIn = matchedFields(result.Type, result.Title, result.Description, result.Tags, result.Path, options.Keyword, snippetText)
+		content := ""
+		if result.Type == "historic_file" {
+			content = fallbackContent(database, result.ID)
+		}
+		result.MatchedIn = matchedFields(result.Type, result.Title, result.Description, result.Tags, result.Path, filename, content, options.Keyword)
 		result.Snippet = snippetText
-		if result.Type == "file" {
-			result.Snippet = snippet(fallbackContent(database, result.ID), options.Keyword)
+		if result.Type == "historic_file" {
+			result.Snippet = snippet(content, options.Keyword)
 		}
 		if result.Snippet == "" {
 			result.Snippet = firstLine(result.Description)
 		}
+		result.Topic = TopicContext{ID: result.TopicID, Title: topicTitle, Description: topicDescription, Status: topicStatus, Storage: topicStorage, Path: topicPath, Tags: decodeStrings(topicTagsJSON)}
 		if result.Type == "topic" {
 			result.Path = filepath.ToSlash(filepath.Join(result.Path, "_meta.yaml"))
 		} else {
@@ -174,20 +208,40 @@ func validateOptions(options Options, requireKeyword bool) error {
 	if options.OpenOnly && options.ClosedOnly || options.ActiveOnly && options.ArchivedOnly {
 		return fmt.Errorf("open and closed filters cannot be combined")
 	}
+	if options.Status != "" && !options.Status.IsValid() {
+		return fmt.Errorf("invalid status %q; use create, pending, progress, review, blocked, complete, failed, cancelled, or archived", options.Status)
+	}
 	if options.Type != "" && !validType(options.Type) {
-		return fmt.Errorf("invalid type %q", options.Type)
+		return fmt.Errorf("invalid type %q; use topic, historic_file, asset, or file", options.Type)
 	}
 	if options.ID != "" && !options.ID.Valid() {
-		return fmt.Errorf("invalid topic ID %q", options.ID)
+		return fmt.Errorf("invalid topic ID %q; use exactly five digits", options.ID)
 	}
 	if options.Folder != "" {
 		folder := filepath.ToSlash(strings.Trim(strings.TrimSpace(options.Folder), "/"))
 		if folder == "" || filepath.IsAbs(options.Folder) || folder == "." || strings.HasPrefix(folder, "../") || strings.Contains(folder, "/../") || strings.HasSuffix(folder, "/..") || folder == ".." {
-			return fmt.Errorf("invalid folder filter %q", options.Folder)
+			return fmt.Errorf("invalid folder filter %q; use a workspace-relative folder such as wos", options.Folder)
 		}
 	}
+	for name, value := range map[string]string{
+		"created-after": options.CreatedAfter, "created-before": options.CreatedBefore,
+		"updated-after": options.UpdatedAfter, "updated-before": options.UpdatedBefore,
+	} {
+		if value == "" {
+			continue
+		}
+		if _, err := time.Parse("2006-01-02", value); err != nil {
+			return fmt.Errorf("invalid %s date %q; expected YYYY-MM-DD", name, value)
+		}
+	}
+	if options.CreatedAfter != "" && options.CreatedBefore != "" && options.CreatedAfter > options.CreatedBefore {
+		return fmt.Errorf("created-after %q is later than created-before %q", options.CreatedAfter, options.CreatedBefore)
+	}
+	if options.UpdatedAfter != "" && options.UpdatedBefore != "" && options.UpdatedAfter > options.UpdatedBefore {
+		return fmt.Errorf("updated-after %q is later than updated-before %q", options.UpdatedAfter, options.UpdatedBefore)
+	}
 	if requireKeyword && strings.TrimSpace(options.Keyword) == "" {
-		return fmt.Errorf("keyword must not be empty")
+		return fmt.Errorf("keyword must not be empty; provide a search term")
 	}
 	return nil
 }
@@ -242,11 +296,16 @@ func resultPredicates(options Options) ([]string, []any) {
 		args = append(args, options.Status.String(), options.Status.String())
 	}
 	if options.Type != "" {
-		if options.Type == "topic" {
+		if options.Type == "topic" || options.Type == "meta" {
 			where = append(where, "historic_fts.entity_type = 'topic'")
+		} else if options.Type == "file" || options.Type == "historic_file" || options.Type == "task" || options.Type == "prd" || options.Type == "spec" || options.Type == "issue" || options.Type == "note" || options.Type == "decision" {
+			where = append(where, "historic_fts.entity_type = 'file' AND f.type = 'historic_file'")
+			if options.Type == "task" {
+				where = append(where, "f.path LIKE 'wos/%'")
+			}
 		} else {
-			where = append(where, "historic_fts.entity_type = 'file' AND (f.type = ? OR (? = 'task' AND f.path LIKE 'wos/%'))")
-			args = append(args, options.Type, options.Type)
+			where = append(where, "historic_fts.entity_type = 'file' AND f.type = ?")
+			args = append(args, options.Type)
 		}
 	}
 	if options.ActiveOnly || options.ArchivedOnly {
@@ -278,7 +337,7 @@ func resultPredicates(options Options) ([]string, []any) {
 		args = append(args, options.UpdatedBefore, options.UpdatedBefore)
 	}
 	for _, tag := range options.Tags {
-		where = append(where, `(EXISTS (SELECT 1 FROM json_each(CASE WHEN historic_fts.entity_type = 'topic' THEN t.tags ELSE '[]' END) WHERE value = ?) OR EXISTS (SELECT 1 FROM json_each(CASE WHEN historic_fts.entity_type = 'file' THEN f.tags ELSE '[]' END) WHERE value = ?))`)
+		where = append(where, `(EXISTS (SELECT 1 FROM json_each(COALESCE(t.tags, '[]')) WHERE value = ?) OR EXISTS (SELECT 1 FROM json_each(COALESCE(f.tags, '[]')) WHERE value = ?))`)
 		args = append(args, tag, tag)
 	}
 	return where, args
@@ -292,7 +351,7 @@ func fallbackContent(database *sql.DB, id string) string {
 	return content
 }
 
-func matchedFields(kind, title, description string, tags []string, path, keyword, snippetText string) []string {
+func matchedFields(kind, title, description string, tags []string, path, filename, content, keyword string) []string {
 	terms := strings.Fields(strings.ToLower(keyword))
 	contains := func(value string) bool {
 		value = strings.ToLower(value)
@@ -316,10 +375,13 @@ func matchedFields(kind, title, description string, tags []string, path, keyword
 			break
 		}
 	}
+	if contains(filename) {
+		matches = append(matches, "filename")
+	}
 	if contains(path) {
 		matches = append(matches, "path")
 	}
-	if kind == "file" && snippetText != "" && len(matches) == 0 {
+	if kind == "historic_file" && contains(content) {
 		matches = append(matches, "content")
 	}
 	return matches

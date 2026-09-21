@@ -14,7 +14,7 @@ import (
 func newFindCommand() *cobra.Command {
 	var status, tag, folder, searchType, id string
 	var createdAfter, createdBefore, updatedAfter, updatedBefore string
-	var openOnly, closedOnly, activeOnly, archivedOnly, jsonOutput bool
+	var openOnly, closedOnly, jsonOutput bool
 	command := &cobra.Command{
 		Use:   "find <keyword>",
 		Short: "Find text in the Historic FTS5 index",
@@ -24,7 +24,7 @@ func newFindCommand() *cobra.Command {
 			if err != nil {
 				return writeCommandError(cmd, "find", jsonOutput, err)
 			}
-			if activeOnly || archivedOnly {
+			if cmd.Flags().Changed("active") || cmd.Flags().Changed("archived") {
 				return writeCommandError(cmd, "find", jsonOutput, fmt.Errorf("--active and --archived are no longer supported; use --open or --closed"))
 			}
 			var parsedStatus domain.Status
@@ -78,9 +78,9 @@ func newFindCommand() *cobra.Command {
 	command.Flags().StringVar(&updatedBefore, "updated-before", "", "filter updated date through YYYY-MM-DD")
 	command.Flags().BoolVar(&openOnly, "open", false, "search open topics only")
 	command.Flags().BoolVar(&closedOnly, "closed", false, "search closed topics only")
-	command.Flags().BoolVar(&activeOnly, "active", false, "deprecated alias; rejected, use --open")
-	command.Flags().BoolVar(&archivedOnly, "archived", false, "deprecated alias; rejected, use --closed")
 	command.Flags().BoolVar(&jsonOutput, "json", false, "output stable JSON")
+	_ = command.Flags().Bool("active", false, "deprecated; rejected, use --open")
+	_ = command.Flags().Bool("archived", false, "deprecated; rejected, use --closed")
 	return command
 }
 

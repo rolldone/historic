@@ -117,3 +117,84 @@ func TestFindHumanOutputHighlightsMatches(t *testing.T) {
 		t.Fatalf("human output missing highlight: %q", output)
 	}
 }
+
+func TestFindCommandFTSJSONSmokeCanonicalMetadataAndStorage(t *testing.T) {
+	root := t.TempDir()
+	t.Chdir(root)
+	if _, err := executeCommand(t, "init"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := executeCommand(t, "create", "Canonical Search Topic", "--id", "00001"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := executeCommand(t, "add", "weighted-note", "--id", "00001"); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(root, ".historic", "00001-canonical-search-topic", "weighted-note.md")
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	content = append(content, []byte("\nfilter-token in the body\n")...)
+	if err := os.WriteFile(path, content, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := executeCommand(t, "close", "00001"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := executeCommand(t, "rebuild"); err != nil {
+		t.Fatal(err)
+	}
+
+	output, err := executeCommand(t, "find", "filter-token", "--closed", "--type", "historic_file", "--json")
+	if err != nil {
+		t.Fatalf("closed JSON search: %v", err)
+	}
+	var response struct {
+		Command string `json:"command"`
+		OK      bool   `json:"ok"`
+		Data    []struct {
+			Type      string   `json:"type"`
+			TopicID   string   `json:"topic_id"`
+			Storage   string   `json:"storage"`
+			MatchedIn []string `json:"matched_in"`
+			Snippet   string   `json:"snippet"`
+			Topic     struct {
+				ID      string `json:"id"`
+				Storage string `json:"storage"`
+			} `json:"topic"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal([]byte(output), &response); err != nil {
+		t.Fatalf("JSON output = %q: %v", output, err)
+	}
+	if !response.OK || response.Command != "find" || len(response.Data) != 1 {
+		t.Fatalf("unexpected JSON response = %q", output)
+	}
+	result := response.Data[0]
+	if result.Type != "historic_file" || result.TopicID != "00001" || result.Storage != "closed" || result.Topic.ID != "00001" || result.Topic.Storage != "closed" || result.Snippet == "" || !containsString(result.MatchedIn, "content") {
+		t.Fatalf("incomplete closed result = %+v", result)
+	}
+	human, err := executeCommand(t, "find", "filter-token", "--closed")
+	if err != nil || !strings.Contains(human, "[CLOSED]") {
+		t.Fatalf("human closed label output=%q err=%v", human, err)
+	}
+	if _, err := executeCommand(t, "find", "filter-token", "--open", "--closed"); err == nil || !strings.Contains(err.Error(), "cannot be combined") {
+		t.Fatalf("conflicting storage filters error = %v", err)
+	}
+	if _, err := executeCommand(t, "find", "filter-token", "--active"); err == nil {
+		t.Fatal("deprecated --active flag was accepted")
+	}
+	if _, err := executeCommand(t, "find", "filter-token", "--updated-after", "not-a-date"); err == nil || !strings.Contains(err.Error(), "YYYY-MM-DD") {
+		t.Fatalf("invalid date error = %v", err)
+	}
+}
+
+func containsString(values []string, needle string) bool {
+	for _, value := range values {
+		if value == needle {
+			return true
+		}
+	}
+	return false
+}
