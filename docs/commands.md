@@ -100,6 +100,20 @@ historic search
 
 The TUI must respect terminal viewport height. Results must not render beneath the footer, and the active result must remain visible.
 
+## Schema compatibility and recovery
+
+```sh
+historic doctor [--json]
+historic upgrade [--json]
+historic rebuild [--json]
+```
+
+`doctor` performs a read-only compatibility diagnosis. It reports binary version, executable path, workspace format version, current and required index schema versions, Markdown validity, status, and recovery recommendation.
+
+Use `upgrade` for an older index schema and `rebuild` for a missing or damaged index. Both commands scan Markdown without modifying it, build and validate a temporary SQLite database, protect the old index with a backup and rollback path, replace atomically, clean temporary files, and use a lock against concurrent replacement. Legacy workspaces do not require manual SQL changes.
+
+Possible diagnosis statuses are `compatible`, `upgrade required`, `rebuild required`, `binary too old`, and `workspace invalid`.
+
 ## Lifecycle and versioning
 
 ```sh

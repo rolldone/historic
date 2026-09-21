@@ -110,16 +110,21 @@ historic open 00001
 - Close/open preserve frontmatter status and all topic bytes. They reject missing topics, duplicate IDs, destination conflicts, and symlink topic roots.
 - `historic import 00001` is a compatibility alias for opening a closed topic and preserves its work status.
 
-## Local snapshots
+## Schema compatibility and recovery
 
 ```sh
-historic save -m "snapshot message"
-historic log 00001
-historic diff 00001
-historic restore 00001 --snapshot <commit>
+historic doctor [--json]
+historic upgrade [--json]
+historic rebuild [--json]
 ```
 
-Snapshots are local-only and include both open and closed topic storage under `.historic`. Never push the internal repository or configure a remote for it.
+- `doctor` is read-only. It reports binary version, executable path, workspace format version, current and required index schema versions, Markdown validity, compatibility status, and an actionable recommendation.
+- Status values include `compatible`, `upgrade required`, `rebuild required`, `binary too old`, and `workspace invalid`.
+- If the index is missing or damaged, run `historic rebuild` to recreate it from Markdown.
+- If the index schema is older, run `historic upgrade`. Upgrade validates the workspace, builds a temporary schema, scans Markdown as source of truth, validates the new index, backs up the old index, and atomically replaces it.
+- Upgrade and rebuild use temporary files, cleanup, rollback safeguards, and a lock to prevent concurrent index replacement. Markdown is never modified.
+- A failed scan or invalid workspace leaves the existing index protected. Do not add SQLite columns manually or delete the index manually.
+
 
 ## JSON output
 

@@ -116,12 +116,36 @@ historic rebuild --json
 
 Every JSON-capable command uses the stable envelope `{ "command", "ok", "data", "error" }`. Successful empty list/find results return `ok: true` with an empty `data` array. Errors return a non-zero exit code and a message on stderr; JSON mode also emits the error envelope on stdout.
 
+## Schema compatibility and recovery
+
+Historic separates binary, workspace-format, and SQLite index-schema versions. Diagnose an existing workspace before recovery:
+
+```sh
+historic doctor --json
+```
+
+`doctor` is read-only and reports the executable, binary version, workspace format, current/required index schema, Markdown validity, compatibility status, and an actionable recommendation.
+
+```sh
+historic upgrade --json
+historic rebuild --json
+```
+
+- Use `upgrade` when the index schema is older than the binary requirement.
+- Use `rebuild` when the index is missing or damaged.
+- Both operations scan Markdown as the source of truth and leave Markdown unchanged.
+- A temporary SQLite database is validated before atomic replacement.
+- The previous index is backed up and protected by rollback handling.
+- A lock prevents concurrent upgrade/rebuild replacement.
+- Do not manually add SQLite columns or delete `.historic/.index.sqlite`.
+
 ## Development and quality gate
 
 ```sh
 go test ./...
 go vet ./...
-go build -o historic .
+go build ./...
+./build-global.sh
 go test ./internal/search -run '^$' -bench BenchmarkFind1000Files -benchtime=1x
 ```
 
