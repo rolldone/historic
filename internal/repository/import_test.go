@@ -16,8 +16,7 @@ func TestImportTopicOpensWithoutChangingStatusOrContent(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(source, "wos"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	meta, _ := markdown.NewDocument(domain.Frontmatter{ID: "00001", Title: "Topic", Status: domain.StatusComplete, Created: "2026-09-18"}, "meta")
-	if err := markdown.WriteFile(filepath.Join(source, "_meta.md"), meta); err != nil {
+	if err := markdown.WriteTopicMetadata(filepath.Join(source, markdown.MetaFilename), markdown.TopicMetadataFromFrontmatter(domain.Frontmatter{ID: "00001", Title: "Topic", Status: domain.StatusComplete, Created: "2026-09-18"}, "")); err != nil {
 		t.Fatal(err)
 	}
 	entryContent := []byte("entry content\n")
@@ -47,8 +46,7 @@ func TestImportTopicRejectsConflictWithoutPartialDestination(t *testing.T) {
 	if err := os.MkdirAll(source, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	meta, _ := markdown.NewDocument(domain.Frontmatter{ID: "00001", Title: "Topic", Status: domain.StatusComplete, Created: "2026-09-18"}, "meta")
-	if err := markdown.WriteFile(filepath.Join(source, "_meta.md"), meta); err != nil {
+	if err := markdown.WriteTopicMetadata(filepath.Join(source, markdown.MetaFilename), markdown.TopicMetadataFromFrontmatter(domain.Frontmatter{ID: "00001", Title: "Topic", Status: domain.StatusComplete, Created: "2026-09-18"}, "")); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.MkdirAll(filepath.Join(store.Workspace.Histories, "00001-topic"), 0o755); err != nil {

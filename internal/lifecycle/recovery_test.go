@@ -19,8 +19,7 @@ func TestArchiveFailureLeavesSourceAndDetectsConflict(t *testing.T) {
 	if err := os.MkdirAll(source, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	meta, _ := markdown.NewDocument(domain.Frontmatter{ID: "00001", Title: "Topic", Status: domain.StatusProgress, Created: "2026-09-18"}, "meta")
-	if err := markdown.WriteFile(filepath.Join(source, "_meta.md"), meta); err != nil {
+	if err := markdown.WriteTopicMetadata(filepath.Join(source, markdown.MetaFilename), markdown.TopicMetadata{ID: "00001", Title: "Topic", Status: domain.StatusProgress, Created: "2026-09-18"}); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.MkdirAll(filepath.Join(workspace.Database, "00001-topic"), 0o755); err != nil {

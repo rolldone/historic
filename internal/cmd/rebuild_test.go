@@ -15,7 +15,7 @@ func TestRebuildCommandJSON(t *testing.T) {
 	if err := os.MkdirAll(workspace, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(workspace, "_meta.md"), []byte("---\nid: 00001\ntitle: Topic\nstatus: progress\ncreated: 2026-09-18\n---\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(workspace, "_meta.yaml"), []byte("id: 00001\ntitle: Topic\nstatus: progress\ncreated: 2026-09-18\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	command := NewRootCommand()

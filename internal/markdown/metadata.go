@@ -17,8 +17,6 @@ import (
 const (
 	// MetaFilename is the canonical topic metadata filename.
 	MetaFilename = "_meta.yaml"
-	// LegacyMetaFilename is the Markdown topic metadata filename supported for migration.
-	LegacyMetaFilename = "_meta.md"
 )
 
 // TopicMetadata is the canonical, non-Markdown metadata for a topic.
@@ -127,148 +125,26 @@ func WriteTopicMetadata(path string, metadata TopicMetadata) error {
 	return nil
 }
 
-// ReadTopicMetadata reads canonical metadata and migrates one legacy topic if
-// needed. A topic containing both formats is rejected instead of overwritten.
+// ReadTopicMetadata reads and validates the canonical metadata file. The
+// canonical file is required; Markdown files with other names are ordinary
+// topic assets and are never considered metadata.
 func ReadTopicMetadata(topicPath string) (TopicMetadata, error) {
 	canonical := filepath.Join(topicPath, MetaFilename)
-	legacy := filepath.Join(topicPath, LegacyMetaFilename)
-	canonicalInfo, canonicalErr := os.Lstat(canonical)
-	legacyInfo, legacyErr := os.Lstat(legacy)
-	if canonicalErr != nil && !errors.Is(canonicalErr, os.ErrNotExist) {
-		return TopicMetadata{}, fmt.Errorf("inspect topic metadata %s: %w", canonical, canonicalErr)
+	info, err := os.Lstat(canonical)
+	if err != nil {
+		return TopicMetadata{}, fmt.Errorf("%s: read: %w", canonical, err)
 	}
-	if legacyErr != nil && !errors.Is(legacyErr, os.ErrNotExist) {
-		return TopicMetadata{}, fmt.Errorf("inspect legacy metadata %s: %w", legacy, legacyErr)
-	}
-	if canonicalErr == nil && canonicalInfo.Mode()&os.ModeSymlink != 0 {
+	if info.Mode()&os.ModeSymlink != 0 {
 		return TopicMetadata{}, fmt.Errorf("%w: metadata symlink %s", domain.ErrConflict, canonical)
 	}
-	if legacyErr == nil && legacyInfo.Mode()&os.ModeSymlink != 0 {
-		return TopicMetadata{}, fmt.Errorf("%w: legacy metadata symlink %s", domain.ErrConflict, legacy)
-	}
-	if canonicalErr == nil && canonicalInfo.IsDir() {
+	if info.IsDir() {
 		return TopicMetadata{}, fmt.Errorf("%s: metadata is a directory", canonical)
 	}
-	if legacyErr == nil && legacyInfo.IsDir() {
-		return TopicMetadata{}, fmt.Errorf("%s: legacy metadata is a directory", legacy)
+	if !info.Mode().IsRegular() {
+		return TopicMetadata{}, fmt.Errorf("%w: metadata is not a regular file", domain.ErrConflict)
 	}
-	if canonicalErr == nil && legacyErr == nil {
-		return TopicMetadata{}, fmt.Errorf("%w: both %s and %s exist", domain.ErrConflict, canonical, legacy)
-	}
-	if canonicalErr == nil {
-		return ParseTopicMetadataFile(canonical)
-	}
-	if legacyErr == nil {
-		metadata, err := migrateLegacyTopic(topicPath, legacy, canonical)
-		if err != nil {
-			return TopicMetadata{}, err
-		}
-		return metadata, nil
-	}
-	return TopicMetadata{}, fmt.Errorf("%s: read: %w", canonical, os.ErrNotExist)
+	return ParseTopicMetadataFile(canonical)
 }
-
-// MigrateWorkspaceMetadata migrates all topic roots. The returned rollback
-// function restores legacy files if a later rebuild/upgrade step fails.
-func MigrateWorkspaceMetadata(roots ...string) (func(), error) {
-	migrations := make([]metadataMigration, 0)
-	for _, root := range roots {
-		entries, err := os.ReadDir(root)
-		if errors.Is(err, os.ErrNotExist) {
-			continue
-		}
-		if err != nil {
-			return nil, fmt.Errorf("scan metadata root %s: %w", root, err)
-		}
-		for _, entry := range entries {
-			if !entry.IsDir() || strings.HasPrefix(entry.Name(), ".") {
-				continue
-			}
-			topicPath := filepath.Join(root, entry.Name())
-			canonical := filepath.Join(topicPath, MetaFilename)
-			legacy := filepath.Join(topicPath, LegacyMetaFilename)
-			_, canonicalErr := os.Stat(canonical)
-			_, legacyErr := os.Stat(legacy)
-			if errors.Is(canonicalErr, os.ErrNotExist) && legacyErr == nil {
-				old, err := os.ReadFile(legacy)
-				if err != nil {
-					rollbackMetadata(migrations)
-					return nil, fmt.Errorf("save legacy metadata %s: %w", legacy, err)
-				}
-				if _, err := migrateLegacyTopic(topicPath, legacy, canonical); err != nil {
-					rollbackMetadata(migrations)
-					return nil, err
-				}
-				migrations = append(migrations, metadataMigration{canonical: canonical, legacy: legacy, legacyBytes: old})
-				continue
-			}
-			if canonicalErr != nil && !errors.Is(canonicalErr, os.ErrNotExist) {
-				rollbackMetadata(migrations)
-				return nil, fmt.Errorf("inspect metadata %s: %w", canonical, canonicalErr)
-			}
-			if legacyErr != nil && !errors.Is(legacyErr, os.ErrNotExist) {
-				rollbackMetadata(migrations)
-				return nil, fmt.Errorf("inspect legacy metadata %s: %w", legacy, legacyErr)
-			}
-			if canonicalErr == nil && legacyErr == nil {
-				rollbackMetadata(migrations)
-				return nil, fmt.Errorf("%w: both %s and %s exist", domain.ErrConflict, canonical, legacy)
-			}
-		}
-	}
-	return func() { rollbackMetadata(migrations) }, nil
-}
-
-type metadataMigration struct {
-	canonical   string
-	legacy      string
-	legacyBytes []byte
-}
-
-func migrateLegacyTopic(topicPath, legacy, canonical string) (TopicMetadata, error) {
-	document, err := ParseFile(legacy)
-	if err != nil {
-		return TopicMetadata{}, fmt.Errorf("invalid legacy topic metadata %s: %w", legacy, err)
-	}
-	metadata := TopicMetadataFromFrontmatter(document.Frontmatter, "")
-	if err := WriteTopicMetadata(canonical, metadata); err != nil {
-		return TopicMetadata{}, fmt.Errorf("migrate legacy metadata %s: %w", legacy, err)
-	}
-	validated, err := ParseTopicMetadataFile(canonical)
-	if err != nil {
-		_ = os.Remove(canonical)
-		return TopicMetadata{}, fmt.Errorf("validate migrated metadata %s: %w", canonical, err)
-	}
-	if err := os.Remove(legacy); err != nil {
-		_ = os.Remove(canonical)
-		return TopicMetadata{}, fmt.Errorf("remove legacy metadata %s after validation: %w", legacy, err)
-	}
-	return validated, nil
-}
-
-func rollbackMetadata(migrations []metadataMigration) {
-	for index := len(migrations) - 1; index >= 0; index-- {
-		migration := migrations[index]
-		_ = os.Remove(migration.canonical)
-		_ = os.WriteFile(migration.legacy, migration.legacyBytes, 0o644)
-	}
-}
-
-func legacyDescription(body string) string {
-	lines := strings.Split(strings.ReplaceAll(body, "\r\n", "\n"), "\n")
-	for index, line := range lines {
-		if strings.TrimSpace(line) != "## Deskripsi" {
-			continue
-		}
-		end := index + 1
-		for end < len(lines) && !strings.HasPrefix(strings.TrimSpace(lines[end]), "## ") {
-			end++
-		}
-		return strings.TrimSpace(strings.Join(lines[index+1:end], "\n"))
-	}
-	return ""
-}
-
 func atomicWrite(path string, data []byte) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return fmt.Errorf("%s: create parent: %w", path, err)

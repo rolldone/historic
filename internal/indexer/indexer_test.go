@@ -282,6 +282,12 @@ func TestRebuildPreservesOldIndexWhenScanFails(t *testing.T) {
 		t.Fatal(err)
 	}
 	valid, _ := markdown.NewDocument(domain.Frontmatter{ID: "00001", Title: "Valid", Status: domain.StatusProgress, Created: "2026-09-18"}, "valid")
+	if err := markdown.WriteTopicMetadata(filepath.Join(topic, markdown.MetaFilename), markdown.TopicMetadataFromFrontmatter(valid.Frontmatter, "")); err != nil {
+		t.Fatal(err)
+	}
+	if err := markdown.WriteTopicMetadata(filepath.Join(topic, markdown.MetaFilename), markdown.TopicMetadataFromFrontmatter(valid.Frontmatter, "")); err != nil {
+		t.Fatal(err)
+	}
 	if err := markdown.WriteFile(filepath.Join(topic, "note.md"), valid); err != nil {
 		t.Fatal(err)
 	}
@@ -295,7 +301,7 @@ func TestRebuildPreservesOldIndexWhenScanFails(t *testing.T) {
 		t.Fatalf("rebuild with Markdown asset failed: %v", err)
 	}
 	count, err := Count(workspace)
-	if err != nil || count != 1 {
+	if err != nil || count != 2 {
 		t.Fatalf("old index changed: count=%d err=%v", count, err)
 	}
 }
@@ -331,6 +337,9 @@ func TestRebuildReadModelClassifiesAssetsAndAggregatesStatus(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(topic, "brief.md"), []byte("plain Markdown asset"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.WriteFile(filepath.Join(topic, "_meta.md"), []byte("legacy metadata is an asset"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := Rebuild(workspace); err != nil {
 		t.Fatal(err)
 	}
@@ -356,7 +365,7 @@ func TestRebuildReadModelClassifiesAssetsAndAggregatesStatus(t *testing.T) {
 	if err := database.QueryRow("SELECT COUNT(*) FROM files WHERE topic_id = '00001' AND type = 'asset' AND status IS NULL").Scan(&nullAssets); err != nil {
 		t.Fatal(err)
 	}
-	if managed != 2 || assets != 1 || nullAssets != 1 {
+	if managed != 2 || assets != 2 || nullAssets != 2 {
 		t.Fatalf("read model counts managed=%d assets=%d nullAssets=%d", managed, assets, nullAssets)
 	}
 }
@@ -459,6 +468,12 @@ func TestRebuildPreservesFTSIndexWhenScanFails(t *testing.T) {
 		t.Fatal(err)
 	}
 	document, _ := markdown.NewDocument(domain.Frontmatter{ID: "00001", Title: "Valid", Status: domain.StatusProgress, Created: "2026-09-18"}, "searchable body")
+	if err := markdown.WriteTopicMetadata(filepath.Join(topic, markdown.MetaFilename), markdown.TopicMetadataFromFrontmatter(document.Frontmatter, "")); err != nil {
+		t.Fatal(err)
+	}
+	if err := markdown.WriteTopicMetadata(filepath.Join(topic, markdown.MetaFilename), markdown.TopicMetadataFromFrontmatter(document.Frontmatter, "")); err != nil {
+		t.Fatal(err)
+	}
 	if err := markdown.WriteFile(filepath.Join(topic, "note.md"), document); err != nil {
 		t.Fatal(err)
 	}

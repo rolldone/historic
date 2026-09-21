@@ -22,7 +22,7 @@ func TestImportCommandCopiesArchivedTopic(t *testing.T) {
 	if err := os.MkdirAll(archive, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(archive, "_meta.md"), []byte("---\nid: 00001\ntitle: Topic\nstatus: complete\ncreated: 2026-09-18\n---\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(archive, "_meta.yaml"), []byte("id: 00001\ntitle: Topic\nstatus: complete\ncreated: 2026-09-18\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	command = NewRootCommand()

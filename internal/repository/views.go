@@ -113,7 +113,7 @@ func readFiles(topicPath, root string) ([]FileView, error) {
 		if info.Mode()&os.ModeSymlink != 0 || entry.Type()&os.ModeSymlink != 0 {
 			return fmt.Errorf("%w: symlink %s", domain.ErrConflict, filepath.ToSlash(path))
 		}
-		if entry.IsDir() || filepath.Base(path) == markdown.MetaFilename || filepath.Base(path) == markdown.LegacyMetaFilename || strings.ToLower(filepath.Ext(path)) != ".md" {
+		if entry.IsDir() || filepath.Base(path) == markdown.MetaFilename || strings.ToLower(filepath.Ext(path)) != ".md" {
 			return nil
 		}
 		document, err := markdown.ParseFile(path)

@@ -42,17 +42,6 @@ func atomicRebuildWithPreparation(workspace config.Workspace, prepare func() err
 	}
 	defer unlock()
 
-	rollbackMetadata, err := markdown.MigrateWorkspaceMetadata(workspace.Histories, workspace.Database)
-	if err != nil {
-		return 0, err
-	}
-	committed := false
-	defer func() {
-		if !committed {
-			rollbackMetadata()
-		}
-	}()
-
 	// Validate the source before preparation can modify generated metadata. This
 	// keeps both Markdown and the current index intact when the scan is invalid.
 	if prepare != nil {
@@ -67,7 +56,6 @@ func atomicRebuildWithPreparation(workspace config.Workspace, prepare func() err
 	if err != nil {
 		return 0, err
 	}
-	committed = true
 	return count, nil
 }
 

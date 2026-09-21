@@ -63,7 +63,7 @@ func scanTopicFiles(topic string, id domain.ID) ([]string, []string, error) {
 		if entry.Type()&os.ModeSymlink != 0 {
 			return fmt.Errorf("%w: symlink %s", domain.ErrConflict, path)
 		}
-		if entry.IsDir() || filepath.Base(path) == markdown.MetaFilename || filepath.Base(path) == markdown.LegacyMetaFilename {
+		if entry.IsDir() || filepath.Base(path) == markdown.MetaFilename {
 			return nil
 		}
 		relative, err := filepath.Rel(topic, path)
@@ -71,7 +71,7 @@ func scanTopicFiles(topic string, id domain.ID) ([]string, []string, error) {
 			return err
 		}
 		relative = filepath.ToSlash(relative)
-		if strings.EqualFold(filepath.Ext(path), ".md") {
+		if strings.EqualFold(filepath.Ext(path), ".md") && filepath.Base(path) != "_meta.md" {
 			document, parseErr := markdown.ParseFile(path)
 			if parseErr == nil && document.Frontmatter.ID == id {
 				managed = append(managed, relative)

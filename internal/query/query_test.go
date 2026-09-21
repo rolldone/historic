@@ -24,6 +24,13 @@ func writeQueryDocument(t *testing.T, path string, metadata domain.Frontmatter, 
 	}
 }
 
+func writeQueryMetadata(t *testing.T, path string, metadata domain.Frontmatter) {
+	t.Helper()
+	if err := markdown.WriteTopicMetadata(path, markdown.TopicMetadataFromFrontmatter(metadata, "")); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestQueryTopicsAggregatesManagedFilesExcludesAssetsAndKeepsEmptyTopics(t *testing.T) {
 	workspace, err := config.Initialize(t.TempDir())
 	if err != nil {
@@ -42,15 +49,15 @@ func TestQueryTopicsAggregatesManagedFilesExcludesAssetsAndKeepsEmptyTopics(t *t
 		t.Fatal(err)
 	}
 
-	writeQueryDocument(t, filepath.Join(mixed, "_meta.md"), domain.Frontmatter{ID: "00001", Title: "Mixed", Status: domain.StatusCreate, Tags: []string{"schema"}, Created: "2026-09-01"}, "topic")
+	writeQueryMetadata(t, filepath.Join(mixed, markdown.MetaFilename), domain.Frontmatter{ID: "00001", Title: "Mixed", Status: domain.StatusCreate, Tags: []string{"schema"}, Created: "2026-09-01"})
 	writeQueryDocument(t, filepath.Join(mixed, "wos", "active.md"), domain.Frontmatter{ID: "00001", Title: "Active", Status: domain.StatusProgress, Tags: []string{"urgent"}, Created: "2026-09-02", Updated: "2026-09-10"}, "active")
 	writeQueryDocument(t, filepath.Join(mixed, "wos", "complete.md"), domain.Frontmatter{ID: "00001", Title: "Complete", Status: domain.StatusComplete, Created: "2026-09-03"}, "complete")
 	writeQueryDocument(t, filepath.Join(mixed, "wos", "cancelled.md"), domain.Frontmatter{ID: "00001", Title: "Cancelled", Status: domain.StatusCancelled, Created: "2026-09-04"}, "cancelled")
 	if err := os.WriteFile(filepath.Join(mixed, "diagram.png"), []byte("asset"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	writeQueryDocument(t, filepath.Join(empty, "_meta.md"), domain.Frontmatter{ID: "00002", Title: "Empty", Status: domain.StatusCreate, Created: "2026-09-01"}, "empty")
-	writeQueryDocument(t, filepath.Join(complete, "_meta.md"), domain.Frontmatter{ID: "00003", Title: "Complete", Status: domain.StatusCreate, Created: "2026-09-01"}, "complete")
+	writeQueryMetadata(t, filepath.Join(empty, markdown.MetaFilename), domain.Frontmatter{ID: "00002", Title: "Empty", Status: domain.StatusCreate, Created: "2026-09-01"})
+	writeQueryMetadata(t, filepath.Join(complete, markdown.MetaFilename), domain.Frontmatter{ID: "00003", Title: "Complete", Status: domain.StatusCreate, Created: "2026-09-01"})
 	writeQueryDocument(t, filepath.Join(complete, "done.md"), domain.Frontmatter{ID: "00003", Title: "Done", Status: domain.StatusComplete, Created: "2026-09-05"}, "done")
 
 	if _, err := indexer.Rebuild(workspace); err != nil {
@@ -84,7 +91,7 @@ func TestQueryFiltersCombineAndFileResultsCarryTopicContext(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(topic, "wos"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	writeQueryDocument(t, filepath.Join(topic, "_meta.md"), domain.Frontmatter{ID: "00001", Title: "Filterable", Status: domain.StatusCreate, Tags: []string{"schema"}, Created: "2026-09-01"}, "topic")
+	writeQueryMetadata(t, filepath.Join(topic, markdown.MetaFilename), domain.Frontmatter{ID: "00001", Title: "Filterable", Status: domain.StatusCreate, Tags: []string{"schema"}, Created: "2026-09-01"})
 	writeQueryDocument(t, filepath.Join(topic, "wos", "target.md"), domain.Frontmatter{ID: "00001", Title: "Target", Status: domain.StatusProgress, Tags: []string{"urgent"}, Created: "2026-09-02", Updated: "2026-09-10"}, "target")
 	writeQueryDocument(t, filepath.Join(topic, "other.md"), domain.Frontmatter{ID: "00001", Title: "Other", Status: domain.StatusComplete, Created: "2026-09-03"}, "other")
 	if _, err := indexer.Rebuild(workspace); err != nil {
@@ -127,9 +134,7 @@ func TestAggregateQuerySmokeHasStableJSONAndExcludesAssets(t *testing.T) {
 	if err := os.MkdirAll(topic, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	writeQueryDocument(t, filepath.Join(topic, "_meta.md"), domain.Frontmatter{
-		ID: "00001", Title: "Smoke", Status: domain.StatusCreate, Created: "2026-09-01",
-	}, "topic")
+	writeQueryMetadata(t, filepath.Join(topic, markdown.MetaFilename), domain.Frontmatter{ID: "00001", Title: "Smoke", Status: domain.StatusCreate, Created: "2026-09-01"})
 	writeQueryDocument(t, filepath.Join(topic, "done.md"), domain.Frontmatter{
 		ID: "00001", Title: "Done", Status: domain.StatusComplete, Created: "2026-09-02",
 	}, "done")

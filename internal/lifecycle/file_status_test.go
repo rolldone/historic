@@ -22,6 +22,9 @@ func TestChangeFileStatusUpdatesOnlyTargetAndRebuilds(t *testing.T) {
 		t.Fatal(err)
 	}
 	metadata := domain.Frontmatter{ID: "00001", Title: "Topic", Status: domain.StatusProgress, Created: "2026-09-19"}
+	if err := markdown.WriteTopicMetadata(filepath.Join(topic, markdown.MetaFilename), markdown.TopicMetadataFromFrontmatter(metadata, "")); err != nil {
+		t.Fatal(err)
+	}
 	target, err := markdown.NewDocument(metadata, "target body")
 	if err != nil {
 		t.Fatal(err)
@@ -67,7 +70,7 @@ func TestChangeFileStatusUpdatesOnlyTargetAndRebuilds(t *testing.T) {
 	if string(afterOther) != string(beforeOther) {
 		t.Fatal("non-target file changed")
 	}
-	if indexed, err := indexer.Count(workspace); err != nil || indexed != 2 {
+	if indexed, err := indexer.Count(workspace); err != nil || indexed != 3 {
 		t.Fatalf("index count = %d, %v", indexed, err)
 	}
 }

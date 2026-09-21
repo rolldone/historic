@@ -496,10 +496,6 @@ func validateCopiedTopic(path string, id domain.ID) (markdown.Document, error) {
 	}
 	metaPath := filepath.Join(path, markdown.MetaFilename)
 	metaInfo, err := os.Lstat(metaPath)
-	if errors.Is(err, os.ErrNotExist) {
-		metaPath = filepath.Join(path, markdown.LegacyMetaFilename)
-		metaInfo, err = os.Lstat(metaPath)
-	}
 	if err != nil {
 		return markdown.Document{}, err
 	}

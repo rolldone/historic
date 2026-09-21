@@ -48,7 +48,7 @@ func TestSyncMetaBatchCommandDoesNotProcessArchive(t *testing.T) {
 	if err := os.MkdirAll(archive, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(archive, "_meta.md"), []byte("---\nid: 00002\ntitle: Archived\nstatus: complete\ncreated: 2026-09-19\n---\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(archive, "_meta.yaml"), []byte("id: 00002\ntitle: Archived\nstatus: complete\ncreated: 2026-09-19\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := executeCommand(t, "sync-meta", "--json"); err != nil {

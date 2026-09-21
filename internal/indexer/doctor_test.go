@@ -13,7 +13,7 @@ import (
 	"historic/internal/markdown"
 )
 
-func TestUpgradeMigratesLegacyIndexAndPreservesMarkdown(t *testing.T) {
+func TestUpgradeRequiresCanonicalMetadataAndPreservesLegacyAsset(t *testing.T) {
 	workspace, err := config.Initialize(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -23,7 +23,7 @@ func TestUpgradeMigratesLegacyIndexAndPreservesMarkdown(t *testing.T) {
 		t.Fatal(err)
 	}
 	document, _ := markdown.NewDocument(domain.Frontmatter{ID: "00001", Title: "Topic", Status: domain.StatusProgress, Created: "2026-09-21"}, "body")
-	legacyPath := filepath.Join(topic, markdown.LegacyMetaFilename)
+	legacyPath := filepath.Join(topic, "_meta.md")
 	if err := markdown.WriteFile(legacyPath, document); err != nil {
 		t.Fatal(err)
 	}
@@ -39,28 +39,15 @@ func TestUpgradeMigratesLegacyIndexAndPreservesMarkdown(t *testing.T) {
 		t.Fatal(err)
 	}
 	count, _, err := Upgrade(workspace)
-	if err != nil || count != 1 {
-		t.Fatalf("upgrade count=%d err=%v", count, err)
+	if err == nil || count != 0 {
+		t.Fatalf("upgrade count=%d err=%v, want missing canonical metadata error", count, err)
 	}
 	canonicalPath := filepath.Join(topic, markdown.MetaFilename)
-	if _, err := os.Stat(legacyPath); !os.IsNotExist(err) {
-		t.Fatalf("legacy metadata remains after upgrade: %v", err)
+	if _, err := os.Stat(canonicalPath); !os.IsNotExist(err) {
+		t.Fatalf("canonical metadata unexpectedly created: %v", err)
 	}
-	canonical, err := markdown.ParseTopicMetadataFile(canonicalPath)
-	if err != nil || canonical.ID != "00001" || canonical.Title != "Topic" || canonical.Status != domain.StatusProgress {
-		t.Fatalf("migrated metadata = %#v err=%v", canonical, err)
-	}
-	if checksum(legacyPath) == before {
-		t.Fatal("legacy checksum unexpectedly available after migration")
-	}
-	version, err := sql.Open("sqlite", workspace.Index)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer version.Close()
-	var got int
-	if err := version.QueryRow("SELECT value FROM historic_metadata WHERE key='schema_version'").Scan(&got); err != nil || got != SchemaVersion {
-		t.Fatalf("schema version=%d err=%v", got, err)
+	if checksum(legacyPath) != before {
+		t.Fatal("legacy asset changed during upgrade")
 	}
 }
 

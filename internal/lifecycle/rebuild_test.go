@@ -25,15 +25,14 @@ func TestRebuildMetadataProcessesOpenAndClosedTopics(t *testing.T) {
 		if err := os.MkdirAll(topic, 0o755); err != nil {
 			t.Fatal(err)
 		}
-		document, _ := markdown.NewDocument(domain.Frontmatter{ID: item.id, Title: "Topic", Status: item.status, Created: "2026-09-21"}, "manual notes")
-		if err := markdown.WriteFile(filepath.Join(topic, markdown.MetaFilename), document); err != nil {
+		if err := markdown.WriteTopicMetadata(filepath.Join(topic, markdown.MetaFilename), markdown.TopicMetadata{ID: item.id, Title: "Topic", Status: item.status, Created: "2026-09-21"}); err != nil {
 			t.Fatal(err)
 		}
 		file, _ := markdown.NewDocument(domain.Frontmatter{ID: item.id, Title: "Current", Status: domain.StatusProgress, Created: "2026-09-21"}, "current body")
 		if err := markdown.WriteFile(filepath.Join(topic, "current.md"), file); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(filepath.Join(topic, "image.png"), []byte("asset"), 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(topic, "_meta.md"), []byte("legacy asset"), 0o644); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -53,8 +52,8 @@ func TestRebuildMetadataProcessesOpenAndClosedTopics(t *testing.T) {
 		if meta.Status != item.status || meta.ID != item.id || meta.Title != "Topic" {
 			t.Fatalf("metadata = %#v", meta)
 		}
-		if _, err := os.Stat(filepath.Join(item.root, item.id.String()+"-topic", markdown.LegacyMetaFilename)); !os.IsNotExist(err) {
-			t.Fatalf("legacy metadata remains: %v", err)
+		if _, err := os.Stat(filepath.Join(item.root, item.id.String()+"-topic", "_meta.md")); err != nil {
+			t.Fatalf("legacy metadata asset missing: %v", err)
 		}
 	}
 }
