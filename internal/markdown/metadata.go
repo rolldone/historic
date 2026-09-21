@@ -23,14 +23,29 @@ const (
 // Status is retained for lifecycle compatibility; child Markdown frontmatter
 // remains authoritative for managed file status.
 type TopicMetadata struct {
-	ID          domain.ID     `yaml:"id"`
-	Title       string        `yaml:"title"`
-	Description string        `yaml:"description,omitempty"`
-	Status      domain.Status `yaml:"status,omitempty"`
-	Created     string        `yaml:"created"`
-	Updated     string        `yaml:"updated,omitempty"`
-	Tags        []string      `yaml:"tags,omitempty"`
-	Related     []domain.ID   `yaml:"related,omitempty"`
+	ID          domain.ID       `yaml:"id"`
+	Title       string          `yaml:"title"`
+	Description string          `yaml:"description,omitempty"`
+	Status      domain.Status   `yaml:"status,omitempty"`
+	Created     string          `yaml:"created"`
+	Updated     string          `yaml:"updated,omitempty"`
+	Tags        []string        `yaml:"tags,omitempty"`
+	Related     []domain.ID     `yaml:"related,omitempty"`
+	Files       []ManifestFile  `yaml:"files"`
+	Assets      []ManifestAsset `yaml:"assets"`
+}
+
+// ManifestFile describes a managed Markdown file discovered below a topic.
+type ManifestFile struct {
+	Path   string        `yaml:"path"`
+	Type   string        `yaml:"type"`
+	Status domain.Status `yaml:"status"`
+}
+
+// ManifestAsset describes a non-managed file discovered below a topic.
+type ManifestAsset struct {
+	Path string `yaml:"path"`
+	Type string `yaml:"type"`
 }
 
 // TopicMetadataFromFrontmatter converts legacy topic frontmatter without
@@ -77,6 +92,61 @@ func ValidateTopicMetadata(metadata TopicMetadata) error {
 			return fmt.Errorf("%w: field %q item %d is not a five-digit ID", ErrInvalidFrontmatter, "related", index)
 		}
 	}
+	if err := validateManifestFiles(metadata.Files); err != nil {
+		return fmt.Errorf("%w: %v", ErrInvalidFrontmatter, err)
+	}
+	if err := validateManifestAssets(metadata.Assets); err != nil {
+		return fmt.Errorf("%w: %v", ErrInvalidFrontmatter, err)
+	}
+	return nil
+}
+
+func validateManifestFiles(files []ManifestFile) error {
+	seen := make(map[string]struct{}, len(files))
+	for index, file := range files {
+		if err := validateManifestPath(file.Path); err != nil {
+			return fmt.Errorf("field %q item %d: %v", "files", index, err)
+		}
+		if strings.TrimSpace(file.Type) == "" {
+			return fmt.Errorf("field %q item %d type is required", "files", index)
+		}
+		if !file.Status.IsValid() {
+			return fmt.Errorf("field %q item %d has invalid status %q", "files", index, file.Status)
+		}
+		if _, exists := seen[file.Path]; exists {
+			return fmt.Errorf("field %q contains duplicate path %q", "files", file.Path)
+		}
+		seen[file.Path] = struct{}{}
+	}
+	return nil
+}
+
+func validateManifestAssets(assets []ManifestAsset) error {
+	seen := make(map[string]struct{}, len(assets))
+	for index, asset := range assets {
+		if err := validateManifestPath(asset.Path); err != nil {
+			return fmt.Errorf("field %q item %d: %v", "assets", index, err)
+		}
+		if strings.TrimSpace(asset.Type) == "" {
+			return fmt.Errorf("field %q item %d type is required", "assets", index)
+		}
+		if _, exists := seen[asset.Path]; exists {
+			return fmt.Errorf("field %q contains duplicate path %q", "assets", asset.Path)
+		}
+		seen[asset.Path] = struct{}{}
+	}
+	return nil
+}
+
+func validateManifestPath(value string) error {
+	if value == "" || filepath.IsAbs(value) || filepath.ToSlash(value) != value || strings.HasPrefix(value, "/") {
+		return fmt.Errorf("path %q must be a logical POSIX relative path", value)
+	}
+	for _, part := range strings.Split(value, "/") {
+		if part == "" || part == "." || part == ".." {
+			return fmt.Errorf("path %q must be a logical POSIX relative path", value)
+		}
+	}
 	return nil
 }
 
@@ -109,12 +179,37 @@ func ParseTopicMetadataFile(path string) (TopicMetadata, error) {
 // WriteTopicMetadata writes canonical topic metadata atomically and validates
 // the installed bytes before returning.
 func WriteTopicMetadata(path string, metadata TopicMetadata) error {
+	if err := writeTopicMetadata(path, metadata); err != nil {
+		return err
+	}
+	return nil
+}
+
+// WriteTopicMetadataManifest writes metadata only when the filesystem-derived
+// manifest differs from the current canonical metadata. The rendered result
+// is validated before and after the atomic replacement.
+func WriteTopicMetadataManifest(path string, metadata TopicMetadata, files []ManifestFile, assets []ManifestAsset) (bool, error) {
+	if manifestsEqual(metadata.Files, files) && assetsEqual(metadata.Assets, assets) {
+		return false, nil
+	}
+	metadata.Files = append([]ManifestFile(nil), files...)
+	metadata.Assets = append([]ManifestAsset(nil), assets...)
+	if err := writeTopicMetadata(path, metadata); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func writeTopicMetadata(path string, metadata TopicMetadata) error {
 	if err := ValidateTopicMetadata(metadata); err != nil {
 		return fmt.Errorf("%s: %w", path, err)
 	}
 	data, err := yaml.Marshal(metadata)
 	if err != nil {
 		return fmt.Errorf("%s: marshal metadata: %w", path, err)
+	}
+	if _, err := ParseTopicMetadata(path, data); err != nil {
+		return fmt.Errorf("%s: validate metadata before write: %w", path, err)
 	}
 	if err := atomicWrite(path, data); err != nil {
 		return err
@@ -123,6 +218,30 @@ func WriteTopicMetadata(path string, metadata TopicMetadata) error {
 		return fmt.Errorf("%s: validate metadata after write: %w", path, err)
 	}
 	return nil
+}
+
+func manifestsEqual(left, right []ManifestFile) bool {
+	if (left == nil) != (right == nil) || len(left) != len(right) {
+		return false
+	}
+	for index := range left {
+		if left[index] != right[index] {
+			return false
+		}
+	}
+	return true
+}
+
+func assetsEqual(left, right []ManifestAsset) bool {
+	if (left == nil) != (right == nil) || len(left) != len(right) {
+		return false
+	}
+	for index := range left {
+		if left[index] != right[index] {
+			return false
+		}
+	}
+	return true
 }
 
 // ReadTopicMetadata reads and validates the canonical metadata file. The

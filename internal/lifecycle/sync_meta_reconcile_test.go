@@ -94,7 +94,14 @@ func TestSyncMetaReconcilesManagedToAsset(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(updated) != string(before) {
-		t.Fatalf("canonical metadata changed during classification sync: %s", updated)
+	if string(updated) == string(before) {
+		t.Fatal("canonical metadata did not change after classification sync")
+	}
+	metadata, err := markdown.ParseTopicMetadata(filepath.Join(topic, markdown.MetaFilename), updated)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(metadata.Files) != 0 || len(metadata.Assets) != 1 || metadata.Assets[0].Path != "changed.md" {
+		t.Fatalf("manifest = %#v", metadata)
 	}
 }

@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"historic/internal/domain"
 )
 
 func TestTopicMetadataRequiresCanonicalFile(t *testing.T) {
@@ -38,5 +40,29 @@ func TestTopicMetadataInvalidCanonicalDoesNotReadLegacy(t *testing.T) {
 	got, err := os.ReadFile(legacy)
 	if err != nil || string(got) != "legacy asset" {
 		t.Fatalf("legacy asset = %q err=%v", got, err)
+	}
+}
+
+func TestWriteTopicMetadataManifestRejectsInvalidManifestAtomically(t *testing.T) {
+	topic := t.TempDir()
+	path := filepath.Join(topic, MetaFilename)
+	metadata := TopicMetadata{ID: "00005", Title: "Topic", Status: domain.StatusProgress, Created: "2026-09-21"}
+	if err := WriteTopicMetadata(path, metadata); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	updated, err := WriteTopicMetadataManifest(path, metadata, []ManifestFile{{Path: "../escape", Type: "task", Status: domain.StatusProgress}}, nil)
+	if err == nil || updated {
+		t.Fatalf("invalid manifest result = updated:%v err:%v", updated, err)
+	}
+	after, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(before) != string(after) {
+		t.Fatal("invalid manifest replaced canonical metadata")
 	}
 }

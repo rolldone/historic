@@ -43,7 +43,7 @@ func TestWO14UnifiedRebuildSmokeUsesCanonicalMetadataAndReadModel(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if change.Topics != 2 || change.Updated != 0 || change.Errors != 0 || change.Records != 5 {
+	if change.Topics != 2 || change.Updated != 2 || change.Errors != 0 || change.Records != 5 {
 		t.Fatalf("rebuild change = %#v", change)
 	}
 
@@ -61,6 +61,9 @@ func TestWO14UnifiedRebuildSmokeUsesCanonicalMetadataAndReadModel(t *testing.T) 
 		}
 		if strings.Contains(string(content), "Files:") || strings.Contains(string(content), "Assets:") {
 			t.Fatalf("generated sections written to canonical metadata %s", topic)
+		}
+		if len(metadata.Files) == 0 {
+			t.Fatalf("manifest files missing for %s", topic)
 		}
 	}
 

@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 
 	"historic/internal/config"
@@ -25,8 +26,8 @@ type SyncChange struct {
 	Updated bool
 }
 
-// SyncMeta scans a topic and reconciles filesystem-derived counts. Canonical
-// YAML metadata does not contain generated Files or Assets sections.
+// SyncMeta scans a topic and reconciles the filesystem-derived Files and
+// Assets manifest in canonical YAML metadata.
 func SyncMeta(workspace config.Workspace, input string) (SyncChange, error) {
 	return syncMetaTopic(workspace, input, true)
 }
@@ -36,7 +37,7 @@ func syncMetaTopic(workspace config.Workspace, input string, rebuildIndex bool) 
 	if err != nil {
 		return SyncChange{}, err
 	}
-	_, err = markdown.ReadTopicMetadata(topic)
+	metadata, err := markdown.ReadTopicMetadata(topic)
 	if err != nil {
 		return SyncChange{}, fmt.Errorf("read topic metadata: %w", err)
 	}
@@ -45,17 +46,21 @@ func syncMetaTopic(workspace config.Workspace, input string, rebuildIndex bool) 
 	if err != nil {
 		return SyncChange{}, err
 	}
+	updated, err := markdown.WriteTopicMetadataManifest(filepath.Join(topic, markdown.MetaFilename), metadata, managed, assets)
+	if err != nil {
+		return SyncChange{}, fmt.Errorf("write topic manifest: %w", err)
+	}
 	if rebuildIndex {
 		if _, err := indexer.Rebuild(workspace); err != nil {
 			return SyncChange{}, fmt.Errorf("rebuild metadata index: %w", err)
 		}
 	}
-	return SyncChange{ID: id, Path: workspace.RelativePath(topic), Files: len(managed), Assets: len(assets), Updated: false}, nil
+	return SyncChange{ID: id, Path: workspace.RelativePath(topic), Files: len(managed), Assets: len(assets), Updated: updated}, nil
 }
 
-func scanTopicFiles(topic string, id domain.ID) ([]string, []string, error) {
-	managed := make([]string, 0)
-	assets := make([]string, 0)
+func scanTopicFiles(topic string, id domain.ID) ([]markdown.ManifestFile, []markdown.ManifestAsset, error) {
+	managed := make([]markdown.ManifestFile, 0)
+	assets := make([]markdown.ManifestAsset, 0)
 	err := filepath.WalkDir(topic, func(path string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
@@ -63,7 +68,7 @@ func scanTopicFiles(topic string, id domain.ID) ([]string, []string, error) {
 		if entry.Type()&os.ModeSymlink != 0 {
 			return fmt.Errorf("%w: symlink %s", domain.ErrConflict, path)
 		}
-		if entry.IsDir() || filepath.Base(path) == markdown.MetaFilename {
+		if entry.IsDir() || path == filepath.Join(topic, markdown.MetaFilename) {
 			return nil
 		}
 		relative, err := filepath.Rel(topic, path)
@@ -74,17 +79,50 @@ func scanTopicFiles(topic string, id domain.ID) ([]string, []string, error) {
 		if strings.EqualFold(filepath.Ext(path), ".md") && filepath.Base(path) != "_meta.md" {
 			document, parseErr := markdown.ParseFile(path)
 			if parseErr == nil && document.Frontmatter.ID == id {
-				managed = append(managed, relative)
+				managed = append(managed, markdown.ManifestFile{Path: relative, Type: manifestFileType(relative), Status: document.Frontmatter.Status})
 				return nil
 			}
 		}
-		assets = append(assets, relative)
+		assets = append(assets, markdown.ManifestAsset{Path: relative, Type: manifestAssetType(path)})
 		return nil
 	})
 	if err != nil {
 		return nil, nil, fmt.Errorf("scan topic files: %w", err)
 	}
+	sort.Slice(managed, func(i, j int) bool { return managed[i].Path < managed[j].Path })
+	sort.Slice(assets, func(i, j int) bool { return assets[i].Path < assets[j].Path })
 	return managed, assets, nil
+}
+
+func manifestFileType(path string) string {
+	base := strings.ToLower(filepath.Base(path))
+	name := strings.TrimSuffix(base, filepath.Ext(base))
+	for _, kind := range []string{"prd", "spec", "issue", "note", "decision", "task"} {
+		if name == kind || strings.HasPrefix(name, kind+"-") {
+			return kind
+		}
+	}
+	if strings.Contains(filepath.ToSlash(path), "/wos/") || strings.HasPrefix(filepath.ToSlash(path), "wos/") {
+		return "task"
+	}
+	return "file"
+}
+
+func manifestAssetType(path string) string {
+	ext := strings.ToLower(filepath.Ext(path))
+	if ext == ".md" || ext == ".markdown" {
+		return "markdown"
+	}
+	if ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".gif" || ext == ".webp" {
+		return "image"
+	}
+	if ext == ".pdf" {
+		return "pdf"
+	}
+	if ext == "" {
+		return "file"
+	}
+	return strings.TrimPrefix(ext, ".")
 }
 
 func syncMetaSection(body, heading string, paths []string) string {

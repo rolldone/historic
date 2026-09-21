@@ -41,7 +41,7 @@ func TestSyncMetaBatchProcessesActiveTopicsDeterministically(t *testing.T) {
 		t.Fatalf("ordering = %#v", change.Topics)
 	}
 	for _, topic := range change.Topics {
-		if topic.Assets != 1 || topic.Updated {
+		if topic.Assets != 1 || !topic.Updated {
 			t.Fatalf("topic result = %#v", topic)
 		}
 	}
