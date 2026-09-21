@@ -39,4 +39,10 @@ func TestInitializeMigratesLegacyIndexBeforeStorageIndex(t *testing.T) {
 	if count != 1 {
 		t.Fatalf("storage column count = %d", count)
 	}
+	if err := check.QueryRow("SELECT COUNT(*) FROM pragma_table_info('index_records') WHERE name='description'").Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 1 {
+		t.Fatalf("description column count = %d", count)
+	}
 }

@@ -58,7 +58,7 @@ func (store TopicStore) CreateTopic(title string, requestedID string) (domain.To
 	}
 
 	created := dateToday()
-	metadata := domain.Frontmatter{ID: id, Title: title, Status: domain.StatusCreate, Created: created}
+	metadata := domain.Frontmatter{ID: id, Title: title, Description: "", Status: domain.StatusCreate, Created: created}
 	if err := os.Mkdir(topicPath, 0o755); err != nil {
 		return domain.Topic{}, fmt.Errorf("create topic directory %s: %w", topicPath, err)
 	}
@@ -67,7 +67,7 @@ func (store TopicStore) CreateTopic(title string, requestedID string) (domain.To
 		_ = os.Remove(topicPath)
 		return domain.Topic{}, fmt.Errorf("create topic metadata: %w", err)
 	}
-	return domain.Topic{ID: id, Title: title, Status: domain.StatusCreate, Created: parseDate(created), Path: topicPath, Slug: slug}, nil
+	return domain.Topic{ID: id, Title: title, Description: metadata.Description, Status: domain.StatusCreate, Created: parseDate(created), Path: topicPath, Slug: slug}, nil
 }
 
 // AddEntry creates a Markdown entry in an active topic and updates _meta.md.
@@ -102,7 +102,7 @@ func (store TopicStore) AddEntry(topicID domain.ID, name string, force bool) (do
 		return domain.Entry{}, fmt.Errorf("read topic metadata: %w", err)
 	}
 	created := dateToday()
-	metadata := domain.Frontmatter{ID: topicID, Title: entryTitle(relativeName), Status: meta.Frontmatter.Status, Created: created}
+	metadata := domain.Frontmatter{ID: topicID, Title: entryTitle(relativeName), Description: "", Status: meta.Frontmatter.Status, Created: created}
 	document, err := markdown.NewDocument(metadata, "# "+metadata.Title+"\n")
 	if err != nil {
 		return domain.Entry{}, fmt.Errorf("create entry metadata: %w", err)
@@ -118,7 +118,7 @@ func (store TopicStore) AddEntry(topicID domain.ID, name string, force bool) (do
 		}
 		return domain.Entry{}, fmt.Errorf("update topic metadata: %w", err)
 	}
-	return domain.Entry{ID: topicID, Title: metadata.Title, Status: metadata.Status, Created: parseDate(created), Path: entryPath, Filename: relativeName, Content: document.Body}, nil
+	return domain.Entry{ID: topicID, Title: metadata.Title, Description: metadata.Description, Status: metadata.Status, Created: parseDate(created), Path: entryPath, Filename: relativeName, Content: document.Body}, nil
 }
 
 func (store TopicStore) activeTopicPath(id domain.ID) (string, error) {

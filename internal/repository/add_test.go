@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"historic/internal/domain"
+	"historic/internal/markdown"
 )
 
 func TestAddEntryCreatesMarkdownAndUpdatesMeta(t *testing.T) {
@@ -35,6 +36,13 @@ func TestAddEntryCreatesMarkdownAndUpdatesMeta(t *testing.T) {
 	}
 	if strings.Contains(string(meta), `\n`) {
 		t.Fatalf("meta contains literal escaped newline: %q", meta)
+	}
+	parsedEntry, err := markdown.ParseFile(filepath.Join(topic.Path, entry.Filename))
+	if err != nil {
+		t.Fatalf("parse entry: %v", err)
+	}
+	if parsedEntry.Frontmatter.Description != "" || entry.Description != "" {
+		t.Fatalf("description = %q, entry description = %q, want empty", parsedEntry.Frontmatter.Description, entry.Description)
 	}
 }
 

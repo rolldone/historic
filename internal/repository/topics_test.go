@@ -8,6 +8,7 @@ import (
 
 	"historic/internal/config"
 	"historic/internal/domain"
+	"historic/internal/markdown"
 )
 
 func newTestStore(t *testing.T) TopicStore {
@@ -38,6 +39,13 @@ func TestCreateTopicAutoIDUsesFirstGapAcrossActiveAndArchive(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(topic.Path, "_meta.md")); err != nil {
 		t.Fatalf("metadata: %v", err)
+	}
+	meta, err := markdown.ParseFile(filepath.Join(topic.Path, "_meta.md"))
+	if err != nil {
+		t.Fatalf("parse metadata: %v", err)
+	}
+	if meta.Frontmatter.Description != "" || topic.Description != "" {
+		t.Fatalf("description = %q, topic description = %q, want empty", meta.Frontmatter.Description, topic.Description)
 	}
 }
 

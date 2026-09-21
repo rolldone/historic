@@ -27,26 +27,27 @@ var topicFolderPattern = regexp.MustCompile(`^([0-9]{5})-(.+)$`)
 
 // Record is the SQLite-backed representation of one Markdown file.
 type Record struct {
-	Num        int
-	NumPadded  string
-	Type       string
-	Title      string
-	Status     domain.Status
-	Tags       []string
-	Related    []domain.ID
-	CreatedAt  string
-	UpdatedAt  string
-	Path       string
-	Storage    domain.StorageState
-	FolderID   domain.ID
-	FolderSlug string
-	Subfolder  string
-	Filename   string
-	FileOrder  int
-	Content    string
-	WordCount  int
-	Mtime      string
-	Hash       string
+	Num         int
+	NumPadded   string
+	Type        string
+	Title       string
+	Description string
+	Status      domain.Status
+	Tags        []string
+	Related     []domain.ID
+	CreatedAt   string
+	UpdatedAt   string
+	Path        string
+	Storage     domain.StorageState
+	FolderID    domain.ID
+	FolderSlug  string
+	Subfolder   string
+	Filename    string
+	FileOrder   int
+	Content     string
+	WordCount   int
+	Mtime       string
+	Hash        string
 }
 
 const FTS5TableName = "historic_fts"
@@ -76,7 +77,7 @@ func rebuildInto(workspace config.Workspace) (int, error) {
 	defer transaction.Rollback()
 	if _, err := transaction.Exec(`CREATE TABLE IF NOT EXISTS index_records (
 		id INTEGER PRIMARY KEY, num INTEGER NOT NULL, num_padded TEXT NOT NULL, type TEXT NOT NULL DEFAULT '',
-		title TEXT NOT NULL, status TEXT NOT NULL, storage TEXT NOT NULL DEFAULT 'open', tags TEXT NOT NULL DEFAULT '[]', related TEXT NOT NULL DEFAULT '[]',
+		title TEXT NOT NULL, description TEXT, status TEXT NOT NULL, storage TEXT NOT NULL DEFAULT 'open', tags TEXT NOT NULL DEFAULT '[]', related TEXT NOT NULL DEFAULT '[]',
 		created_at TEXT NOT NULL, updated_at TEXT, path TEXT NOT NULL UNIQUE, folder_id TEXT NOT NULL,
 		folder_slug TEXT NOT NULL DEFAULT '', subfolder TEXT NOT NULL DEFAULT '', filename TEXT NOT NULL,
 		file_order INTEGER NOT NULL DEFAULT 0, content TEXT NOT NULL DEFAULT '', word_count INTEGER NOT NULL DEFAULT 0,
@@ -86,9 +87,9 @@ func rebuildInto(workspace config.Workspace) (int, error) {
 	if err := schema.EnsureReadModel(transaction); err != nil {
 		return 0, err
 	}
-	if !hasStorageColumn(transaction) {
-		if _, err := transaction.Exec(`ALTER TABLE index_records ADD COLUMN storage TEXT NOT NULL DEFAULT 'open'`); err != nil {
-			return 0, fmt.Errorf("add storage index column: %w", err)
+	if !hasDescriptionColumn(transaction) {
+		if _, err := transaction.Exec(`ALTER TABLE index_records ADD COLUMN description TEXT`); err != nil {
+			return 0, fmt.Errorf("add description index column: %w", err)
 		}
 	}
 	if _, err := transaction.Exec(`CREATE INDEX IF NOT EXISTS idx_index_records_num ON index_records(num);
@@ -98,8 +99,11 @@ func rebuildInto(workspace config.Workspace) (int, error) {
 		CREATE INDEX IF NOT EXISTS idx_index_records_folder ON index_records(folder_id)`); err != nil {
 		return 0, fmt.Errorf("create index indexes: %w", err)
 	}
-	if _, err := transaction.Exec(`CREATE VIRTUAL TABLE IF NOT EXISTS historic_fts USING fts5(
-		path, filename, title, content, tokenize = 'unicode61'
+	if _, err := transaction.Exec("DROP TABLE IF EXISTS historic_fts"); err != nil {
+		return 0, fmt.Errorf("replace FTS5 table: %w", err)
+	}
+	if _, err := transaction.Exec(`CREATE VIRTUAL TABLE historic_fts USING fts5(
+		path, filename, title, description, content, tokenize = 'unicode61'
 	)`); err != nil {
 		return 0, fmt.Errorf("create FTS5 table: %w", err)
 	}
@@ -111,14 +115,14 @@ func rebuildInto(workspace config.Workspace) (int, error) {
 	}
 	seenPaths := make(map[string]struct{}, len(records))
 	statement, err := transaction.Prepare(`INSERT INTO index_records
-		(num, num_padded, type, title, status, storage, tags, related, created_at, updated_at, path, folder_id, folder_slug,
+		(num, num_padded, type, title, description, status, storage, tags, related, created_at, updated_at, path, folder_id, folder_slug,
 		subfolder, filename, file_order, content, word_count, mtime, hash)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return 0, fmt.Errorf("prepare index insert: %w", err)
 	}
 	defer statement.Close()
-	ftsStatement, err := transaction.Prepare(`INSERT INTO historic_fts(rowid, path, filename, title, content) VALUES (?, ?, ?, ?, ?)`)
+	ftsStatement, err := transaction.Prepare(`INSERT INTO historic_fts(rowid, path, filename, title, description, content) VALUES (?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return 0, fmt.Errorf("prepare FTS5 insert: %w", err)
 	}
@@ -131,7 +135,7 @@ func rebuildInto(workspace config.Workspace) (int, error) {
 		seenPaths[record.Path] = struct{}{}
 		tags, _ := json.Marshal(record.Tags)
 		related, _ := json.Marshal(record.Related)
-		result, err := statement.Exec(record.Num, record.NumPadded, record.Type, record.Title, record.Status.String(), record.Storage.String(), string(tags), string(related), record.CreatedAt, nullable(record.UpdatedAt), record.Path, record.FolderID.String(), record.FolderSlug, record.Subfolder, record.Filename, record.FileOrder, record.Content, record.WordCount, record.Mtime, record.Hash)
+		result, err := statement.Exec(record.Num, record.NumPadded, record.Type, record.Title, nullable(record.Description), record.Status.String(), record.Storage.String(), string(tags), string(related), record.CreatedAt, nullable(record.UpdatedAt), record.Path, record.FolderID.String(), record.FolderSlug, record.Subfolder, record.Filename, record.FileOrder, record.Content, record.WordCount, record.Mtime, record.Hash)
 		if err != nil {
 			return 0, fmt.Errorf("insert %s: %w", record.Path, err)
 		}
@@ -139,7 +143,7 @@ func rebuildInto(workspace config.Workspace) (int, error) {
 		if err != nil {
 			return 0, fmt.Errorf("read index row ID for %s: %w", record.Path, err)
 		}
-		if _, err := ftsStatement.Exec(rowID, record.Path, record.Filename, record.Title, record.Content); err != nil {
+		if _, err := ftsStatement.Exec(rowID, record.Path, record.Filename, record.Title, record.Description, record.Content); err != nil {
 			return 0, fmt.Errorf("insert FTS5 record %s: %w", record.Path, err)
 		}
 		indexed++
@@ -165,6 +169,24 @@ func hasStorageColumn(transaction *sql.Tx) bool {
 	var defaultValue any
 	for rows.Next() {
 		if err := rows.Scan(&cid, &name, &columnType, &notNull, &defaultValue, &primaryKey); err == nil && name == "storage" {
+			return true
+		}
+	}
+	return false
+}
+
+func hasDescriptionColumn(transaction *sql.Tx) bool {
+	rows, err := transaction.Query("PRAGMA table_info(index_records)")
+	if err != nil {
+		return false
+	}
+	defer rows.Close()
+	var cid int
+	var name, columnType string
+	var notNull, primaryKey int
+	var defaultValue any
+	for rows.Next() {
+		if err := rows.Scan(&cid, &name, &columnType, &notNull, &defaultValue, &primaryKey); err == nil && name == "description" {
 			return true
 		}
 	}
@@ -242,7 +264,7 @@ func scanFile(workspace config.Workspace, path string) (Record, error) {
 	createdAt := document.Frontmatter.Created
 	return Record{
 		Num: folderID.Number(), NumPadded: folderID.String(), Type: inferType(relative), Title: document.Frontmatter.Title,
-		Status: document.Frontmatter.Status, Tags: document.Frontmatter.Tags, Related: document.Frontmatter.Related,
+		Description: document.Frontmatter.Description, Status: document.Frontmatter.Status, Tags: document.Frontmatter.Tags, Related: document.Frontmatter.Related,
 		CreatedAt: createdAt, UpdatedAt: document.Frontmatter.Updated, Path: relative, FolderID: folderID,
 		FolderSlug: folderSlug, Subfolder: subfolder, Filename: filepath.Base(path), Content: document.Body,
 		WordCount: wordCount(document.Body), Mtime: info.ModTime().UTC().Format(time.RFC3339Nano), Hash: hashFile(path),

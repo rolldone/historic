@@ -13,6 +13,66 @@ import (
 	"historic/internal/markdown"
 )
 
+func TestRebuildIndexesDescriptionAndFTS(t *testing.T) {
+	workspace, err := config.Initialize(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	topic := filepath.Join(workspace.Histories, "00001-topic")
+	if err := os.MkdirAll(topic, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for name, description := range map[string]string{
+		"_meta.md": "Topic overview",
+		"note.md":  "File details",
+	} {
+		document, err := markdown.NewDocument(domain.Frontmatter{ID: "00001", Title: name, Description: description, Status: domain.StatusProgress, Created: "2026-09-21"}, "body")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := markdown.WriteFile(filepath.Join(topic, name), document); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := Rebuild(workspace); err != nil {
+		t.Fatal(err)
+	}
+	database, err := sql.Open("sqlite", workspace.Index)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer database.Close()
+	rows, err := database.Query("SELECT filename, description FROM index_records ORDER BY filename")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	got := map[string]string{}
+	for rows.Next() {
+		var filename string
+		var description sql.NullString
+		if err := rows.Scan(&filename, &description); err != nil {
+			t.Fatal(err)
+		}
+		got[filename] = description.String
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if got["_meta.md"] != "Topic overview" || got["note.md"] != "File details" {
+		t.Fatalf("indexed descriptions = %#v", got)
+	}
+	for _, keyword := range []string{"Topic overview", "File details"} {
+		var count int
+		if err := database.QueryRow("SELECT COUNT(*) FROM historic_fts WHERE historic_fts MATCH ?", keyword).Scan(&count); err != nil {
+			t.Fatalf("FTS %q: %v", keyword, err)
+		}
+		if count != 1 {
+			t.Fatalf("FTS %q count = %d, want 1", keyword, count)
+		}
+	}
+}
+
 func TestRebuildIndexesMarkdownAndIsRepeatable(t *testing.T) {
 	workspace, err := config.Initialize(t.TempDir())
 	if err != nil {

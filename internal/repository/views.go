@@ -14,23 +14,25 @@ import (
 
 // TopicView is a read model for list and show commands.
 type TopicView struct {
-	ID      string     `json:"id"`
-	Title   string     `json:"title"`
-	Status  string     `json:"status"`
-	Created string     `json:"created"`
-	Updated string     `json:"updated,omitempty"`
-	Path    string     `json:"path"`
-	Storage string     `json:"storage"`
-	Files   []FileView `json:"files"`
-	Body    string     `json:"body,omitempty"`
-	Active  bool       `json:"active"`
+	ID          string     `json:"id"`
+	Title       string     `json:"title"`
+	Description string     `json:"description"`
+	Status      string     `json:"status"`
+	Created     string     `json:"created"`
+	Updated     string     `json:"updated,omitempty"`
+	Path        string     `json:"path"`
+	Storage     string     `json:"storage"`
+	Files       []FileView `json:"files"`
+	Body        string     `json:"body,omitempty"`
+	Active      bool       `json:"active"`
 }
 
 // FileView describes a Markdown file inside a topic.
 type FileView struct {
-	Path   string `json:"path"`
-	Title  string `json:"title"`
-	Status string `json:"status"`
+	Path        string `json:"path"`
+	Title       string `json:"title"`
+	Description string `json:"description"`
+	Status      string `json:"status"`
 }
 
 // ListTopics returns deterministic topic views, filtered to open by default.
@@ -91,7 +93,7 @@ func (store TopicStore) readTopicView(path string, active, includeBody bool) (To
 		return TopicView{}, fmt.Errorf("read metadata %s: %w", store.Workspace.RelativePath(metaPath), err)
 	}
 	view := TopicView{
-		ID: meta.Frontmatter.ID.String(), Title: meta.Frontmatter.Title, Status: meta.Frontmatter.Status.String(),
+		ID: meta.Frontmatter.ID.String(), Title: meta.Frontmatter.Title, Description: meta.Frontmatter.Description, Status: meta.Frontmatter.Status.String(),
 		Created: meta.Frontmatter.Created, Updated: meta.Frontmatter.Updated,
 		Path: store.Workspace.RelativePath(path), Body: meta.Body, Active: active,
 		Storage: map[bool]string{true: "open", false: "closed"}[active],
@@ -123,7 +125,7 @@ func readFiles(topicPath, root string) ([]FileView, error) {
 		if err != nil {
 			return err
 		}
-		files = append(files, FileView{Path: filepath.ToSlash(relative), Title: document.Frontmatter.Title, Status: document.Frontmatter.Status.String()})
+		files = append(files, FileView{Path: filepath.ToSlash(relative), Title: document.Frontmatter.Title, Description: document.Frontmatter.Description, Status: document.Frontmatter.Status.String()})
 		return nil
 	})
 	if err != nil && !errors.Is(err, os.ErrNotExist) {

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"historic/internal/domain"
+	"historic/internal/markdown"
 )
 
 func TestListTopicsDefaultsToActiveAndSortsByID(t *testing.T) {
@@ -49,12 +50,30 @@ func TestShowTopicIncludesFilesAndRejectsMissing(t *testing.T) {
 	if _, err := store.AddEntry(topic.ID, "prd", false); err != nil {
 		t.Fatal(err)
 	}
+	metaPath := filepath.Join(topic.Path, "_meta.md")
+	meta, err := markdown.ParseFile(metaPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	meta.Frontmatter.Description = "Topic summary"
+	if err := markdown.WriteFile(metaPath, meta); err != nil {
+		t.Fatal(err)
+	}
+	entryPath := filepath.Join(topic.Path, "prd.md")
+	entry, err := markdown.ParseFile(entryPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry.Frontmatter.Description = "File summary"
+	if err := markdown.WriteFile(entryPath, entry); err != nil {
+		t.Fatal(err)
+	}
 	view, err := store.ShowTopic(topic.ID, false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(view.Files) != 1 || view.Files[0].Path != ".historic/00014-topic/prd.md" {
-		t.Fatalf("files = %#v", view.Files)
+	if view.Description != "Topic summary" || len(view.Files) != 1 || view.Files[0].Path != ".historic/00014-topic/prd.md" || view.Files[0].Description != "File summary" {
+		t.Fatalf("view = %#v, want manual descriptions", view)
 	}
 	if _, err := store.ShowTopic(domain.ID("00099"), false); !errors.Is(err, domain.ErrTopicMissing) {
 		t.Fatalf("missing error = %v", err)

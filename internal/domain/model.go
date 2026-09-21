@@ -94,30 +94,32 @@ func (id ID) Valid() bool { return idPattern.MatchString(string(id)) }
 
 // Topic is the metadata and identity of a Historic topic.
 type Topic struct {
-	ID      ID
-	Title   string
-	Status  Status
-	Created time.Time
-	Updated *time.Time
-	Tags    []string
-	Related []ID
-	Path    string
-	Slug    string
+	ID          ID
+	Title       string
+	Description string
+	Status      Status
+	Created     time.Time
+	Updated     *time.Time
+	Tags        []string
+	Related     []ID
+	Path        string
+	Slug        string
 }
 
 // Entry is a Markdown document belonging to a topic.
 type Entry struct {
-	ID        ID
-	Title     string
-	Status    Status
-	Created   time.Time
-	Updated   *time.Time
-	Tags      []string
-	Related   []ID
-	Path      string
-	Filename  string
-	Content   string
-	WordCount int
+	ID          ID
+	Title       string
+	Description string
+	Status      Status
+	Created     time.Time
+	Updated     *time.Time
+	Tags        []string
+	Related     []ID
+	Path        string
+	Filename    string
+	Content     string
+	WordCount   int
 }
 
 // WorkOrder is a sortable work-order document within a topic.
@@ -128,36 +130,38 @@ type WorkOrder struct {
 
 // Frontmatter is the metadata serialized at the start of a Markdown file.
 type Frontmatter struct {
-	ID      ID       `yaml:"id"`
-	Title   string   `yaml:"title"`
-	Status  Status   `yaml:"status"`
-	Created string   `yaml:"created"`
-	Updated string   `yaml:"updated,omitempty"`
-	Tags    []string `yaml:"tags,omitempty"`
-	Related []ID     `yaml:"related,omitempty"`
+	ID          ID       `yaml:"id"`
+	Title       string   `yaml:"title"`
+	Description string   `yaml:"description"`
+	Status      Status   `yaml:"status"`
+	Created     string   `yaml:"created"`
+	Updated     string   `yaml:"updated,omitempty"`
+	Tags        []string `yaml:"tags,omitempty"`
+	Related     []ID     `yaml:"related,omitempty"`
 }
 
 // IndexRecord is the rebuildable SQLite index representation of an entry.
 type IndexRecord struct {
-	Num        int
-	NumPadded  string
-	Type       string
-	Title      string
-	Status     Status
-	Tags       []string
-	Related    []ID
-	CreatedAt  time.Time
-	UpdatedAt  *time.Time
-	Path       string
-	FolderID   ID
-	FolderSlug string
-	Subfolder  string
-	Filename   string
-	FileOrder  int
-	Content    string
-	WordCount  int
-	Mtime      time.Time
-	Hash       string
+	Num         int
+	NumPadded   string
+	Type        string
+	Title       string
+	Description string
+	Status      Status
+	Tags        []string
+	Related     []ID
+	CreatedAt   time.Time
+	UpdatedAt   *time.Time
+	Path        string
+	FolderID    ID
+	FolderSlug  string
+	Subfolder   string
+	Filename    string
+	FileOrder   int
+	Content     string
+	WordCount   int
+	Mtime       time.Time
+	Hash        string
 }
 
 // SlugTitle converts a title to the filesystem slug used in topic folders.

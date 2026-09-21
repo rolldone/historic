@@ -37,13 +37,39 @@ func TestParseAndWriteRoundTrip(t *testing.T) {
 }
 
 func TestParseAllowsEmptyOptionalFields(t *testing.T) {
-	input := "---\nid: 00014\ntitle: Note\nstatus: create\ncreated: 2026-09-18\n---\nBody\n"
+	input := "---\nid: 00014\ntitle: Note\nstatus: create\ncreated: 2026-09-18\ndescription: \"\"\n---\nBody\n"
 	document, err := Parse("note.md", []byte(input))
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
-	if len(document.Frontmatter.Tags) != 0 || len(document.Frontmatter.Related) != 0 {
+	if document.Frontmatter.Description != "" || len(document.Frontmatter.Tags) != 0 || len(document.Frontmatter.Related) != 0 {
 		t.Fatalf("optional fields should be empty: %#v", document.Frontmatter)
+	}
+}
+
+func TestParseAllowsMissingAndNullDescription(t *testing.T) {
+	for name, description := range map[string]string{
+		"missing": "",
+		"null":    "description: null\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			input := "---\nid: 00014\ntitle: Note\nstatus: create\ncreated: 2026-09-18\n" + description + "---\nBody\n"
+			document, err := Parse("note.md", []byte(input))
+			if err != nil {
+				t.Fatalf("Parse: %v", err)
+			}
+			if document.Frontmatter.Description != "" {
+				t.Fatalf("description = %q, want empty", document.Frontmatter.Description)
+			}
+		})
+	}
+}
+
+func TestParseRejectsInvalidDescriptionWithActionableError(t *testing.T) {
+	input := "---\nid: 00014\ntitle: Note\nstatus: create\ncreated: 2026-09-18\ndescription:\n  invalid: mapping\n---\nBody\n"
+	_, err := Parse("note.md", []byte(input))
+	if err == nil || !strings.Contains(err.Error(), "description") || !strings.Contains(err.Error(), "string or null") {
+		t.Fatalf("error = %v, want actionable description error", err)
 	}
 }
 

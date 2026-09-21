@@ -39,6 +39,9 @@ func Parse(path string, input []byte) (Document, error) {
 	}
 
 	var metadata domain.Frontmatter
+	if err := validateDescriptionField(frontmatter); err != nil {
+		return Document{}, documentError(path, "frontmatter", err)
+	}
 	if err := yaml.Unmarshal(frontmatter, &metadata); err != nil {
 		return Document{}, documentError(path, "frontmatter", fmt.Errorf("%w: %v", ErrInvalidFrontmatter, err))
 	}
@@ -163,6 +166,28 @@ func splitFrontmatter(input []byte) ([]byte, string, error) {
 	}
 	end += 4
 	return []byte(text[4:end]), text[end+5:], nil
+}
+
+func validateDescriptionField(input []byte) error {
+	var document yaml.Node
+	if err := yaml.Unmarshal(input, &document); err != nil {
+		return fmt.Errorf("%w: %v", ErrInvalidFrontmatter, err)
+	}
+	if len(document.Content) == 0 || document.Content[0].Kind != yaml.MappingNode {
+		return nil
+	}
+	mapping := document.Content[0]
+	for index := 0; index+1 < len(mapping.Content); index += 2 {
+		key, value := mapping.Content[index], mapping.Content[index+1]
+		if key.Value != "description" {
+			continue
+		}
+		if value.Kind != yaml.ScalarNode || (value.Tag != "!!str" && value.Tag != "!!null") {
+			return fmt.Errorf("%w: field %q must be a string or null", ErrInvalidFrontmatter, "description")
+		}
+		return nil
+	}
+	return nil
 }
 
 func documentError(path, field string, err error) error {
