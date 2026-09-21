@@ -107,12 +107,14 @@ FTS results are ranked by relevance with ascending path as a deterministic tie-b
 
 If a rebuild encounters invalid Markdown, it fails before changing the existing index. Fix the file and run `historic rebuild` again.
 
-Rebuild the SQLite cache from Markdown:
+Rebuild the SQLite cache and reconcile all topic metadata from Markdown:
 
 ```sh
 historic rebuild
 historic rebuild --json
 ```
+
+`historic rebuild` processes both open and closed topics in one workflow. It fully reconciles `## Files` and `## Assets`, reflects rename/move/delete/classification changes, preserves other metadata sections and work status, then builds and atomically replaces the schema-aware SQLite/FTS5 index. Markdown remains the source of truth; temporary database, backup, rollback, lock, and cleanup safeguards protect the previous index.
 
 Every JSON-capable command uses the stable envelope `{ "command", "ok", "data", "error" }`. Successful empty list/find results return `ok: true` with an empty `data` array. Errors return a non-zero exit code and a message on stderr; JSON mode also emits the error envelope on stdout.
 

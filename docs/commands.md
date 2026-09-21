@@ -138,4 +138,4 @@ Every JSON-capable command uses the envelope:
 {"command":"...","ok":true,"data":{},"error":null}
 ```
 
-Markdown remains authoritative; rebuildable indexes must never be treated as the source of truth.
+`historic rebuild` is the unified workflow for all open and closed topics. It reconciles `## Files` and `## Assets`, reflects filesystem changes, preserves other metadata sections and work status, rebuilds storage-aware SQLite/FTS5, validates the temporary index, and atomically replaces the prior index with backup, rollback, lock, and cleanup safeguards.

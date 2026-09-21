@@ -28,6 +28,10 @@ type SyncChange struct {
 
 // SyncMeta scans a topic and updates only its _meta.md Files and Assets sections.
 func SyncMeta(workspace config.Workspace, input string) (SyncChange, error) {
+	return syncMetaTopic(workspace, input, true)
+}
+
+func syncMetaTopic(workspace config.Workspace, input string, rebuildIndex bool) (SyncChange, error) {
 	topic, id, err := resolveSyncTopic(workspace, input)
 	if err != nil {
 		return SyncChange{}, err
@@ -54,8 +58,10 @@ func SyncMeta(workspace config.Workspace, input string) (SyncChange, error) {
 			return SyncChange{}, fmt.Errorf("write topic metadata: %w", err)
 		}
 	}
-	if _, err := indexer.Rebuild(workspace); err != nil {
-		return SyncChange{}, fmt.Errorf("rebuild metadata index: %w", err)
+	if rebuildIndex {
+		if _, err := indexer.Rebuild(workspace); err != nil {
+			return SyncChange{}, fmt.Errorf("rebuild metadata index: %w", err)
+		}
 	}
 	return SyncChange{ID: id, Path: workspace.RelativePath(topic), Files: len(managed), Assets: len(assets), Updated: changed}, nil
 }

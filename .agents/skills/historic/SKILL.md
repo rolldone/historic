@@ -120,6 +120,7 @@ historic rebuild [--json]
 
 - `doctor` is read-only. It reports binary version, executable path, workspace format version, current and required index schema versions, Markdown validity, compatibility status, and an actionable recommendation.
 - Status values include `compatible`, `upgrade required`, `rebuild required`, `binary too old`, and `workspace invalid`.
+- `historic rebuild --json` is the unified recovery workflow: it processes open and closed topics, reconciles `## Files` and `## Assets`, preserves other metadata sections and work status, updates storage-aware SQLite/FTS5 records, and atomically replaces the validated index.
 - If the index is missing or damaged, run `historic rebuild` to recreate it from Markdown.
 - If the index schema is older, run `historic upgrade`. Upgrade validates the workspace, builds a temporary schema, scans Markdown as source of truth, validates the new index, backs up the old index, and atomically replaces it.
 - Upgrade and rebuild use temporary files, cleanup, rollback safeguards, and a lock to prevent concurrent index replacement. Markdown is never modified.

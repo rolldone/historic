@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"historic/internal/indexer"
+	"historic/internal/lifecycle"
 
 	"github.com/spf13/cobra"
 )
@@ -20,15 +20,15 @@ func newRebuildCommand() *cobra.Command {
 			if err != nil {
 				return writeCommandError(cmd, "rebuild", jsonOutput, err)
 			}
-			count, err := indexer.Rebuild(workspace)
+			change, err := lifecycle.RebuildMetadata(workspace)
 			if err != nil {
-				return writeCommandError(cmd, "rebuild", jsonOutput, fmt.Errorf("schema-aware rebuild failed; run historic doctor for diagnosis: %w", err))
+				return writeCommandError(cmd, "rebuild", jsonOutput, fmt.Errorf("unified rebuild failed; run historic doctor for diagnosis: %w", err))
 			}
-			response := rebuildOutput{Command: "rebuild", OK: true, Data: rebuildData{Records: count, Index: workspace.RelativePath(workspace.Index)}, Error: nil}
+			response := rebuildOutput{Command: "rebuild", OK: true, Data: rebuildData{Topics: change.Topics, Updated: change.Updated, Errors: change.Errors, Records: change.Records, Index: workspace.RelativePath(workspace.Index)}, Error: nil}
 			if jsonOutput {
 				return json.NewEncoder(cmd.OutOrStdout()).Encode(response)
 			}
-			_, err = fmt.Fprintf(cmd.OutOrStdout(), "Rebuilt index with %d records at %s\n", count, response.Data.Index)
+			_, err = fmt.Fprintf(cmd.OutOrStdout(), "Rebuilt index with %d records at %s\n", response.Data.Records, response.Data.Index)
 			return err
 		},
 	}
@@ -44,6 +44,9 @@ type rebuildOutput struct {
 }
 
 type rebuildData struct {
+	Topics  int    `json:"topics"`
+	Updated int    `json:"updated"`
+	Errors  int    `json:"errors"`
 	Records int    `json:"records"`
 	Index   string `json:"index"`
 }
