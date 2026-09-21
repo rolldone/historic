@@ -156,6 +156,8 @@ func initializeIndex(path string) error {
 		return fmt.Errorf("initialize index %s: %w", path, err)
 	}
 	const schema = `
+CREATE TABLE IF NOT EXISTS historic_metadata (key TEXT PRIMARY KEY, value INTEGER NOT NULL);
+INSERT INTO historic_metadata(key, value) VALUES ('workspace_format_version', 1) ON CONFLICT(key) DO NOTHING;
 CREATE TABLE IF NOT EXISTS index_records (
     id INTEGER PRIMARY KEY,
     num INTEGER NOT NULL,

@@ -22,7 +22,7 @@ func newRebuildCommand() *cobra.Command {
 			}
 			count, err := indexer.Rebuild(workspace)
 			if err != nil {
-				return writeCommandError(cmd, "rebuild", jsonOutput, err)
+				return writeCommandError(cmd, "rebuild", jsonOutput, fmt.Errorf("schema-aware rebuild failed; run historic doctor for diagnosis: %w", err))
 			}
 			response := rebuildOutput{Command: "rebuild", OK: true, Data: rebuildData{Records: count, Index: workspace.RelativePath(workspace.Index)}, Error: nil}
 			if jsonOutput {

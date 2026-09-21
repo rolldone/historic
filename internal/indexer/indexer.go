@@ -50,8 +50,12 @@ type Record struct {
 
 const FTS5TableName = "historic_fts"
 
-// Rebuild scans Markdown source files and replaces the index in one transaction.
 func Rebuild(workspace config.Workspace) (int, error) {
+	return atomicRebuild(workspace)
+}
+
+// Rebuild scans Markdown source files and replaces the index in one transaction.
+func rebuildInto(workspace config.Workspace) (int, error) {
 	records, err := scan(workspace)
 	if err != nil {
 		return 0, err
@@ -135,6 +139,9 @@ func Rebuild(workspace config.Workspace) (int, error) {
 			return 0, fmt.Errorf("insert FTS5 record %s: %w", record.Path, err)
 		}
 		indexed++
+	}
+	if err := ensureSchemaMetadata(transaction); err != nil {
+		return 0, err
 	}
 	if err := transaction.Commit(); err != nil {
 		return 0, fmt.Errorf("commit index rebuild: %w", err)
