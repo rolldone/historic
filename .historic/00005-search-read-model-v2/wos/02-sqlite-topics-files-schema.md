@@ -1,7 +1,7 @@
 ---
 id: 00002
 title: WO 02 SQLite Topics and Files Schema
-status: planned
+status: complete
 created: 2026-09-21
 updated: 2026-09-21
 tags: [sqlite, schema, topics, files, read-model]

@@ -1,7 +1,7 @@
 ---
 id: 00005
 title: WO 05 Copy Based Open
-status: planned
+status: complete
 created: 2026-09-21
 updated: 2026-09-21
 tags: [lifecycle, open, copy, snapshot]

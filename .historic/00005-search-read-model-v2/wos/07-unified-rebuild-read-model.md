@@ -1,7 +1,7 @@
 ---
 id: 00007
 title: WO 07 Unified Rebuild Read Model
-status: planned
+status: complete
 created: 2026-09-21
 updated: 2026-09-21
 tags: [rebuild, reconcile, index, aggregate]

@@ -1,7 +1,7 @@
 ---
 id: 00003
 title: WO 03 Manual Description Frontmatter
-status: planned
+status: complete
 created: 2026-09-21
 updated: 2026-09-21
 tags: [frontmatter, description, metadata]

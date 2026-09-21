@@ -1,7 +1,7 @@
 ---
 id: 00004
 title: WO 04 Topic Identity and Logical Paths
-status: planned
+status: complete
 created: 2026-09-21
 updated: 2026-09-21
 tags: [identity, slug, path, storage]

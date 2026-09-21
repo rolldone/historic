@@ -1,7 +1,7 @@
 ---
 id: 00009
 title: WO 09 FTS Search and AI Output
-status: planned
+status: complete
 created: 2026-09-21
 updated: 2026-09-21
 tags: [search, fts5, filters, ai, json]

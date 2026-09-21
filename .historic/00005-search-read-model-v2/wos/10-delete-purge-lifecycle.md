@@ -1,7 +1,7 @@
 ---
 id: 00010
 title: WO 10 Delete and Purge Lifecycle
-status: planned
+status: complete
 created: 2026-09-21
 updated: 2026-09-21
 tags: [delete, purge, lifecycle, safety]

@@ -1,7 +1,7 @@
 ---
 id: 00006
 title: WO 06 Differential Close and Archive Normalization
-status: planned
+status: complete
 created: 2026-09-21
 updated: 2026-09-21
 tags: [lifecycle, close, diff, hash, archive]
