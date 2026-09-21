@@ -38,6 +38,42 @@ func TestAddEntryCreatesMarkdownAndUpdatesMeta(t *testing.T) {
 	}
 }
 
+func TestNormalizeEntryName(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{name: "sentence", input: "Remove stale Cost Dashboard breakdowns", want: "remove-stale-cost-dashboard-breakdowns.md"},
+		{name: "trim and collapse spaces", input: "  Multiple   spaces  ", want: "multiple-spaces.md"},
+		{name: "existing slug", input: "Already-slugged-name", want: "already-slugged-name.md"},
+		{name: "underscore", input: "name_with_separator", want: "name-with-separator.md"},
+		{name: "repeated separators", input: "name__--with---separators.md.md", want: "name-with-separators.md"},
+		{name: "uppercase extension", input: "FILE.MD", want: "file.md"},
+		{name: "work order prefix", input: "wos/Review Login Flow", want: "wos/review-login-flow.md"},
+		{name: "explicit work order number", input: "wos/01-Review Login Flow", want: "wos/01-review-login-flow.md"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := normalizeEntryName(tt.input)
+			if err != nil {
+				t.Fatalf("normalizeEntryName(%q): %v", tt.input, err)
+			}
+			if got != tt.want {
+				t.Fatalf("normalizeEntryName(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestNormalizeEntryNameRejectsUnsafeNames(t *testing.T) {
+	for _, name := range []string{"", "///", "../escape", `..\\escape`, "/tmp/absolute", `C:\\tmp\\absolute`, ".hidden", "wos/"} {
+		if _, err := normalizeEntryName(name); !errors.Is(err, domain.ErrConflict) {
+			t.Errorf("normalizeEntryName(%q) error = %v, want ErrConflict", name, err)
+		}
+	}
+}
+
 func TestAddEntryNumbersWorkOrder(t *testing.T) {
 	store := newTestStore(t)
 	topic, err := store.CreateTopic("Topic", "00001")
@@ -65,6 +101,27 @@ func TestAddEntryNumbersWorkOrder(t *testing.T) {
 	}
 	if strings.Contains(content, `\n`) {
 		t.Fatalf("meta contains literal escaped newline: %q", content)
+	}
+}
+
+func TestAddEntryCanonicalCollisionAndForce(t *testing.T) {
+	store := newTestStore(t)
+	topic, err := store.CreateTopic("Topic", "00001")
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := store.AddEntry(topic.ID, "Remove stale Cost Dashboard breakdowns", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.Filename != "remove-stale-cost-dashboard-breakdowns.md" {
+		t.Fatalf("filename = %q", first.Filename)
+	}
+	if _, err := store.AddEntry(topic.ID, "remove_stale cost dashboard breakdowns.md", false); !errors.Is(err, domain.ErrConflict) {
+		t.Fatalf("canonical collision error = %v, want ErrConflict", err)
+	}
+	if _, err := store.AddEntry(topic.ID, "remove_stale cost dashboard breakdowns.md", true); err != nil {
+		t.Fatalf("forced canonical overwrite: %v", err)
 	}
 }
 

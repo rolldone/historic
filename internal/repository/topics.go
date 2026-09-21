@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -138,24 +139,70 @@ func (store TopicStore) activeTopicPath(id domain.ID) (string, error) {
 }
 
 func normalizeEntryName(name string) (string, error) {
-	name = strings.TrimSpace(strings.ReplaceAll(name, "\\\\", "/"))
+	name = strings.TrimSpace(strings.ReplaceAll(name, "\\", "/"))
 	if name == "" {
 		return "", fmt.Errorf("%w: entry name is empty", domain.ErrConflict)
 	}
-	if filepath.IsAbs(name) || strings.HasPrefix(name, "/") {
+	if filepath.IsAbs(name) || strings.HasPrefix(name, "/") || isWindowsAbsolutePath(name) {
 		return "", fmt.Errorf("%w: absolute entry path is not allowed", domain.ErrConflict)
 	}
-	clean := filepath.ToSlash(filepath.Clean(name))
-	if clean == "." || clean == ".." || strings.HasPrefix(clean, "../") || strings.Contains(clean, "/../") {
+	if strings.HasSuffix(name, "/") {
+		return "", fmt.Errorf("%w: entry basename is empty", domain.ErrConflict)
+	}
+	for _, component := range strings.Split(name, "/") {
+		if component == ".." {
+			return "", fmt.Errorf("%w: path traversal is not allowed", domain.ErrConflict)
+		}
+	}
+	clean := path.Clean(name)
+	if clean == "." || clean == ".." || strings.HasPrefix(clean, "../") {
 		return "", fmt.Errorf("%w: path traversal is not allowed", domain.ErrConflict)
 	}
-	if strings.HasPrefix(clean, ".") && clean != ".md" {
+	components := strings.Split(clean, "/")
+	for _, component := range components[:len(components)-1] {
+		if component == "" || component == "." || strings.HasPrefix(component, ".") {
+			return "", fmt.Errorf("%w: hidden entry path is not allowed", domain.ErrConflict)
+		}
+	}
+
+	directory := strings.Join(components[:len(components)-1], "/")
+	basename := components[len(components)-1]
+	if strings.HasPrefix(basename, ".") {
 		return "", fmt.Errorf("%w: hidden entry path is not allowed", domain.ErrConflict)
 	}
-	if !strings.HasSuffix(strings.ToLower(clean), ".md") {
-		clean += ".md"
+	for strings.HasSuffix(strings.ToLower(basename), ".md") {
+		basename = basename[:len(basename)-len(".md")]
 	}
-	return clean, nil
+	if basename == "" {
+		return "", fmt.Errorf("%w: entry basename is empty", domain.ErrConflict)
+	}
+
+	prefix := ""
+	if strings.HasPrefix(directory, "wos/") {
+		prefix = workOrderPrefix(basename)
+		basename = strings.TrimPrefix(basename, prefix)
+	}
+	slug, err := domain.SlugTitle(basename)
+	if err != nil {
+		return "", fmt.Errorf("%w: entry name %q has no usable basename", domain.ErrConflict, name)
+	}
+	basename = prefix + slug + ".md"
+	if directory == "" {
+		return basename, nil
+	}
+	return directory + "/" + basename, nil
+}
+
+func isWindowsAbsolutePath(name string) bool {
+	return len(name) >= 3 && ((name[0] >= 'a' && name[0] <= 'z') || (name[0] >= 'A' && name[0] <= 'Z')) && name[1] == ':' && name[2] == '/'
+}
+
+func workOrderPrefix(basename string) string {
+	match := workOrderPattern.FindStringSubmatch(basename)
+	if len(match) == 3 {
+		return match[1] + "-"
+	}
+	return ""
 }
 
 func (store TopicStore) nextWorkOrderPath(topicPath, path string) (string, error) {

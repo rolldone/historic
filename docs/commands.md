@@ -10,6 +10,8 @@ historic list [--closed] [--json]
 historic show <id> [--closed] [--json]
 ```
 
+`historic add` canonicalizes the basename before writing it: whitespace, `_`, and repeated `-` separators become a single lowercase `-`, and `.md` is added exactly once. Directory prefixes are preserved. A `wos/` entry receives the next available `NN-` Work Order number; an existing `NN-` prefix is preserved. Absolute paths, traversal, hidden paths, and names without usable characters are rejected. User-facing JSON paths always use `/` separators.
+
 Topic IDs use five digits and topic folders use `<id>-<slug>`.
 
 ## Work status and storage state
