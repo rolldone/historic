@@ -350,6 +350,48 @@ func TestCloseDifferentialIsolatedSmoke(t *testing.T) {
 	}
 }
 
+func TestCloseIdenticalTreeIsNoOpForArchiveContent(t *testing.T) {
+	workspace, err := config.Initialize(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	archive := filepath.Join(workspace.Database, "00008-same-tree")
+	source := filepath.Join(workspace.Histories, "00008-same-tree")
+	for _, topic := range []string{archive, source} {
+		if err := os.MkdirAll(filepath.Join(topic, "nested"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	meta := domain.Frontmatter{ID: "00008", Title: "Same Tree", Status: domain.StatusProgress, Created: "2026-09-21"}
+	for _, topic := range []string{archive, source} {
+		document, _ := markdown.NewDocument(meta, "body")
+		if err := markdown.WriteFile(filepath.Join(topic, markdown.MetaFilename), document); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(topic, "nested", "same.txt"), []byte("unchanged\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	archiveFile := filepath.Join(archive, "nested", "same.txt")
+	var before syscall.Stat_t
+	if err := syscall.Stat(archiveFile, &before); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := NewService(workspace).Close("00008"); err != nil {
+		t.Fatal(err)
+	}
+	var after syscall.Stat_t
+	if err := syscall.Stat(archiveFile, &after); err != nil {
+		t.Fatal(err)
+	}
+	if before.Ino != after.Ino || before.Dev != after.Dev {
+		t.Fatal("identical close rewrote archive content")
+	}
+	if _, err := os.Stat(source); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("source workdir remains: %v", err)
+	}
+}
+
 func checksumFile(path string) string {
 	data, err := os.ReadFile(path)
 	if err != nil {

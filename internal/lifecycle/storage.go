@@ -75,6 +75,15 @@ func closeTopic(workspace config.Workspace, id domain.ID) (Change, error) {
 
 	folder := filepath.Base(location.path)
 	sameSnapshot := archive.path != "" && filepath.Base(archive.path) == folder && manifestsEqual(sourceManifest, archiveManifest)
+	if sameSnapshot {
+		currentSourceManifest, err := buildTopicManifest(location.path)
+		if err != nil {
+			return Change{}, fmt.Errorf("validate close source manifest: %w", err)
+		}
+		if !manifestsEqual(sourceManifest, currentSourceManifest) {
+			return Change{}, fmt.Errorf("%w: close source changed before finalization", domain.ErrConflict)
+		}
+	}
 	if !sameSnapshot {
 		if err := stageDifferentialArchive(workspace, location.path, archive.path, folder, sourceManifest, archiveManifest); err != nil {
 			return Change{}, err
@@ -222,6 +231,33 @@ func stageDifferentialArchive(workspace config.Workspace, source, archive, folde
 		cleanup()
 		return fmt.Errorf("%w: close source changed during staging", domain.ErrConflict)
 	}
+	currentSourceManifest, err := buildTopicManifest(source)
+	if err != nil {
+		cleanup()
+		return fmt.Errorf("validate close source manifest: %w", err)
+	}
+	if !manifestsEqual(sourceManifest, currentSourceManifest) {
+		cleanup()
+		return fmt.Errorf("%w: close source changed during staging", domain.ErrConflict)
+	}
+	return nil
+}
+
+func validateStagedCopy(source, staging string, sourceManifest topicManifest) error {
+	stagedManifest, err := buildTopicManifest(staging)
+	if err != nil {
+		return fmt.Errorf("validate open staging manifest: %w", err)
+	}
+	if !manifestsEqual(sourceManifest, stagedManifest) {
+		return fmt.Errorf("%w: open source changed during staging", domain.ErrConflict)
+	}
+	currentSourceManifest, err := buildTopicManifest(source)
+	if err != nil {
+		return fmt.Errorf("validate open source manifest: %w", err)
+	}
+	if !manifestsEqual(sourceManifest, currentSourceManifest) {
+		return fmt.Errorf("%w: open source changed during staging", domain.ErrConflict)
+	}
 	return nil
 }
 
@@ -339,6 +375,10 @@ func copyOpenTopic(workspace config.Workspace, id domain.ID) (Change, error) {
 	if err != nil {
 		return Change{}, fmt.Errorf("validate closed topic: %w", err)
 	}
+	sourceManifest, err := buildTopicManifest(location.path)
+	if err != nil {
+		return Change{}, fmt.Errorf("build open manifest: %w", err)
+	}
 
 	folder := filepath.Base(location.path)
 	destination := filepath.Join(workspace.Histories, folder)
@@ -361,6 +401,10 @@ func copyOpenTopic(workspace config.Workspace, id domain.ID) (Change, error) {
 	if _, err := validateCopiedTopic(staging, id); err != nil {
 		_ = os.RemoveAll(staging)
 		return Change{}, fmt.Errorf("validate staged topic: %w", err)
+	}
+	if err := validateStagedCopy(location.path, staging, sourceManifest); err != nil {
+		_ = os.RemoveAll(staging)
+		return Change{}, err
 	}
 	if err := os.Rename(staging, destination); err != nil {
 		_ = os.RemoveAll(staging)
@@ -390,16 +434,22 @@ func copyTopicTree(source, destination string) error {
 		if walkErr != nil {
 			return walkErr
 		}
+		relative, err := filepath.Rel(source, path)
+		if err != nil {
+			return err
+		}
+		if relative == ".git" || strings.HasPrefix(relative, ".git"+string(filepath.Separator)) {
+			if entry.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
 		info, err := os.Lstat(path)
 		if err != nil {
 			return err
 		}
 		if info.Mode()&os.ModeSymlink != 0 || entry.Type()&os.ModeSymlink != 0 {
 			return fmt.Errorf("%w: symlink %s", domain.ErrConflict, filepath.ToSlash(path))
-		}
-		relative, err := filepath.Rel(source, path)
-		if err != nil {
-			return err
 		}
 		target := destination
 		if relative != "." {
