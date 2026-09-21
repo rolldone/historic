@@ -15,8 +15,15 @@ import (
 )
 
 const (
-	fileTypeHistoric = "historic_file"
-	fileTypeAsset    = "asset"
+	// FileTypeHistoric identifies a managed Historic Markdown file.
+	FileTypeHistoric = "historic_file"
+	// FileTypeAsset identifies a non-managed topic asset.
+	FileTypeAsset = "asset"
+
+	// Keep the original package-local names as compatibility aliases for
+	// callers and tests that are in this package.
+	fileTypeHistoric = FileTypeHistoric
+	fileTypeAsset    = FileTypeAsset
 )
 
 // Options contains composable filters for topic and file queries. Dates are
@@ -41,6 +48,9 @@ type Options struct {
 }
 
 // TopicSummary is a computed, read-only summary of one logical topic.
+//
+// The field declaration order is part of the JSON contract: encoding/json
+// emits fields in this order, which keeps aggregate output stable for callers.
 type TopicSummary struct {
 	ID                string   `json:"id"`
 	NumPadded         string   `json:"num_padded"`
@@ -271,6 +281,9 @@ func (service Service) open() (*sql.DB, error) {
 }
 
 func validateOptions(options Options) error {
+	if options.Status != "" && !options.Status.IsValid() {
+		return fmt.Errorf("invalid status %q", options.Status)
+	}
 	if options.Storage != "" && !options.Storage.IsValid() {
 		return fmt.Errorf("invalid storage %q", options.Storage)
 	}

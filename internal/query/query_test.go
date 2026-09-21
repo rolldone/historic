@@ -1,6 +1,7 @@
 package query
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -110,9 +111,52 @@ func TestQueryRejectsInvalidFilters(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, options := range []Options{{Type: "unknown"}, {Storage: "unknown"}, {Folder: "../escape"}, {MinFiles: 2, MaxFiles: 1}} {
+	for _, options := range []Options{{Type: "unknown"}, {Storage: "unknown"}, {Status: "unknown"}, {Folder: "../escape"}, {MinFiles: 2, MaxFiles: 1}} {
 		if _, err := QueryTopics(workspace, options); err == nil {
 			t.Fatalf("invalid options accepted: %+v", options)
 		}
+	}
+}
+
+func TestAggregateQuerySmokeHasStableJSONAndExcludesAssets(t *testing.T) {
+	workspace, err := config.Initialize(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	topic := filepath.Join(workspace.Histories, "00001-smoke")
+	if err := os.MkdirAll(topic, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeQueryDocument(t, filepath.Join(topic, "_meta.md"), domain.Frontmatter{
+		ID: "00001", Title: "Smoke", Status: domain.StatusCreate, Created: "2026-09-01",
+	}, "topic")
+	writeQueryDocument(t, filepath.Join(topic, "done.md"), domain.Frontmatter{
+		ID: "00001", Title: "Done", Status: domain.StatusComplete, Created: "2026-09-02",
+	}, "done")
+	if err := os.WriteFile(filepath.Join(topic, "diagram.png"), []byte("asset"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := indexer.Rebuild(workspace); err != nil {
+		t.Fatal(err)
+	}
+
+	results, err := QueryTopics(workspace, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := json.Marshal(results)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const expected = `[{"id":"00001","num_padded":"00001","title":"Smoke","slug":"smoke","path":".historic/00001-smoke","storage":"open","created_at":"2026-09-01","tags":[],"related":[],"total_files":1,"active_files":0,"resolved_files":1,"complete_files":1,"cancelled_files":0,"computed_status":"complete","last_file_updated_at":"2026-09-02"}]`
+	if string(encoded) != expected {
+		t.Fatalf("aggregate JSON = %s, want %s", encoded, expected)
+	}
+	again, err := json.Marshal(results)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(again) != string(encoded) {
+		t.Fatalf("aggregate JSON changed between encodes: %s != %s", encoded, again)
 	}
 }
