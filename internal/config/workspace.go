@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"historic/internal/gitproxy"
+	"historic/internal/schema"
 
 	_ "modernc.org/sqlite"
 )
@@ -158,7 +159,7 @@ func initializeIndex(path string) error {
 	if err := ensureIndexStorageColumn(database); err != nil {
 		return fmt.Errorf("migrate index schema %s: %w", path, err)
 	}
-	const schema = `
+	const indexSchema = `
 CREATE TABLE IF NOT EXISTS historic_metadata (key TEXT PRIMARY KEY, value INTEGER NOT NULL);
 INSERT INTO historic_metadata(key, value) VALUES ('workspace_format_version', 1) ON CONFLICT(key) DO NOTHING;
 CREATE TABLE IF NOT EXISTS index_records (
@@ -190,8 +191,11 @@ CREATE INDEX IF NOT EXISTS idx_index_records_type ON index_records(type);
 CREATE INDEX IF NOT EXISTS idx_index_records_storage ON index_records(storage);
 CREATE INDEX IF NOT EXISTS idx_index_records_folder ON index_records(folder_id);
 `
-	if _, err := database.Exec(schema); err != nil {
+	if _, err := database.Exec(indexSchema); err != nil {
 		return fmt.Errorf("create index schema %s: %w", path, err)
+	}
+	if err := schema.EnsureReadModel(database); err != nil {
+		return fmt.Errorf("create read model schema %s: %w", path, err)
 	}
 	return nil
 }

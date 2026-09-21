@@ -113,6 +113,21 @@ func TestIndexDatabaseHasExpectedRecords(t *testing.T) {
 	if table != "index_records" {
 		t.Fatal(errors.New("index table missing"))
 	}
+	for _, name := range []string{"topics", "files"} {
+		if err := database.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name=?", name).Scan(&table); err != nil {
+			t.Fatalf("read model table %q missing: %v", name, err)
+		}
+		if table != name {
+			t.Fatalf("read model table = %q, want %q", table, name)
+		}
+	}
+	var foreignKeys int
+	if err := database.QueryRow("SELECT COUNT(*) FROM pragma_foreign_key_list('files') WHERE \"table\"='topics' AND \"from\"='topic_id' AND \"to\"='id'").Scan(&foreignKeys); err != nil {
+		t.Fatal(err)
+	}
+	if foreignKeys != 1 {
+		t.Fatalf("files.topic_id foreign key count = %d, want 1", foreignKeys)
+	}
 	var fts string
 	if err := database.QueryRow("SELECT sql FROM sqlite_master WHERE name='historic_fts'").Scan(&fts); err != nil {
 		t.Fatalf("FTS5 table missing: %v", err)

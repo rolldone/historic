@@ -18,6 +18,7 @@ import (
 	"historic/internal/config"
 	"historic/internal/domain"
 	"historic/internal/markdown"
+	"historic/internal/schema"
 
 	_ "modernc.org/sqlite"
 )
@@ -81,6 +82,9 @@ func rebuildInto(workspace config.Workspace) (int, error) {
 		file_order INTEGER NOT NULL DEFAULT 0, content TEXT NOT NULL DEFAULT '', word_count INTEGER NOT NULL DEFAULT 0,
 		mtime TEXT NOT NULL, hash TEXT NOT NULL DEFAULT '')`); err != nil {
 		return 0, fmt.Errorf("create index table: %w", err)
+	}
+	if err := schema.EnsureReadModel(transaction); err != nil {
+		return 0, err
 	}
 	if !hasStorageColumn(transaction) {
 		if _, err := transaction.Exec(`ALTER TABLE index_records ADD COLUMN storage TEXT NOT NULL DEFAULT 'open'`); err != nil {
