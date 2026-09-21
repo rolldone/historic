@@ -1,7 +1,7 @@
 ---
 id: 00017
 title: WO 17 Delete and Purge Lifecycle Safety
-status: planned
+status: complete
 created: 2026-09-21
 updated: 2026-09-21
 tags: [delete, purge, lifecycle, safety, recovery]

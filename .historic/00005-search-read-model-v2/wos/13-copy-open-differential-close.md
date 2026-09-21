@@ -1,7 +1,7 @@
 ---
 id: 00013
 title: WO 13 Copy Based Open and Differential Close
-status: planned
+status: complete
 created: 2026-09-21
 updated: 2026-09-21
 tags: [open, close, copy, diff, hash, lifecycle]

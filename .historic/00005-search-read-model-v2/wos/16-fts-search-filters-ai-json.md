@@ -1,7 +1,7 @@
 ---
 id: 00016
 title: WO 16 FTS Search Filters and AI JSON
-status: planned
+status: complete
 created: 2026-09-21
 updated: 2026-09-21
 tags: [fts5, search, filters, ai, json]

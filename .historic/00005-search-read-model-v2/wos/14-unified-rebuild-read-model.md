@@ -1,7 +1,7 @@
 ---
 id: 00014
 title: WO 14 Unified Rebuild Topic File Read Model
-status: planned
+status: complete
 created: 2026-09-21
 updated: 2026-09-21
 tags: [rebuild, topics, files, aggregate, metadata]

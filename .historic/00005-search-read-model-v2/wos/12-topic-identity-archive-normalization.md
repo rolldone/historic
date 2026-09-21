@@ -1,7 +1,7 @@
 ---
 id: 00012
 title: WO 12 Topic Identity Rename and Archive Normalization
-status: planned
+status: complete
 created: 2026-09-21
 updated: 2026-09-21
 tags: [identity, rename, slug, archive]

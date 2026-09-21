@@ -1,7 +1,7 @@
 ---
 id: 00015
 title: WO 15 Aggregate Topic File Query API
-status: planned
+status: complete
 created: 2026-09-21
 updated: 2026-09-21
 tags: [query, aggregate, sqlite, ai]
