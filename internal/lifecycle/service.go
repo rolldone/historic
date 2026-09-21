@@ -1,11 +1,8 @@
 package lifecycle
 
 import (
-	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"historic/internal/config"
@@ -16,12 +13,14 @@ import (
 
 // Change describes one successful lifecycle status change.
 type Change struct {
-	ID       domain.ID
-	Title    string
-	Previous domain.Status
-	Current  domain.Status
-	Path     string
-	Archived bool
+	ID              domain.ID
+	Title           string
+	Previous        domain.Status
+	Current         domain.Status
+	Path            string
+	Storage         domain.StorageState
+	PreviousStorage domain.StorageState
+	Archived        bool
 }
 
 // Service updates topic metadata and rebuilds the source-derived index.
@@ -34,8 +33,7 @@ func NewService(workspace config.Workspace) Service {
 	return Service{Workspace: workspace}
 }
 
-// ChangeStatus changes an active topic's status. Close statuses are archived
-// in the service but archive path movement is isolated for WO 12.
+// ChangeStatus changes a topic's work status without changing its storage location.
 func (service Service) ChangeStatus(id domain.ID, next domain.Status) (Change, error) {
 	if !id.Valid() {
 		return Change{}, fmt.Errorf("%w: %q", domain.ErrInvalidID, id)
@@ -43,10 +41,11 @@ func (service Service) ChangeStatus(id domain.ID, next domain.Status) (Change, e
 	if !next.IsValid() {
 		return Change{}, fmt.Errorf("%w: %q", domain.ErrInvalidStatus, next)
 	}
-	path, err := activeTopicPath(service.Workspace, id)
+	location, err := resolveTopic(service.Workspace, id)
 	if err != nil {
 		return Change{}, err
 	}
+	path := location.path
 	metaPath := filepath.Join(path, "_meta.md")
 	document, err := markdown.ParseFile(metaPath)
 	if err != nil {
@@ -67,22 +66,16 @@ func (service Service) ChangeStatus(id domain.ID, next domain.Status) (Change, e
 	if _, err := indexer.Rebuild(service.Workspace); err != nil {
 		return Change{}, fmt.Errorf("rebuild lifecycle index: %w", err)
 	}
-	return Change{ID: id, Title: document.Frontmatter.Title, Previous: previous, Current: next, Path: service.Workspace.RelativePath(path), Archived: next.IsClose()}, nil
+	return Change{ID: id, Title: document.Frontmatter.Title, Previous: previous, Current: next, Path: service.Workspace.RelativePath(path), Storage: location.storage, PreviousStorage: location.storage, Archived: location.storage == domain.StorageClosed}, nil
 }
 
 func activeTopicPath(workspace config.Workspace, id domain.ID) (string, error) {
-	entries, err := os.ReadDir(workspace.Histories)
-	if errors.Is(err, os.ErrNotExist) {
-		return "", fmt.Errorf("%w: %s", domain.ErrTopicMissing, id)
-	}
+	path, storage, err := TopicLocation(workspace, id)
 	if err != nil {
-		return "", fmt.Errorf("scan active topics: %w", err)
+		return "", err
 	}
-	prefix := id.String() + "-"
-	for _, entry := range entries {
-		if entry.IsDir() && strings.HasPrefix(entry.Name(), prefix) {
-			return filepath.Join(workspace.Histories, entry.Name()), nil
-		}
+	if storage != domain.StorageOpen {
+		return "", fmt.Errorf("%w: topic %s is closed", domain.ErrTopicMissing, id)
 	}
-	return "", fmt.Errorf("%w: %s", domain.ErrTopicMissing, id)
+	return path, nil
 }

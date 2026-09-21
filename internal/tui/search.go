@@ -82,7 +82,7 @@ func (m model) Init() tea.Cmd { return m.refresh() }
 
 func (m model) refresh() tea.Cmd {
 	keyword := strings.TrimSpace(m.input.Value())
-	options := search.Options{Keyword: keyword, ActiveOnly: m.scope == "active", ArchivedOnly: m.scope == "archived", Status: m.status}
+	options := search.Options{Keyword: keyword, OpenOnly: m.scope == "active", ClosedOnly: m.scope == "archived", Status: m.status}
 	if m.typeName == "work-order" {
 		options.Type = "task"
 	}

@@ -22,8 +22,10 @@ type Options struct {
 	Folder       string
 	Type         string
 	ID           domain.ID
-	ActiveOnly   bool
-	ArchivedOnly bool
+	OpenOnly     bool
+	ClosedOnly   bool
+	ActiveOnly   bool // compatibility for package callers; CLI no longer exposes --active
+	ArchivedOnly bool // compatibility for package callers; CLI no longer exposes --archived
 }
 
 // Result is one matching Markdown entry or topic metadata file.
@@ -33,14 +35,15 @@ type Result struct {
 	Status  string `json:"status"`
 	Path    string `json:"path"`
 	Snippet string `json:"snippet"`
+	Storage string `json:"storage"`
 	Active  bool   `json:"active"`
 }
 
 // RecentTopics returns active or archived topic metadata in deterministic order.
 // It shares the indexed topic records used by Find and is intended for the TUI's empty query.
 func RecentTopics(workspace config.Workspace, options Options) ([]Result, error) {
-	if options.ActiveOnly && options.ArchivedOnly {
-		return nil, fmt.Errorf("active and archived filters cannot be combined")
+	if options.OpenOnly && options.ClosedOnly || options.ActiveOnly && options.ArchivedOnly {
+		return nil, fmt.Errorf("open and closed filters cannot be combined")
 	}
 	database, err := sql.Open("sqlite", workspace.Index)
 	if err != nil {
@@ -56,14 +59,19 @@ func RecentTopics(workspace config.Workspace, options Options) ([]Result, error)
 		where = append(where, "r.status = ?")
 		args = append(args, options.Status.String())
 	}
+	if options.OpenOnly {
+		where = append(where, "r.storage = 'open'")
+	}
+	if options.ClosedOnly {
+		where = append(where, "r.storage = 'closed'")
+	}
 	if options.ActiveOnly {
-		where = append(where, "r.path NOT LIKE '.historic/.database/%'")
+		where = append(where, "r.storage = 'open'")
 	}
 	if options.ArchivedOnly {
-		where = append(where, "r.path LIKE '.historic/.database/%'")
+		where = append(where, "r.storage = 'closed'")
 	}
-	rows, err := database.Query(`SELECT r.num_padded, r.title, r.status, r.path, r.content,
-		r.path LIKE '.historic/.database/%' AS archived FROM index_records AS r WHERE `+strings.Join(where, " AND ")+` ORDER BY r.path ASC`, args...)
+	rows, err := database.Query(`SELECT r.num_padded, r.title, r.status, r.path, r.content, r.storage FROM index_records AS r WHERE `+strings.Join(where, " AND ")+` ORDER BY r.path ASC`, args...)
 	if err != nil {
 		return nil, fmt.Errorf("query recent topics: %w", err)
 	}
@@ -72,12 +80,11 @@ func RecentTopics(workspace config.Workspace, options Options) ([]Result, error)
 	for rows.Next() {
 		var result Result
 		var body string
-		var archived bool
-		if err := rows.Scan(&result.ID, &result.Title, &result.Status, &result.Path, &body, &archived); err != nil {
+		if err := rows.Scan(&result.ID, &result.Title, &result.Status, &result.Path, &body, &result.Storage); err != nil {
 			return nil, fmt.Errorf("read recent topic: %w", err)
 		}
 		result.Snippet = firstLine(body)
-		result.Active = !archived
+		result.Active = result.Storage == "open"
 		results = append(results, result)
 	}
 	return results, rows.Err()
@@ -86,11 +93,8 @@ func RecentTopics(workspace config.Workspace, options Options) ([]Result, error)
 // Find queries the rebuildable SQLite FTS5 index without invoking a shell.
 func Find(workspace config.Workspace, options Options) ([]Result, error) {
 	keyword := strings.TrimSpace(options.Keyword)
-	if keyword == "" {
-		return nil, fmt.Errorf("keyword must not be empty")
-	}
-	if options.ActiveOnly && options.ArchivedOnly {
-		return nil, fmt.Errorf("active and archived filters cannot be combined")
+	if options.OpenOnly && options.ClosedOnly || options.ActiveOnly && options.ArchivedOnly {
+		return nil, fmt.Errorf("open and closed filters cannot be combined")
 	}
 	if options.Type != "" && !validType(options.Type) {
 		return nil, fmt.Errorf("invalid type %q", options.Type)
@@ -137,14 +141,14 @@ func Find(workspace config.Workspace, options Options) ([]Result, error) {
 		where = append(where, "(r.path = ? OR r.path LIKE ?)")
 		args = append(args, folder, folder+"/%")
 	}
-	if options.ActiveOnly {
-		where = append(where, "r.path NOT LIKE '.historic/.database/%'")
+	if options.OpenOnly {
+		where = append(where, "r.storage = 'open'")
 	}
-	if options.ArchivedOnly {
-		where = append(where, "r.path LIKE '.historic/.database/%'")
+	if options.ClosedOnly {
+		where = append(where, "r.storage = 'closed'")
 	}
-	statement := `SELECT r.num_padded, r.title, r.status, r.path, r.content, r.type,
-		r.path LIKE '.historic/.database/%' AS archived, bm25(historic_fts) AS rank
+	statement := `SELECT r.num_padded, r.title, r.status, r.path, r.content, r.type, r.storage,
+		bm25(historic_fts) AS rank
 		FROM historic_fts JOIN index_records AS r ON r.id = historic_fts.rowid
 		WHERE ` + strings.Join(where, " AND ") + ` ORDER BY rank ASC, r.path ASC`
 	rows, err := database.Query(statement, args...)
@@ -156,13 +160,12 @@ func Find(workspace config.Workspace, options Options) ([]Result, error) {
 	for rows.Next() {
 		var result Result
 		var body, recordType string
-		var archived bool
 		var rank float64
-		if err := rows.Scan(&result.ID, &result.Title, &result.Status, &result.Path, &body, &recordType, &archived, &rank); err != nil {
+		if err := rows.Scan(&result.ID, &result.Title, &result.Status, &result.Path, &body, &recordType, &result.Storage, &rank); err != nil {
 			return nil, fmt.Errorf("read search result: %w", err)
 		}
 		result.Snippet = snippet(body, keyword)
-		result.Active = !archived
+		result.Active = result.Storage == "open"
 		results = append(results, result)
 	}
 	if err := rows.Err(); err != nil {

@@ -25,17 +25,12 @@ func newLifecycleCommand(status domain.Status) *cobra.Command {
 			if err != nil {
 				return writeCommandError(cmd, string(status), jsonOutput, err)
 			}
-			var change lifecycle.Change
-			if status.IsClose() {
-				change, err = lifecycle.NewService(workspace).ArchiveStatus(id, status)
-			} else {
-				change, err = lifecycle.NewService(workspace).ChangeStatus(id, status)
-			}
+			change, err := lifecycle.NewService(workspace).ChangeStatus(id, status)
 			if err != nil {
 				return writeCommandError(cmd, string(status), jsonOutput, err)
 			}
 			response := lifecycleOutput{Command: string(status), OK: true, Data: lifecycleData{
-				ID: change.ID.String(), Title: change.Title, Previous: change.Previous.String(), Current: change.Current.String(), Path: change.Path, Archived: change.Archived,
+				ID: change.ID.String(), Title: change.Title, Previous: change.Previous.String(), Current: change.Current.String(), Path: change.Path, Storage: change.Storage.String(), PreviousStorage: change.PreviousStorage.String(), Archived: change.Archived,
 			}, Error: nil}
 			if jsonOutput {
 				return json.NewEncoder(cmd.OutOrStdout()).Encode(response)
@@ -56,10 +51,12 @@ type lifecycleOutput struct {
 }
 
 type lifecycleData struct {
-	ID       string `json:"id"`
-	Title    string `json:"title"`
-	Previous string `json:"previous"`
-	Current  string `json:"current"`
-	Path     string `json:"path"`
-	Archived bool   `json:"archived"`
+	ID              string `json:"id"`
+	Title           string `json:"title"`
+	Previous        string `json:"previous"`
+	Current         string `json:"current"`
+	Path            string `json:"path"`
+	Storage         string `json:"storage"`
+	PreviousStorage string `json:"previous_storage,omitempty"`
+	Archived        bool   `json:"archived"`
 }

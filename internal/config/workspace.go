@@ -163,6 +163,7 @@ CREATE TABLE IF NOT EXISTS index_records (
     type TEXT NOT NULL DEFAULT '',
     title TEXT NOT NULL,
     status TEXT NOT NULL,
+    storage TEXT NOT NULL DEFAULT 'open',
     tags TEXT NOT NULL DEFAULT '[]',
     related TEXT NOT NULL DEFAULT '[]',
     created_at TEXT NOT NULL,
@@ -181,6 +182,7 @@ CREATE TABLE IF NOT EXISTS index_records (
 CREATE INDEX IF NOT EXISTS idx_index_records_num ON index_records(num);
 CREATE INDEX IF NOT EXISTS idx_index_records_status ON index_records(status);
 CREATE INDEX IF NOT EXISTS idx_index_records_type ON index_records(type);
+CREATE INDEX IF NOT EXISTS idx_index_records_storage ON index_records(storage);
 CREATE INDEX IF NOT EXISTS idx_index_records_folder ON index_records(folder_id);
 `
 	if _, err := database.Exec(schema); err != nil {

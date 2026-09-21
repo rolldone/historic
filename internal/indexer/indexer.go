@@ -36,6 +36,7 @@ type Record struct {
 	CreatedAt  string
 	UpdatedAt  string
 	Path       string
+	Storage    domain.StorageState
 	FolderID   domain.ID
 	FolderSlug string
 	Subfolder  string
@@ -70,16 +71,22 @@ func Rebuild(workspace config.Workspace) (int, error) {
 	defer transaction.Rollback()
 	if _, err := transaction.Exec(`CREATE TABLE IF NOT EXISTS index_records (
 		id INTEGER PRIMARY KEY, num INTEGER NOT NULL, num_padded TEXT NOT NULL, type TEXT NOT NULL DEFAULT '',
-		title TEXT NOT NULL, status TEXT NOT NULL, tags TEXT NOT NULL DEFAULT '[]', related TEXT NOT NULL DEFAULT '[]',
+		title TEXT NOT NULL, status TEXT NOT NULL, storage TEXT NOT NULL DEFAULT 'open', tags TEXT NOT NULL DEFAULT '[]', related TEXT NOT NULL DEFAULT '[]',
 		created_at TEXT NOT NULL, updated_at TEXT, path TEXT NOT NULL UNIQUE, folder_id TEXT NOT NULL,
 		folder_slug TEXT NOT NULL DEFAULT '', subfolder TEXT NOT NULL DEFAULT '', filename TEXT NOT NULL,
 		file_order INTEGER NOT NULL DEFAULT 0, content TEXT NOT NULL DEFAULT '', word_count INTEGER NOT NULL DEFAULT 0,
 		mtime TEXT NOT NULL, hash TEXT NOT NULL DEFAULT '')`); err != nil {
 		return 0, fmt.Errorf("create index table: %w", err)
 	}
+	if !hasStorageColumn(transaction) {
+		if _, err := transaction.Exec(`ALTER TABLE index_records ADD COLUMN storage TEXT NOT NULL DEFAULT 'open'`); err != nil {
+			return 0, fmt.Errorf("add storage index column: %w", err)
+		}
+	}
 	if _, err := transaction.Exec(`CREATE INDEX IF NOT EXISTS idx_index_records_num ON index_records(num);
 		CREATE INDEX IF NOT EXISTS idx_index_records_status ON index_records(status);
 		CREATE INDEX IF NOT EXISTS idx_index_records_type ON index_records(type);
+		CREATE INDEX IF NOT EXISTS idx_index_records_storage ON index_records(storage);
 		CREATE INDEX IF NOT EXISTS idx_index_records_folder ON index_records(folder_id)`); err != nil {
 		return 0, fmt.Errorf("create index indexes: %w", err)
 	}
@@ -96,9 +103,9 @@ func Rebuild(workspace config.Workspace) (int, error) {
 	}
 	seenPaths := make(map[string]struct{}, len(records))
 	statement, err := transaction.Prepare(`INSERT INTO index_records
-		(num, num_padded, type, title, status, tags, related, created_at, updated_at, path, folder_id, folder_slug,
+		(num, num_padded, type, title, status, storage, tags, related, created_at, updated_at, path, folder_id, folder_slug,
 		subfolder, filename, file_order, content, word_count, mtime, hash)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return 0, fmt.Errorf("prepare index insert: %w", err)
 	}
@@ -116,7 +123,7 @@ func Rebuild(workspace config.Workspace) (int, error) {
 		seenPaths[record.Path] = struct{}{}
 		tags, _ := json.Marshal(record.Tags)
 		related, _ := json.Marshal(record.Related)
-		result, err := statement.Exec(record.Num, record.NumPadded, record.Type, record.Title, record.Status.String(), string(tags), string(related), record.CreatedAt, nullable(record.UpdatedAt), record.Path, record.FolderID.String(), record.FolderSlug, record.Subfolder, record.Filename, record.FileOrder, record.Content, record.WordCount, record.Mtime, record.Hash)
+		result, err := statement.Exec(record.Num, record.NumPadded, record.Type, record.Title, record.Status.String(), record.Storage.String(), string(tags), string(related), record.CreatedAt, nullable(record.UpdatedAt), record.Path, record.FolderID.String(), record.FolderSlug, record.Subfolder, record.Filename, record.FileOrder, record.Content, record.WordCount, record.Mtime, record.Hash)
 		if err != nil {
 			return 0, fmt.Errorf("insert %s: %w", record.Path, err)
 		}
@@ -135,12 +142,37 @@ func Rebuild(workspace config.Workspace) (int, error) {
 	return indexed, nil
 }
 
+func hasStorageColumn(transaction *sql.Tx) bool {
+	rows, err := transaction.Query("PRAGMA table_info(index_records)")
+	if err != nil {
+		return false
+	}
+	defer rows.Close()
+	var cid int
+	var name, columnType string
+	var notNull, primaryKey int
+	var defaultValue any
+	for rows.Next() {
+		if err := rows.Scan(&cid, &name, &columnType, &notNull, &defaultValue, &primaryKey); err == nil && name == "storage" {
+			return true
+		}
+	}
+	return false
+}
+
 func scan(workspace config.Workspace) ([]Record, error) {
 	var records []Record
 	for _, root := range []string{workspace.Histories, workspace.Database} {
+		storage := domain.StorageOpen
+		if filepath.Clean(root) == filepath.Clean(workspace.Database) {
+			storage = domain.StorageClosed
+		}
 		err := filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
 			if walkErr != nil {
 				return walkErr
+			}
+			if filepath.Clean(root) == filepath.Clean(workspace.Histories) && filepath.Clean(path) == filepath.Clean(workspace.Database) && entry.IsDir() {
+				return filepath.SkipDir
 			}
 			if entry.Type()&os.ModeSymlink != 0 {
 				return nil
@@ -149,6 +181,7 @@ func scan(workspace config.Workspace) ([]Record, error) {
 				return nil
 			}
 			record, err := scanFile(workspace, path)
+			record.Storage = storage
 			if err != nil {
 				if filepath.Base(path) == "_meta.md" {
 					// A broken topic metadata file is not indexed, allowing batch operations to continue.

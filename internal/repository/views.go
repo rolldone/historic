@@ -20,6 +20,7 @@ type TopicView struct {
 	Created string     `json:"created"`
 	Updated string     `json:"updated,omitempty"`
 	Path    string     `json:"path"`
+	Storage string     `json:"storage"`
 	Files   []FileView `json:"files"`
 	Body    string     `json:"body,omitempty"`
 	Active  bool       `json:"active"`
@@ -32,21 +33,26 @@ type FileView struct {
 	Status string `json:"status"`
 }
 
-// ListTopics returns deterministic topic views, filtered to active by default.
-func (store TopicStore) ListTopics(includeArchived bool) ([]TopicView, error) {
+// ListTopics returns deterministic topic views, filtered to open by default.
+func (store TopicStore) ListTopics(includeClosed bool) ([]TopicView, error) {
 	paths, err := store.ListTopicDirectories()
 	if err != nil {
 		return nil, fmt.Errorf("list topics: %w", err)
 	}
 	views := make([]TopicView, 0, len(paths))
+	seen := make(map[string]struct{}, len(paths))
 	for _, path := range paths {
 		active := filepath.Dir(path) == store.Workspace.Histories
-		if !includeArchived && !active {
-			continue
-		}
 		view, err := store.readTopicView(path, active, false)
 		if err != nil {
 			return nil, err
+		}
+		if _, exists := seen[view.ID]; exists {
+			return nil, fmt.Errorf("%w: topic %s exists in open and closed storage", domain.ErrConflict, view.ID)
+		}
+		seen[view.ID] = struct{}{}
+		if !includeClosed && view.Storage == "closed" {
+			continue
 		}
 		views = append(views, view)
 	}
@@ -55,7 +61,7 @@ func (store TopicStore) ListTopics(includeArchived bool) ([]TopicView, error) {
 }
 
 // ShowTopic returns one topic view, including its metadata and Markdown files.
-func (store TopicStore) ShowTopic(id domain.ID, includeArchived bool) (TopicView, error) {
+func (store TopicStore) ShowTopic(id domain.ID, includeClosed bool) (TopicView, error) {
 	if !id.Valid() {
 		return TopicView{}, fmt.Errorf("%w: %q", domain.ErrInvalidID, id)
 	}
@@ -63,14 +69,16 @@ func (store TopicStore) ShowTopic(id domain.ID, includeArchived bool) (TopicView
 	if err != nil {
 		return TopicView{}, fmt.Errorf("find topic: %w", err)
 	}
+	matched := false
 	for _, path := range paths {
 		if !strings.HasPrefix(filepath.Base(path), id.String()+"-") {
 			continue
 		}
 		active := filepath.Dir(path) == store.Workspace.Histories
-		if !active && !includeArchived {
-			return TopicView{}, fmt.Errorf("%w: %s is archived; use --archived", domain.ErrTopicMissing, id)
+		if matched {
+			return TopicView{}, fmt.Errorf("%w: topic %s exists in open and closed storage", domain.ErrConflict, id)
 		}
+		matched = true
 		return store.readTopicView(path, active, true)
 	}
 	return TopicView{}, fmt.Errorf("%w: %s", domain.ErrTopicMissing, id)
@@ -86,7 +94,8 @@ func (store TopicStore) readTopicView(path string, active, includeBody bool) (To
 		ID: meta.Frontmatter.ID.String(), Title: meta.Frontmatter.Title, Status: meta.Frontmatter.Status.String(),
 		Created: meta.Frontmatter.Created, Updated: meta.Frontmatter.Updated,
 		Path: store.Workspace.RelativePath(path), Body: meta.Body, Active: active,
-		Files: []FileView{},
+		Storage: map[bool]string{true: "open", false: "closed"}[active],
+		Files:   []FileView{},
 	}
 	if includeBody {
 		view.Files, err = readFiles(path, store.Workspace.Root)

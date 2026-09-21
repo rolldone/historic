@@ -14,7 +14,7 @@ import (
 )
 
 func newListCommand() *cobra.Command {
-	var includeArchived, jsonOutput bool
+	var closedOnly, jsonOutput bool
 	command := &cobra.Command{
 		Use:   "list",
 		Short: "List Historic topics",
@@ -24,7 +24,7 @@ func newListCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			views, err := repository.NewTopicStore(workspace).ListTopics(includeArchived)
+			views, err := repository.NewTopicStore(workspace).ListTopics(closedOnly)
 			if err != nil {
 				return writeCommandError(cmd, "list", jsonOutput, err)
 			}
@@ -37,20 +37,20 @@ func newListCommand() *cobra.Command {
 				return err
 			}
 			for _, view := range views {
-				if _, err = fmt.Fprintf(cmd.OutOrStdout(), "%s  %-10s  %s  %s\n", view.ID, view.Status, view.Title, view.Path); err != nil {
+				if _, err = fmt.Fprintf(cmd.OutOrStdout(), "%s  %-10s  %-6s  %s  %s\n", view.ID, view.Status, view.Storage, view.Title, view.Path); err != nil {
 					return err
 				}
 			}
 			return nil
 		},
 	}
-	command.Flags().BoolVar(&includeArchived, "archived", false, "include archived topics")
+	command.Flags().BoolVar(&closedOnly, "closed", false, "include closed topics")
 	command.Flags().BoolVar(&jsonOutput, "json", false, "output stable JSON")
 	return command
 }
 
 func newShowCommand() *cobra.Command {
-	var includeArchived, jsonOutput bool
+	var includeClosed, jsonOutput bool
 	command := &cobra.Command{
 		Use:   "show <id>",
 		Short: "Show a Historic topic",
@@ -64,7 +64,7 @@ func newShowCommand() *cobra.Command {
 			if err != nil {
 				return writeCommandError(cmd, "show", jsonOutput, err)
 			}
-			view, err := repository.NewTopicStore(workspace).ShowTopic(id, includeArchived)
+			view, err := repository.NewTopicStore(workspace).ShowTopic(id, includeClosed)
 			if err != nil {
 				return writeCommandError(cmd, "show", jsonOutput, err)
 			}
@@ -72,7 +72,7 @@ func newShowCommand() *cobra.Command {
 			if jsonOutput {
 				return json.NewEncoder(cmd.OutOrStdout()).Encode(result)
 			}
-			_, err = fmt.Fprintf(cmd.OutOrStdout(), "%s  %s  [%s]\nPath: %s\n", view.ID, view.Title, view.Status, view.Path)
+			_, err = fmt.Fprintf(cmd.OutOrStdout(), "%s  %s  [%s] [%s]\nPath: %s\n", view.ID, view.Title, view.Status, view.Storage, view.Path)
 			if err != nil {
 				return err
 			}
@@ -84,7 +84,7 @@ func newShowCommand() *cobra.Command {
 			return nil
 		},
 	}
-	command.Flags().BoolVar(&includeArchived, "archived", false, "show an archived topic")
+	command.Flags().BoolVar(&includeClosed, "closed", false, "show a closed topic")
 	command.Flags().BoolVar(&jsonOutput, "json", false, "output stable JSON")
 	return command
 }

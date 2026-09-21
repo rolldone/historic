@@ -3,6 +3,7 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"historic/internal/domain"
 	"historic/internal/search"
@@ -12,7 +13,7 @@ import (
 
 func newFindCommand() *cobra.Command {
 	var status, folder, searchType, id string
-	var activeOnly, archivedOnly, jsonOutput bool
+	var openOnly, closedOnly, jsonOutput bool
 	command := &cobra.Command{
 		Use:   "find <keyword>",
 		Short: "Find text in the Historic FTS5 index",
@@ -38,7 +39,7 @@ func newFindCommand() *cobra.Command {
 			}
 			results, err := search.Find(workspace, search.Options{
 				Keyword: args[0], Status: parsedStatus, Folder: folder, Type: searchType, ID: parsedID,
-				ActiveOnly: activeOnly, ArchivedOnly: archivedOnly,
+				OpenOnly: openOnly, ClosedOnly: closedOnly,
 			})
 			if err != nil {
 				return writeCommandError(cmd, "find", jsonOutput, err)
@@ -52,7 +53,7 @@ func newFindCommand() *cobra.Command {
 				return err
 			}
 			for _, result := range results {
-				line := fmt.Sprintf("%s  %-10s  %s  %s\n", result.ID, result.Status, result.Path, search.HighlightHuman(result.Snippet, args[0]))
+				line := fmt.Sprintf("%s  %-10s  [%s]  %s  %s\n", result.ID, result.Status, strings.ToUpper(result.Storage), result.Path, search.HighlightHuman(result.Snippet, args[0]))
 				if _, err = fmt.Fprint(cmd.OutOrStdout(), line); err != nil {
 					return err
 				}
@@ -64,8 +65,8 @@ func newFindCommand() *cobra.Command {
 	command.Flags().StringVar(&folder, "folder", "", "filter by workspace-relative folder")
 	command.Flags().StringVar(&searchType, "type", "", "filter by inferred file type")
 	command.Flags().StringVar(&id, "id", "", "filter by five-digit topic ID")
-	command.Flags().BoolVar(&activeOnly, "active", false, "search active topics only")
-	command.Flags().BoolVar(&archivedOnly, "archived", false, "search archived topics only")
+	command.Flags().BoolVar(&openOnly, "open", false, "search open topics only")
+	command.Flags().BoolVar(&closedOnly, "closed", false, "search closed topics only")
 	command.Flags().BoolVar(&jsonOutput, "json", false, "output stable JSON")
 	return command
 }
