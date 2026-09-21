@@ -112,6 +112,9 @@ func rebuildInto(workspace config.Workspace) (int, error) {
 	if err := database.Ping(); err != nil {
 		return 0, fmt.Errorf("ping index: %w", err)
 	}
+	if _, err := database.Exec("PRAGMA foreign_keys = ON"); err != nil {
+		return 0, fmt.Errorf("enable index foreign keys: %w", err)
+	}
 	transaction, err := database.Begin()
 	if err != nil {
 		return 0, fmt.Errorf("begin index rebuild: %w", err)
@@ -483,7 +486,7 @@ func aggregateStatus(statuses []domain.Status) domain.Status {
 		return ""
 	}
 	for _, status := range statuses {
-		if status.IsOpen() {
+		if status != domain.StatusComplete && status != domain.StatusCancelled {
 			return status
 		}
 	}

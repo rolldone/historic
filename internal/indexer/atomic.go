@@ -124,7 +124,9 @@ func atomicRebuildUnlocked(workspace config.Workspace) (int, error) {
 			return 0, fmt.Errorf("backup index: %w", err)
 		}
 		if err := os.Rename(temporaryPath, workspace.Index); err != nil {
-			_ = os.Rename(backup, workspace.Index)
+			if restoreErr := os.Rename(backup, workspace.Index); restoreErr != nil {
+				return 0, fmt.Errorf("replace index: %w; restore backup: %v", err, restoreErr)
+			}
 			return 0, fmt.Errorf("replace index: %w", err)
 		}
 	} else if errors.Is(err, os.ErrNotExist) {
