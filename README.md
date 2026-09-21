@@ -1,6 +1,17 @@
 # Historic CLI
 
-Historic stores work history as portable Markdown files. Markdown is the source of truth; SQLite is a rebuildable cache.
+Historic stores work history as portable Markdown files. Markdown is the source of truth; SQLite/FTS5 is a rebuildable cache, and the internal Git repository is local-only.
+
+## Install globally
+
+From a checkout of this repository:
+
+```sh
+./build-global.sh
+historic version
+```
+
+The installer builds the CLI and installs it to `~/.local/bin/historic`. Ensure `~/.local/bin` is on `PATH`.
 
 - [Command reference](docs/commands.md)
 
@@ -52,29 +63,45 @@ Interactive read-only search:
 historic search
 ```
 
-`historic search` is a Bubble Tea TUI over the same FTS5/search service used by `historic find`. It uses a default limit of 20, empty query shows recent active topics, and supports `/` query focus, `f` filter focus, `↑/↓` navigation, `Enter` preview, `n/p` pagination, `r` refresh, `Esc`, and `q`/`Ctrl+C` exit. MVP filters use status, scope (`active`, `archived`, `all`), and existing type inference (`work-order` maps to `task`). Markdown previews are read-only; assets/binary files are represented by metadata. `historic search --json` is rejected; use `historic find --json` for automation.
+`historic search` is a Bubble Tea TUI over the same FTS5/search service used by `historic find`. It uses a default limit of 20, empty query shows recent topics, and supports `/` query focus, `f` filter focus, `↑/↓` navigation, `Enter` preview, `n/p` pagination, `r` refresh, `Esc`, and `q`/`Ctrl+C` exit. MVP filters use status, storage scope (`open`, `closed`, `all`), and type (`work-order` maps to `task`). Markdown previews are read-only; assets/binary files are represented by metadata. `historic search --json` is rejected; use `historic find --json` for automation.
 
-Read topics:
+## Work status and storage state
+
+Work status and filesystem storage are independent.
+
+- Open topic: `.historic/<id>-<slug>/`
+- Closed topic: `.historic/.database/<id>-<slug>/`
+
+A topic may be `complete + open` or `complete + closed`. Completing a topic changes only its work status; it does not move files.
+
+```sh
+historic complete 00014 --json
+historic close 00014 --json
+historic open 00014 --json
+```
+
+`close` and `open` preserve frontmatter status and all topic contents. They use safe staged moves, reject duplicate IDs and destination conflicts, and rebuild the index after a successful move. `import <id>` remains as a compatibility alias for opening a closed topic without changing its work status.
+
+Read topics with explicit closed scope when needed:
 
 ```sh
 historic list
-historic list --archived
+historic list --closed
 historic show 00014
-historic show 00014 --json
+historic show 00014 --closed
 ```
 
-Search Markdown filename, title, and body:
+Search both storage states by default:
 
 ```sh
 historic find "oauth"
-historic find "oauth" --active --json
-historic find "oauth" --status progress
-historic find "oauth" --folder .historic/00014-admin-dashboard
-historic find "oauth" --archived
-historic find "phase 4" --type task --id 00014 --json
+historic find "oauth" --open --json
+historic find "oauth" --closed --json
 ```
 
-`historic find` uses the SQLite FTS5 index built by `historic rebuild`. Search covers path, filename, title, and Markdown body. Filters can be combined with `--status`, `--folder`, `--active`, `--archived`, `--type`, and `--id`. If the index is missing or stale, run `historic rebuild`; the command does not silently fall back to a filesystem scan.
+`--active` and `--archived` are no longer supported. Human search output marks results as `[OPEN]` or `[CLOSED]`; JSON results include `status`, `storage`, and the actual `path`.
+
+Synchronize manually created topic files into `_meta.md`:
 
 FTS results are ranked by relevance with ascending path as a deterministic tie-breaker. Human output includes a contextual snippet with yellow ANSI emphasis (`ESC[1;33m...ESC[0m`) around matched terms; JSON output contains plain data without terminal highlight codes. Empty results are successful JSON responses with `ok: true`. Query terms are treated as literal terms, so punctuation and FTS operators do not execute shell commands or alter the source Markdown.
 

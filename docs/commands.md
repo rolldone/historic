@@ -6,11 +6,33 @@
 historic init
 historic create "Topic Title" [--id 00014]
 historic add <name> [--id 00014]
-historic list [--archived] [--json]
-historic show <id> [--archived] [--json]
+historic list [--closed] [--json]
+historic show <id> [--closed] [--json]
 ```
 
 Topic IDs use five digits and topic folders use `<id>-<slug>`.
+
+## Work status and storage state
+
+Work status is independent from storage location:
+
+- `open`: `.historic/<id>-<slug>/`
+- `closed`: `.historic/.database/<id>-<slug>/`
+
+```sh
+historic progress <id> [--json]
+historic pending <id> [--json]
+historic review <id> [--json]
+historic blocked <id> [--json]
+historic complete <id> [--json]
+historic failed <id> [--json]
+historic cancelled <id> [--json]
+historic close <id> [--json]
+historic open <id> [--json]
+historic import <id> [--json]
+```
+
+Lifecycle commands update work status only. `close` and `open` are the explicit storage moves; they preserve frontmatter status and topic contents. `import` is a compatibility alias for `open`. Duplicate IDs, destination conflicts, missing topics, and symlink topic roots are rejected.
 
 ## File status
 
@@ -48,14 +70,14 @@ Targeted mode processes one active topic. No-target mode processes all active to
 
 ```sh
 historic find "keyword"
-historic find "keyword" --active --json
+historic find "keyword" --open --json
 historic find "keyword" --status progress
 historic find "keyword" --folder .historic/00014-topic
-historic find "keyword" --archived
+historic find "keyword" --closed
 historic find "keyword" --type task --id 00014 --json
 ```
 
-`find` uses the shared SQLite FTS5 index and supports filters for status, folder, active/archived scope, type, and topic ID. If the index is missing or invalid, run `historic rebuild`.
+`find` searches open and closed storage by default and uses the shared SQLite FTS5 index. Use `--open` for open topics only or `--closed` for closed topics only; combining them is rejected. Results expose work `status`, `storage`, and actual `path`. Legacy `--active` and `--archived` flags are not supported. If the index is missing or invalid, run `historic rebuild`.
 
 ## Interactive search TUI
 
@@ -81,21 +103,13 @@ The TUI must respect terminal viewport height. Results must not render beneath t
 ## Lifecycle and versioning
 
 ```sh
-historic progress <id> [--json]
-historic pending <id> [--json]
-historic review <id> [--json]
-historic blocked <id> [--json]
-historic complete <id> [--json]
-historic failed <id> [--json]
-historic cancelled <id> [--json]
-historic import <id> [--json]
 historic save -m "message" [--json]
 historic log <id> [--json]
 historic diff <id> [--json]
 historic restore <id> --snapshot <commit> [--force] [--json]
 ```
 
-Closing lifecycle operations may archive topics under `.historic/.database/`. Import and restore have conflict and recovery safeguards.
+Snapshots are local-only and include both open and closed topic storage under `.historic`. Closing and opening topics are filesystem operations with recovery safeguards; they do not automatically change work status.
 
 ## Rebuild and output
 

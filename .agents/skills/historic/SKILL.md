@@ -64,12 +64,16 @@ historic sync-meta [<id>|<topic-path>] [--json]
 ## Search and TUI
 
 - `historic find "query" [--json]` is the one-shot interface for AI, scripts, and automation.
+- Search includes both open and closed storage by default.
+- Use `--open` for `.historic/<id>-<slug>/` only and `--closed` for `.historic/.database/<id>-<slug>/` only. Combining them is rejected.
+- Legacy `--active` and `--archived` flags are not supported.
+- Every result exposes independent `status`, `storage`, and actual `path` fields. Human output uses `[OPEN]` and `[CLOSED]` markers.
 - `historic search` is the read-only interactive terminal UI for human exploration.
 - The TUI uses the shared search service and existing FTS5 index; it has no separate index and must not access SQLite directly from the presentation layer.
 - The TUI uses Bubble Tea, Bubbles, and Lip Gloss.
 - `historic search --json` is rejected; use `historic find --json`.
-- Query execution occurs on Enter. Empty query shows recent active topics; `r` refreshes.
-- MVP supports status, scope (`active`, `archived`, `all`), and type (`all`, `topic`, `work-order`) filters, pagination, keyboard navigation, and read-only previews.
+- Query execution occurs on Enter. Empty query shows recent topics; `r` refreshes.
+- MVP supports status, scope (`open`, `closed`, `all`), and type (`all`, `topic`, `work-order`) filters, pagination, keyboard navigation, and read-only previews.
 - Layout must respect terminal viewport height, keep the active result visible, and never render results beneath the footer. Long titles/paths and small terminals require safe truncation or compact layout.
 
 ## File and topic lifecycle
@@ -81,7 +85,7 @@ historic status <path> progress
 historic status <path> complete
 ```
 
-Update a whole topic:
+Update a whole topic's work status without moving its storage location:
 
 ```sh
 historic progress 00001
@@ -91,10 +95,20 @@ historic blocked 00001
 historic complete 00001
 historic failed 00001
 historic cancelled 00001
-historic import 00001
 ```
 
-Closing operations may archive a topic under `.historic/.database/`. Before destructive actions, inspect the target and confirm the intended scope.
+Move a topic between storage states explicitly:
+
+```sh
+historic close 00001
+historic open 00001
+```
+
+- `open` means `.historic/<id>-<slug>/`.
+- `closed` means `.historic/.database/<id>-<slug>/`.
+- Work status and storage state are independent: `complete + open` and `complete + closed` are both valid.
+- Close/open preserve frontmatter status and all topic bytes. They reject missing topics, duplicate IDs, destination conflicts, and symlink topic roots.
+- `historic import 00001` is a compatibility alias for opening a closed topic and preserves its work status.
 
 ## Local snapshots
 
@@ -105,7 +119,7 @@ historic diff 00001
 historic restore 00001 --snapshot <commit>
 ```
 
-Snapshots are local-only. Never push the internal repository or configure a remote for it.
+Snapshots are local-only and include both open and closed topic storage under `.historic`. Never push the internal repository or configure a remote for it.
 
 ## JSON output
 
