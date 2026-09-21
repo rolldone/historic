@@ -50,6 +50,46 @@ type Record struct {
 	Hash        string
 }
 
+type fileReadModel struct {
+	TopicID     domain.ID
+	Type        string
+	Path        string
+	Filename    string
+	Title       string
+	Description string
+	Status      domain.Status
+	Tags        []string
+	Related     []domain.ID
+	Content     string
+	AssetKind   string
+	CreatedAt   string
+	UpdatedAt   string
+	Mtime       string
+	Hash        string
+	Size        int64
+	WordCount   int
+}
+
+type topicReadModel struct {
+	ID             domain.ID
+	Title          string
+	Description    string
+	Slug           string
+	Path           string
+	Storage        domain.StorageState
+	CreatedAt      string
+	UpdatedAt      string
+	Tags           []string
+	Related        []domain.ID
+	ComputedStatus domain.Status
+}
+
+type scanResult struct {
+	records []Record
+	topics  []topicReadModel
+	files   []fileReadModel
+}
+
 const FTS5TableName = "historic_fts"
 
 func Rebuild(workspace config.Workspace) (int, error) {
@@ -58,10 +98,11 @@ func Rebuild(workspace config.Workspace) (int, error) {
 
 // Rebuild scans Markdown source files and replaces the index in one transaction.
 func rebuildInto(workspace config.Workspace) (int, error) {
-	records, err := scan(workspace)
+	scanned, err := scan(workspace)
 	if err != nil {
 		return 0, err
 	}
+	records := scanned.records
 	database, err := sql.Open("sqlite", workspace.Index)
 	if err != nil {
 		return 0, fmt.Errorf("open index: %w", err)
@@ -91,6 +132,9 @@ func rebuildInto(workspace config.Workspace) (int, error) {
 		if _, err := transaction.Exec(`ALTER TABLE index_records ADD COLUMN description TEXT`); err != nil {
 			return 0, fmt.Errorf("add description index column: %w", err)
 		}
+	}
+	if err := replaceReadModel(transaction, scanned.topics, scanned.files); err != nil {
+		return 0, err
 	}
 	if _, err := transaction.Exec(`CREATE INDEX IF NOT EXISTS idx_index_records_num ON index_records(num);
 		CREATE INDEX IF NOT EXISTS idx_index_records_status ON index_records(status);
@@ -157,6 +201,48 @@ func rebuildInto(workspace config.Workspace) (int, error) {
 	return indexed, nil
 }
 
+func replaceReadModel(transaction *sql.Tx, topics []topicReadModel, files []fileReadModel) error {
+	if _, err := transaction.Exec("DELETE FROM files"); err != nil {
+		return fmt.Errorf("clear files read model: %w", err)
+	}
+	if _, err := transaction.Exec("DELETE FROM topics"); err != nil {
+		return fmt.Errorf("clear topics read model: %w", err)
+	}
+	topicStatement, err := transaction.Prepare(`INSERT INTO topics
+		(id, num_padded, title, description, slug, path, storage, created_at, updated_at, tags, related, computed_status)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+	if err != nil {
+		return fmt.Errorf("prepare topic read model insert: %w", err)
+	}
+	defer topicStatement.Close()
+	for _, topic := range topics {
+		tags, _ := json.Marshal(topic.Tags)
+		related, _ := json.Marshal(topic.Related)
+		if _, err := topicStatement.Exec(topic.ID.String(), topic.ID.String(), topic.Title, nullable(topic.Description), topic.Slug, topic.Path, topic.Storage.String(), topic.CreatedAt, nullable(topic.UpdatedAt), string(tags), string(related), nullable(topic.ComputedStatus.String())); err != nil {
+			return fmt.Errorf("insert topic %s: %w", topic.ID, err)
+		}
+	}
+	fileStatement, err := transaction.Prepare(`INSERT INTO files
+		(topic_id, type, path, filename, title, description, status, tags, related, content, asset_kind, created_at, updated_at, mtime, hash, size, word_count)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+	if err != nil {
+		return fmt.Errorf("prepare file read model insert: %w", err)
+	}
+	defer fileStatement.Close()
+	for _, file := range files {
+		tags, _ := json.Marshal(file.Tags)
+		related, _ := json.Marshal(file.Related)
+		var status any
+		if file.Type == "historic_file" {
+			status = file.Status.String()
+		}
+		if _, err := fileStatement.Exec(file.TopicID.String(), file.Type, file.Path, file.Filename, file.Title, nullable(file.Description), status, string(tags), string(related), file.Content, nullable(file.AssetKind), nullable(file.CreatedAt), nullable(file.UpdatedAt), file.Mtime, file.Hash, file.Size, file.WordCount); err != nil {
+			return fmt.Errorf("insert file %s/%s: %w", file.TopicID, file.Path, err)
+		}
+	}
+	return nil
+}
+
 func hasStorageColumn(transaction *sql.Tx) bool {
 	rows, err := transaction.Query("PRAGMA table_info(index_records)")
 	if err != nil {
@@ -193,51 +279,224 @@ func hasDescriptionColumn(transaction *sql.Tx) bool {
 	return false
 }
 
-func scan(workspace config.Workspace) ([]Record, error) {
-	var records []Record
-	for _, root := range []string{workspace.Histories, workspace.Database} {
-		storage := domain.StorageOpen
-		if filepath.Clean(root) == filepath.Clean(workspace.Database) {
-			storage = domain.StorageClosed
+func scan(workspace config.Workspace) (scanResult, error) {
+	candidates := make(map[domain.ID][]topicCandidate)
+	for _, root := range []struct {
+		path    string
+		storage domain.StorageState
+	}{
+		{workspace.Histories, domain.StorageOpen},
+		{workspace.Database, domain.StorageClosed},
+	} {
+		entries, err := os.ReadDir(root.path)
+		if errors.Is(err, os.ErrNotExist) {
+			continue
 		}
-		err := filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
-			if walkErr != nil {
-				return walkErr
+		if err != nil {
+			return scanResult{}, fmt.Errorf("scan %s: %w", workspace.RelativePath(root.path), err)
+		}
+		seenRoot := make(map[domain.ID]string)
+		for _, entry := range entries {
+			if strings.HasPrefix(entry.Name(), ".staging-") || entry.Name() == config.IndexFileName {
+				continue
 			}
-			if filepath.Clean(root) == filepath.Clean(workspace.Histories) && filepath.Clean(path) == filepath.Clean(workspace.Database) && entry.IsDir() {
-				return filepath.SkipDir
+			match := topicFolderPattern.FindStringSubmatch(entry.Name())
+			if len(match) != 3 {
+				continue
 			}
-			if entry.Type()&os.ModeSymlink != 0 {
-				return nil
-			}
-			if entry.IsDir() || filepath.Ext(path) != ".md" {
-				return nil
-			}
-			record, err := scanFile(workspace, path)
-			record.Storage = storage
+			id, err := domain.ParseID(match[1])
 			if err != nil {
-				if filepath.Base(path) == "_meta.md" {
-					// A broken topic metadata file is not indexed, allowing batch operations to continue.
-					return nil
-				}
-				if filepath.Ext(path) == ".md" {
-					// Markdown without valid Historic frontmatter is an asset, not an index error.
-					return nil
-				}
-				return err
+				continue
 			}
-			records = append(records, record)
-			return nil
-		})
-		if err != nil && !errors.Is(err, os.ErrNotExist) {
-			return nil, fmt.Errorf("scan %s: %w", workspace.RelativePath(root), err)
+			candidatePath := filepath.Join(root.path, entry.Name())
+			info, err := os.Lstat(candidatePath)
+			if err != nil {
+				return scanResult{}, fmt.Errorf("inspect topic %s: %w", workspace.RelativePath(candidatePath), err)
+			}
+			if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
+				continue
+			}
+			if previous, exists := seenRoot[id]; exists {
+				return scanResult{}, fmt.Errorf("%w: duplicate topic ID %s in %s (%s and %s)", domain.ErrConflict, id, root.storage, workspace.RelativePath(previous), workspace.RelativePath(candidatePath))
+			}
+			seenRoot[id] = candidatePath
+			candidates[id] = append(candidates[id], topicCandidate{path: candidatePath, storage: root.storage, slug: match[2]})
 		}
 	}
-	sort.Slice(records, func(i, j int) bool { return records[i].Path < records[j].Path })
-	for index := range records {
-		records[index].FileOrder = index
+
+	ids := make([]domain.ID, 0, len(candidates))
+	for id := range candidates {
+		ids = append(ids, id)
 	}
-	return records, nil
+	sort.Slice(ids, func(i, j int) bool { return ids[i].String() < ids[j].String() })
+	result := scanResult{records: make([]Record, 0), topics: make([]topicReadModel, 0, len(ids)), files: make([]fileReadModel, 0)}
+	for _, id := range ids {
+		locations := candidates[id]
+		chosen := locations[0]
+		for _, location := range locations[1:] {
+			if location.storage == domain.StorageOpen {
+				chosen = location
+			}
+		}
+		topic, records, files, err := scanTopic(workspace, id, chosen)
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				continue
+			}
+			return scanResult{}, err
+		}
+		result.topics = append(result.topics, topic)
+		result.records = append(result.records, records...)
+		result.files = append(result.files, files...)
+	}
+	sort.Slice(result.records, func(i, j int) bool { return result.records[i].Path < result.records[j].Path })
+	for index := range result.records {
+		result.records[index].FileOrder = index
+	}
+	return result, nil
+}
+
+type topicCandidate struct {
+	path    string
+	storage domain.StorageState
+	slug    string
+}
+
+func scanTopic(workspace config.Workspace, id domain.ID, candidate topicCandidate) (topicReadModel, []Record, []fileReadModel, error) {
+	metaPath := filepath.Join(candidate.path, "_meta.md")
+	meta, err := markdown.ParseFile(metaPath)
+	metaMissing := err != nil
+	if !metaMissing && meta.Frontmatter.ID != id {
+		return topicReadModel{}, nil, nil, fmt.Errorf("%w: metadata ID %s does not match folder ID %s at %s", domain.ErrConflict, meta.Frontmatter.ID, id, workspace.RelativePath(candidate.path))
+	}
+	topic := topicReadModel{ID: id, Slug: candidate.slug, Path: workspace.RelativePath(candidate.path), Storage: candidate.storage}
+	if !metaMissing {
+		topic.Title = meta.Frontmatter.Title
+		topic.Description = meta.Frontmatter.Description
+		topic.CreatedAt = meta.Frontmatter.Created
+		topic.UpdatedAt = meta.Frontmatter.Updated
+		topic.Tags = meta.Frontmatter.Tags
+		topic.Related = meta.Frontmatter.Related
+	}
+	var records []Record
+	if !metaMissing {
+		metaRecord, recordErr := scanFile(workspace, metaPath)
+		if recordErr != nil {
+			return topicReadModel{}, nil, nil, recordErr
+		}
+		metaRecord.Storage = candidate.storage
+		metaRecord.Path = filepath.ToSlash(filepath.Join(workspace.RelativePath(candidate.path), "_meta.md"))
+		metaRecord.FolderID = id
+		metaRecord.FolderSlug = candidate.slug
+		metaRecord.Subfolder = ""
+		metaRecord.Filename = "_meta.md"
+		records = append(records, metaRecord)
+	}
+	var files []fileReadModel
+	statuses := make([]domain.Status, 0)
+	err = filepath.WalkDir(candidate.path, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.Type()&os.ModeSymlink != 0 {
+			return fmt.Errorf("%w: symlink %s", domain.ErrConflict, workspace.RelativePath(path))
+		}
+		if entry.IsDir() || path == metaPath {
+			return nil
+		}
+		relativeOS, err := filepath.Rel(candidate.path, path)
+		if err != nil {
+			return err
+		}
+		relative := filepath.ToSlash(relativeOS)
+		stat, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		if strings.EqualFold(filepath.Ext(path), ".md") {
+			document, parseErr := markdown.ParseFile(path)
+			if parseErr == nil && document.Frontmatter.ID == id {
+				record, recordErr := scanFile(workspace, path)
+				if recordErr != nil {
+					return recordErr
+				}
+				record.Storage = candidate.storage
+				record.Path = filepath.ToSlash(filepath.Join(workspace.RelativePath(candidate.path), relative))
+				record.FolderID = id
+				record.FolderSlug = candidate.slug
+				record.Subfolder = filepath.ToSlash(filepath.Dir(relative))
+				record.Filename = filepath.Base(path)
+				records = append(records, record)
+				statuses = append(statuses, document.Frontmatter.Status)
+				if metaMissing {
+					topic.Title = document.Frontmatter.Title
+					topic.Description = document.Frontmatter.Description
+					topic.CreatedAt = document.Frontmatter.Created
+					topic.UpdatedAt = document.Frontmatter.Updated
+					topic.Tags = document.Frontmatter.Tags
+					topic.Related = document.Frontmatter.Related
+				}
+				files = append(files, fileReadModelFromDocument(id, relative, path, stat, document, "historic_file"))
+				return nil
+			}
+		}
+		files = append(files, fileReadModelFromAsset(id, relative, path, stat))
+		return nil
+	})
+	if err != nil {
+		return topicReadModel{}, nil, nil, fmt.Errorf("scan topic %s: %w", workspace.RelativePath(candidate.path), err)
+	}
+	if metaMissing && len(records) == 0 {
+		return topicReadModel{}, nil, nil, fmt.Errorf("read topic metadata %s: %w", workspace.RelativePath(metaPath), os.ErrNotExist)
+	}
+	topic.ComputedStatus = aggregateStatus(statuses)
+	return topic, records, files, nil
+}
+
+func fileReadModelFromDocument(id domain.ID, relative, path string, info os.FileInfo, document markdown.Document, fileType string) fileReadModel {
+	return fileReadModel{TopicID: id, Type: fileType, Path: relative, Filename: filepath.Base(path), Title: document.Frontmatter.Title, Description: document.Frontmatter.Description, Status: document.Frontmatter.Status, Tags: document.Frontmatter.Tags, Related: document.Frontmatter.Related, Content: document.Body, CreatedAt: document.Frontmatter.Created, UpdatedAt: document.Frontmatter.Updated, Mtime: info.ModTime().UTC().Format(time.RFC3339Nano), Hash: hashFile(path), Size: info.Size(), WordCount: wordCount(document.Body)}
+}
+
+func fileReadModelFromAsset(id domain.ID, relative, path string, info os.FileInfo) fileReadModel {
+	return fileReadModel{TopicID: id, Type: "asset", Path: relative, Filename: filepath.Base(path), Title: filepath.Base(path), AssetKind: assetKind(path), Mtime: info.ModTime().UTC().Format(time.RFC3339Nano), Hash: hashFile(path), Size: info.Size()}
+}
+
+func assetKind(path string) string {
+	ext := strings.ToLower(filepath.Ext(path))
+	if ext == ".md" || ext == ".markdown" {
+		return "markdown"
+	}
+	if ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".gif" || ext == ".webp" {
+		return "image"
+	}
+	if ext == ".pdf" {
+		return "pdf"
+	}
+	return strings.TrimPrefix(ext, ".")
+}
+
+func aggregateStatus(statuses []domain.Status) domain.Status {
+	if len(statuses) == 0 {
+		return ""
+	}
+	for _, status := range statuses {
+		if status.IsOpen() {
+			return status
+		}
+	}
+	if allStatus(statuses, domain.StatusCancelled) {
+		return domain.StatusCancelled
+	}
+	return domain.StatusComplete
+}
+
+func allStatus(statuses []domain.Status, expected domain.Status) bool {
+	for _, status := range statuses {
+		if status != expected {
+			return false
+		}
+	}
+	return true
 }
 
 func scanFile(workspace config.Workspace, path string) (Record, error) {

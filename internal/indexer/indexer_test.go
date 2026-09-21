@@ -13,6 +13,128 @@ import (
 	"historic/internal/markdown"
 )
 
+func writeIndexerDocument(t *testing.T, path string, metadata domain.Frontmatter, body string) {
+	t.Helper()
+	document, err := markdown.NewDocument(metadata, body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := markdown.WriteFile(path, document); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestRebuildUsesTopicIdentityAndLogicalPaths(t *testing.T) {
+	workspace, err := config.Initialize(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	openTopic := filepath.Join(workspace.Histories, "00001-renamed-topic")
+	closedTopic := filepath.Join(workspace.Database, "00001-old-topic")
+	if err := os.MkdirAll(filepath.Join(openTopic, "wos"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(closedTopic, "wos"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeIndexerDocument(t, filepath.Join(openTopic, "_meta.md"), domain.Frontmatter{ID: "00001", Title: "Renamed Topic", Status: domain.StatusProgress, Created: "2026-09-21"}, "current topic")
+	writeIndexerDocument(t, filepath.Join(openTopic, "wos", "task.md"), domain.Frontmatter{ID: "00001", Title: "Current Task", Status: domain.StatusProgress, Created: "2026-09-21"}, "current task body")
+	writeIndexerDocument(t, filepath.Join(closedTopic, "_meta.md"), domain.Frontmatter{ID: "00001", Title: "Old Snapshot", Status: domain.StatusComplete, Created: "2026-09-21"}, "old snapshot")
+	writeIndexerDocument(t, filepath.Join(closedTopic, "wos", "task.md"), domain.Frontmatter{ID: "00001", Title: "Old Task", Status: domain.StatusComplete, Created: "2026-09-21"}, "old task body")
+
+	if _, err := Rebuild(workspace); err != nil {
+		t.Fatal(err)
+	}
+	database, err := sql.Open("sqlite", workspace.Index)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer database.Close()
+	var topicCount int
+	if err := database.QueryRow("SELECT COUNT(*) FROM topics WHERE id = '00001'").Scan(&topicCount); err != nil {
+		t.Fatal(err)
+	}
+	if topicCount != 1 {
+		t.Fatalf("logical topic count = %d, want 1", topicCount)
+	}
+	var slug, physicalPath, storage string
+	if err := database.QueryRow("SELECT slug, path, storage FROM topics WHERE id = '00001'").Scan(&slug, &physicalPath, &storage); err != nil {
+		t.Fatal(err)
+	}
+	if slug != "renamed-topic" || physicalPath != ".historic/00001-renamed-topic" || storage != "open" {
+		t.Fatalf("topic identity = slug %q path %q storage %q", slug, physicalPath, storage)
+	}
+	var logicalPath string
+	if err := database.QueryRow("SELECT path FROM files WHERE topic_id = '00001' AND path = 'wos/task.md'").Scan(&logicalPath); err != nil {
+		t.Fatal(err)
+	}
+	if logicalPath != "wos/task.md" {
+		t.Fatalf("logical file path = %q", logicalPath)
+	}
+	var fileCount int
+	if err := database.QueryRow("SELECT COUNT(*) FROM files WHERE topic_id = '00001'").Scan(&fileCount); err != nil {
+		t.Fatal(err)
+	}
+	if fileCount != 1 {
+		t.Fatalf("logical child file count = %d, want 1", fileCount)
+	}
+	var oldSnapshotCount int
+	if err := database.QueryRow("SELECT COUNT(*) FROM files WHERE content LIKE '%old snapshot%'").Scan(&oldSnapshotCount); err != nil {
+		t.Fatal(err)
+	}
+	if oldSnapshotCount != 0 {
+		t.Fatalf("closed snapshot was indexed as a duplicate: %d", oldSnapshotCount)
+	}
+}
+
+func TestRebuildRejectsDuplicateTopicIDsInSameRoot(t *testing.T) {
+	workspace, err := config.Initialize(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, folder := range []string{"00001-first", "00001-second"} {
+		topic := filepath.Join(workspace.Histories, folder)
+		if err := os.MkdirAll(topic, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		writeIndexerDocument(t, filepath.Join(topic, "_meta.md"), domain.Frontmatter{ID: "00001", Title: folder, Status: domain.StatusProgress, Created: "2026-09-21"}, folder)
+	}
+	if _, err := Rebuild(workspace); err == nil || !errors.Is(err, domain.ErrConflict) || !strings.Contains(err.Error(), "duplicate topic ID 00001") {
+		t.Fatalf("duplicate rebuild error = %v", err)
+	}
+}
+
+func TestRebuildKeepsNestedLogicalPathWithinTopic(t *testing.T) {
+	workspace, err := config.Initialize(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	topic := filepath.Join(workspace.Histories, "00001-topic")
+	if err := os.MkdirAll(filepath.Join(topic, "wos"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeIndexerDocument(t, filepath.Join(topic, "_meta.md"), domain.Frontmatter{ID: "00001", Title: "Topic", Status: domain.StatusProgress, Created: "2026-09-21"}, "meta")
+	writeIndexerDocument(t, filepath.Join(topic, "wos", "task.md"), domain.Frontmatter{ID: "00001", Title: "Task", Status: domain.StatusProgress, Created: "2026-09-21"}, "task")
+	if _, err := Rebuild(workspace); err != nil {
+		t.Fatal(err)
+	}
+	database, err := sql.Open("sqlite", workspace.Index)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer database.Close()
+	var path string
+	if err := database.QueryRow("SELECT path FROM files WHERE topic_id = '00001'").Scan(&path); err != nil {
+		t.Fatal(err)
+	}
+	if path != "wos/task.md" {
+		t.Fatalf("path = %q, want wos/task.md", path)
+	}
+	if strings.Contains(path, ".historic") || strings.Contains(path, "..") || filepath.IsAbs(path) {
+		t.Fatalf("path escaped topic boundary: %q", path)
+	}
+}
+
 func TestRebuildIndexesDescriptionAndFTS(t *testing.T) {
 	workspace, err := config.Initialize(t.TempDir())
 	if err != nil {
