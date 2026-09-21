@@ -34,7 +34,7 @@ func TestCreateCommandCreatesTopicAndJSON(t *testing.T) {
 	if !response.OK || response.Command != "create" || response.Data.ID != "00014" {
 		t.Fatalf("response = %#v", response)
 	}
-	if _, err := os.Stat(filepath.Join(root, ".historic", "00014-admin-dashboard", "_meta.md")); err != nil {
+	if _, err := os.Stat(filepath.Join(root, ".historic", "00014-admin-dashboard", "_meta.yaml")); err != nil {
 		t.Fatalf("metadata: %v", err)
 	}
 }

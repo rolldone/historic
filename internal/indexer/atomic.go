@@ -42,6 +42,17 @@ func atomicRebuildWithPreparation(workspace config.Workspace, prepare func() err
 	}
 	defer unlock()
 
+	rollbackMetadata, err := markdown.MigrateWorkspaceMetadata(workspace.Histories, workspace.Database)
+	if err != nil {
+		return 0, err
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			rollbackMetadata()
+		}
+	}()
+
 	// Validate the source before preparation can modify generated metadata. This
 	// keeps both Markdown and the current index intact when the scan is invalid.
 	if prepare != nil {
@@ -52,7 +63,12 @@ func atomicRebuildWithPreparation(workspace config.Workspace, prepare func() err
 			return 0, err
 		}
 	}
-	return atomicRebuildUnlocked(workspace)
+	count, err := atomicRebuildUnlocked(workspace)
+	if err != nil {
+		return 0, err
+	}
+	committed = true
+	return count, nil
 }
 
 func validateRebuildSource(workspace config.Workspace) error {
@@ -71,13 +87,8 @@ func validateRebuildSource(workspace config.Workspace) error {
 			if !topicFolderPattern.MatchString(entry.Name()) || !entry.IsDir() {
 				continue
 			}
-			metaPath := filepath.Join(root, entry.Name(), "_meta.md")
-			if _, err := os.Stat(metaPath); errors.Is(err, os.ErrNotExist) {
-				continue
-			} else if err != nil {
-				return fmt.Errorf("inspect topic metadata %s: %w", workspace.RelativePath(metaPath), err)
-			}
-			if _, err := markdown.ParseFile(metaPath); err != nil {
+			metaPath := filepath.Join(root, entry.Name(), markdown.MetaFilename)
+			if _, err := markdown.ParseTopicMetadataFile(metaPath); err != nil {
 				return fmt.Errorf("invalid topic metadata %s: %w", workspace.RelativePath(metaPath), err)
 			}
 		}

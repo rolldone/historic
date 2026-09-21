@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 
 	"historic/internal/config"
+	"historic/internal/markdown"
 )
 
 type Diagnosis struct {
@@ -79,10 +80,21 @@ func Upgrade(workspace config.Workspace) (int, string, error) {
 	if _, err := os.Stat(workspace.Histories); err != nil {
 		return 0, "", fmt.Errorf("workspace invalid: %w", err)
 	}
+	rollbackMetadata, err := markdown.MigrateWorkspaceMetadata(workspace.Histories, workspace.Database)
+	if err != nil {
+		return 0, "", err
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			rollbackMetadata()
+		}
+	}()
 	count, err := rebuildToTemporaryAndReplace(workspace)
 	if err != nil {
 		return 0, "", err
 	}
+	committed = true
 	return count, workspace.RelativePath(workspace.Index), nil
 }
 

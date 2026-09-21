@@ -23,11 +23,11 @@ func TestUpgradeMigratesLegacyIndexAndPreservesMarkdown(t *testing.T) {
 		t.Fatal(err)
 	}
 	document, _ := markdown.NewDocument(domain.Frontmatter{ID: "00001", Title: "Topic", Status: domain.StatusProgress, Created: "2026-09-21"}, "body")
-	path := filepath.Join(topic, "_meta.md")
-	if err := markdown.WriteFile(path, document); err != nil {
+	legacyPath := filepath.Join(topic, markdown.LegacyMetaFilename)
+	if err := markdown.WriteFile(legacyPath, document); err != nil {
 		t.Fatal(err)
 	}
-	before := checksum(path)
+	before := checksum(legacyPath)
 	database, err := sql.Open("sqlite", workspace.Index)
 	if err != nil {
 		t.Fatal(err)
@@ -42,8 +42,16 @@ func TestUpgradeMigratesLegacyIndexAndPreservesMarkdown(t *testing.T) {
 	if err != nil || count != 1 {
 		t.Fatalf("upgrade count=%d err=%v", count, err)
 	}
-	if checksum(path) != before {
-		t.Fatal("Markdown changed during upgrade")
+	canonicalPath := filepath.Join(topic, markdown.MetaFilename)
+	if _, err := os.Stat(legacyPath); !os.IsNotExist(err) {
+		t.Fatalf("legacy metadata remains after upgrade: %v", err)
+	}
+	canonical, err := markdown.ParseTopicMetadataFile(canonicalPath)
+	if err != nil || canonical.ID != "00001" || canonical.Title != "Topic" || canonical.Status != domain.StatusProgress {
+		t.Fatalf("migrated metadata = %#v err=%v", canonical, err)
+	}
+	if checksum(legacyPath) == before {
+		t.Fatal("legacy checksum unexpectedly available after migration")
 	}
 	version, err := sql.Open("sqlite", workspace.Index)
 	if err != nil {

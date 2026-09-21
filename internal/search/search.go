@@ -140,7 +140,7 @@ func Find(workspace config.Workspace, options Options) ([]Result, error) {
 			result.Snippet = firstLine(result.Description)
 		}
 		if result.Type == "topic" {
-			result.Path = filepath.ToSlash(filepath.Join(result.Path, "_meta.md"))
+			result.Path = filepath.ToSlash(filepath.Join(result.Path, "_meta.yaml"))
 		} else {
 			result.ID = result.TopicID
 		}

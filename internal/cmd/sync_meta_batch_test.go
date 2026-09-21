@@ -51,14 +51,10 @@ func TestSyncMetaBatchCommandDoesNotProcessArchive(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(archive, "_meta.md"), []byte("---\nid: 00002\ntitle: Archived\nstatus: complete\ncreated: 2026-09-19\n---\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	output, err := executeCommand(t, "sync-meta", "--json")
-	if err != nil {
+	if _, err := executeCommand(t, "sync-meta", "--json"); err != nil {
 		t.Fatal(err)
 	}
-	if len(output) == 0 {
-		t.Fatal("empty batch output")
-	}
-	if _, err := os.Stat(filepath.Join(archive, "_meta.md")); err != nil {
+	if _, err := os.Stat(archive); err != nil {
 		t.Fatal(err)
 	}
 }

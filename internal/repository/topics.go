@@ -32,7 +32,7 @@ func NewTopicStore(workspace config.Workspace) TopicStore {
 	return TopicStore{Workspace: workspace}
 }
 
-// CreateTopic creates a topic and its required _meta.md atomically enough to
+// CreateTopic creates a topic and its required _meta.yaml atomically enough to
 // leave no topic directory behind when metadata generation fails.
 func (store TopicStore) CreateTopic(title string, requestedID string) (domain.Topic, error) {
 	if strings.TrimSpace(title) == "" {
@@ -62,15 +62,16 @@ func (store TopicStore) CreateTopic(title string, requestedID string) (domain.To
 	if err := os.Mkdir(topicPath, 0o755); err != nil {
 		return domain.Topic{}, fmt.Errorf("create topic directory %s: %w", topicPath, err)
 	}
-	metaPath := filepath.Join(topicPath, "_meta.md")
-	if err := markdown.WriteMetaFile(metaPath, metadata, "", nil, ""); err != nil {
+	metaPath := filepath.Join(topicPath, markdown.MetaFilename)
+	if err := markdown.WriteTopicMetadata(metaPath, markdown.TopicMetadataFromFrontmatter(metadata, "")); err != nil {
 		_ = os.Remove(topicPath)
 		return domain.Topic{}, fmt.Errorf("create topic metadata: %w", err)
 	}
 	return domain.Topic{ID: id, Title: title, Description: metadata.Description, Status: domain.StatusCreate, Created: parseDate(created), Path: topicPath, Slug: slug}, nil
 }
 
-// AddEntry creates a Markdown entry in an active topic and updates _meta.md.
+// AddEntry creates a Markdown entry in an active topic and keeps canonical
+// YAML metadata unchanged.
 func (store TopicStore) AddEntry(topicID domain.ID, name string, force bool) (domain.Entry, error) {
 	if !topicID.Valid() {
 		return domain.Entry{}, fmt.Errorf("%w: %q", domain.ErrInvalidID, topicID)
@@ -96,27 +97,18 @@ func (store TopicStore) AddEntry(topicID domain.ID, name string, force bool) (do
 		return domain.Entry{}, fmt.Errorf("inspect entry path %s: %w", entryPath, err)
 	}
 
-	metaPath := filepath.Join(topicPath, "_meta.md")
-	meta, err := markdown.ParseFile(metaPath)
+	meta, err := markdown.ReadTopicMetadata(topicPath)
 	if err != nil {
 		return domain.Entry{}, fmt.Errorf("read topic metadata: %w", err)
 	}
 	created := dateToday()
-	metadata := domain.Frontmatter{ID: topicID, Title: entryTitle(relativeName), Description: "", Status: meta.Frontmatter.Status, Created: created}
+	metadata := domain.Frontmatter{ID: topicID, Title: entryTitle(relativeName), Description: "", Status: meta.Frontmatter().Status, Created: created}
 	document, err := markdown.NewDocument(metadata, "# "+metadata.Title+"\n")
 	if err != nil {
 		return domain.Entry{}, fmt.Errorf("create entry metadata: %w", err)
 	}
 	if err := markdown.WriteFile(entryPath, document); err != nil {
 		return domain.Entry{}, fmt.Errorf("write entry: %w", err)
-	}
-	updatedMeta := meta
-	updatedMeta.Body = addFileToMeta(meta.Body, relativeName)
-	if err := markdown.WriteFile(metaPath, updatedMeta); err != nil {
-		if !force {
-			_ = os.Remove(entryPath)
-		}
-		return domain.Entry{}, fmt.Errorf("update topic metadata: %w", err)
 	}
 	return domain.Entry{ID: topicID, Title: metadata.Title, Description: metadata.Description, Status: metadata.Status, Created: parseDate(created), Path: entryPath, Filename: relativeName, Content: document.Body}, nil
 }

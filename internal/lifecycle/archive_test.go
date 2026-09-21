@@ -25,7 +25,7 @@ func TestArchiveStatusChangesWorkStatusWithoutMovingTopic(t *testing.T) {
 		t.Fatal(err)
 	}
 	document, _ := markdown.NewDocument(domain.Frontmatter{ID: "00001", Title: "Topic", Status: domain.StatusProgress, Created: "2026-09-18"}, "meta")
-	if err := markdown.WriteFile(filepath.Join(source, "_meta.md"), document); err != nil {
+	if err := markdown.WriteFile(filepath.Join(source, markdown.MetaFilename), document); err != nil {
 		t.Fatal(err)
 	}
 	entry, _ := markdown.NewDocument(domain.Frontmatter{ID: "00001", Title: "Task", Status: domain.StatusProgress, Created: "2026-09-18"}, "entry")
@@ -57,7 +57,7 @@ func TestCloseAndOpenPreserveStatusAndFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 	document, _ := markdown.NewDocument(domain.Frontmatter{ID: "00001", Title: "Topic", Status: domain.StatusBlocked, Created: "2026-09-18"}, "meta")
-	if err := markdown.WriteFile(filepath.Join(source, "_meta.md"), document); err != nil {
+	if err := markdown.WriteFile(filepath.Join(source, markdown.MetaFilename), document); err != nil {
 		t.Fatal(err)
 	}
 	content := []byte("entry bytes\n")
@@ -80,9 +80,9 @@ func TestCloseAndOpenPreserveStatusAndFiles(t *testing.T) {
 	if err != nil || string(got) != string(content) {
 		t.Fatalf("content = %q err=%v", got, err)
 	}
-	closedMeta, err := markdown.ParseFile(filepath.Join(workspace.Database, "00001-topic", "_meta.md"))
-	if err != nil || closedMeta.Frontmatter.Status != domain.StatusBlocked {
-		t.Fatalf("closed metadata = %#v err=%v", closedMeta.Frontmatter, err)
+	closedMeta, err := markdown.ParseTopicMetadataFile(filepath.Join(workspace.Database, "00001-topic", markdown.MetaFilename))
+	if err != nil || closedMeta.Status != domain.StatusBlocked {
+		t.Fatalf("closed metadata = %#v err=%v", closedMeta, err)
 	}
 	if checksumFile(filepath.Join(source, "wos", "01-task.md")) != checksumFile(filepath.Join(workspace.Database, "00001-topic", "wos", "01-task.md")) {
 		t.Fatal("open copy checksum differs from closed snapshot")
@@ -98,8 +98,9 @@ func TestOpenCopyBasedIsolatedSmoke(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(closed, "nested"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	meta, _ := markdown.NewDocument(domain.Frontmatter{ID: "00002", Title: "Smoke Topic", Status: domain.StatusComplete, Created: "2026-09-21"}, "manual body")
-	if err := markdown.WriteFile(filepath.Join(closed, "_meta.md"), meta); err != nil {
+	meta, _ := markdown.NewDocument(domain.Frontmatter{ID: "00002", Title: "Manual Smoke Topic", Status: domain.StatusComplete, Created: "2026-09-21"}, "manual body")
+
+	if err := markdown.WriteFile(filepath.Join(closed, markdown.MetaFilename), meta); err != nil {
 		t.Fatal(err)
 	}
 	asset := []byte{0, 1, 2, 3, 255}
@@ -141,7 +142,7 @@ func TestOpenResolvesOpenCopyAsCurrentIdentity(t *testing.T) {
 	}
 	for topic, body := range map[string]string{closed: "snapshot", open: "current"} {
 		meta, _ := markdown.NewDocument(domain.Frontmatter{ID: "00004", Title: "Topic", Status: domain.StatusComplete, Created: "2026-09-21"}, body)
-		if err := markdown.WriteFile(filepath.Join(topic, "_meta.md"), meta); err != nil {
+		if err := markdown.WriteFile(filepath.Join(topic, markdown.MetaFilename), meta); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -164,7 +165,7 @@ func TestOpenRejectsSymlinkWithoutPartialWorkdirOrSnapshotDamage(t *testing.T) {
 		t.Fatal(err)
 	}
 	meta, _ := markdown.NewDocument(domain.Frontmatter{ID: "00003", Title: "Symlink Topic", Status: domain.StatusComplete, Created: "2026-09-21"}, "body")
-	metaPath := filepath.Join(closed, "_meta.md")
+	metaPath := filepath.Join(closed, markdown.MetaFilename)
 	if err := markdown.WriteFile(metaPath, meta); err != nil {
 		t.Fatal(err)
 	}
@@ -201,10 +202,10 @@ func TestCloseDifferentiallyUpdatesAndNormalizesArchive(t *testing.T) {
 		t.Fatal(err)
 	}
 	meta, _ := markdown.NewDocument(domain.Frontmatter{ID: "00005", Title: "Differential", Status: domain.StatusProgress, Created: "2026-09-21"}, "meta")
-	if err := markdown.WriteFile(filepath.Join(archive, "_meta.md"), meta); err != nil {
+	if err := markdown.WriteFile(filepath.Join(archive, markdown.MetaFilename), meta); err != nil {
 		t.Fatal(err)
 	}
-	if err := markdown.WriteFile(filepath.Join(source, "_meta.md"), meta); err != nil {
+	if err := markdown.WriteFile(filepath.Join(source, markdown.MetaFilename), meta); err != nil {
 		t.Fatal(err)
 	}
 	unchanged := []byte("unchanged bytes\n")
@@ -285,10 +286,10 @@ func TestCloseFailurePreservesArchiveAndWorkdir(t *testing.T) {
 		}
 	}
 	meta, _ := markdown.NewDocument(domain.Frontmatter{ID: "00006", Title: "Safe Close", Status: domain.StatusProgress, Created: "2026-09-21"}, "meta")
-	if err := markdown.WriteFile(filepath.Join(archive, "_meta.md"), meta); err != nil {
+	if err := markdown.WriteFile(filepath.Join(archive, markdown.MetaFilename), meta); err != nil {
 		t.Fatal(err)
 	}
-	if err := markdown.WriteFile(filepath.Join(source, "_meta.md"), meta); err != nil {
+	if err := markdown.WriteFile(filepath.Join(source, markdown.MetaFilename), meta); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(archive, "stable.txt"), []byte("old snapshot\n"), 0o644); err != nil {
@@ -326,7 +327,7 @@ func TestCloseDifferentialIsolatedSmoke(t *testing.T) {
 		t.Fatal(err)
 	}
 	meta, _ := markdown.NewDocument(domain.Frontmatter{ID: "00007", Title: "Close Smoke", Status: domain.StatusComplete, Created: "2026-09-21"}, "smoke")
-	if err := markdown.WriteFile(filepath.Join(source, "_meta.md"), meta); err != nil {
+	if err := markdown.WriteFile(filepath.Join(source, markdown.MetaFilename), meta); err != nil {
 		t.Fatal(err)
 	}
 	asset := []byte{0, 1, 2, 3, 255}
@@ -376,7 +377,7 @@ func TestArchiveStatusRejectsDestinationConflictWithoutDeletingSource(t *testing
 		t.Fatal(err)
 	}
 	document, _ := markdown.NewDocument(domain.Frontmatter{ID: "00001", Title: "Topic", Status: domain.StatusProgress, Created: "2026-09-18"}, "meta")
-	if err := markdown.WriteFile(filepath.Join(source, "_meta.md"), document); err != nil {
+	if err := markdown.WriteFile(filepath.Join(source, markdown.MetaFilename), document); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := NewService(workspace).ArchiveStatus("00001", domain.StatusComplete); !errors.Is(err, domain.ErrConflict) {

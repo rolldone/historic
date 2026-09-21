@@ -182,8 +182,8 @@ func rebuildInto(workspace config.Workspace) (int, error) {
 		indexed++
 	}
 	if _, err := transaction.Exec(`INSERT INTO historic_fts(entity_type, entity_id, path, filename, title, description, tags, content)
-		SELECT 'topic', t.id, t.path, '_meta.md', t.title, COALESCE(t.description, ''), t.tags, COALESCE(r.content, '')
-		FROM topics AS t LEFT JOIN index_records AS r ON r.num_padded = t.num_padded AND r.filename = '_meta.md'
+		SELECT 'topic', t.id, t.path, '_meta.yaml', t.title, COALESCE(t.description, ''), t.tags, ''
+		FROM topics AS t
 		UNION ALL
 		SELECT 'file', CAST(id AS TEXT), path, filename, title, COALESCE(description, ''), tags, content FROM files`); err != nil {
 		return 0, fmt.Errorf("populate FTS5 index: %w", err)
@@ -362,35 +362,38 @@ type topicCandidate struct {
 }
 
 func scanTopic(workspace config.Workspace, id domain.ID, candidate topicCandidate) (topicReadModel, []Record, []fileReadModel, error) {
-	metaPath := filepath.Join(candidate.path, "_meta.md")
-	meta, err := markdown.ParseFile(metaPath)
-	metaMissing := err != nil
-	if !metaMissing && meta.Frontmatter.ID != id {
-		return topicReadModel{}, nil, nil, fmt.Errorf("%w: metadata ID %s does not match folder ID %s at %s", domain.ErrConflict, meta.Frontmatter.ID, id, workspace.RelativePath(candidate.path))
+	metaPath := filepath.Join(candidate.path, markdown.MetaFilename)
+	meta, err := markdown.ReadTopicMetadata(candidate.path)
+	metaMissing := errors.Is(err, os.ErrNotExist)
+	if err != nil && !metaMissing {
+		return topicReadModel{}, nil, nil, err
+	}
+	if !metaMissing && meta.ID != id {
+		return topicReadModel{}, nil, nil, fmt.Errorf("%w: metadata ID %s does not match folder ID %s at %s", domain.ErrConflict, meta.ID, id, workspace.RelativePath(candidate.path))
 	}
 	topic := topicReadModel{ID: id, Slug: candidate.slug, Path: workspace.RelativePath(candidate.path), Storage: candidate.storage}
 	if !metaMissing {
-		topic.Title = meta.Frontmatter.Title
-		topic.Description = meta.Frontmatter.Description
-		topic.CreatedAt = meta.Frontmatter.Created
-		topic.UpdatedAt = meta.Frontmatter.Updated
-		topic.Tags = meta.Frontmatter.Tags
-		topic.Related = meta.Frontmatter.Related
-		topic.Content = meta.Body
+		topic.Title = meta.Title
+		topic.Description = meta.Description
+		topic.CreatedAt = meta.Created
+		topic.UpdatedAt = meta.Updated
+		topic.Tags = meta.Tags
+		topic.Related = meta.Related
 	}
 	var records []Record
 	if !metaMissing {
-		metaRecord, recordErr := scanFile(workspace, metaPath)
-		if recordErr != nil {
-			return topicReadModel{}, nil, nil, recordErr
+		info, statErr := os.Stat(metaPath)
+		if statErr != nil {
+			return topicReadModel{}, nil, nil, fmt.Errorf("inspect topic metadata %s: %w", workspace.RelativePath(metaPath), statErr)
 		}
-		metaRecord.Storage = candidate.storage
-		metaRecord.Path = filepath.ToSlash(filepath.Join(workspace.RelativePath(candidate.path), "_meta.md"))
-		metaRecord.FolderID = id
-		metaRecord.FolderSlug = candidate.slug
-		metaRecord.Subfolder = ""
-		metaRecord.Filename = "_meta.md"
-		records = append(records, metaRecord)
+		records = append(records, Record{
+			Num: id.Number(), NumPadded: id.String(), Type: "meta", Title: meta.Title, Description: meta.Description,
+			Status: meta.Status, Tags: meta.Tags, Related: meta.Related, CreatedAt: meta.Created,
+			UpdatedAt: meta.Updated, Storage: candidate.storage,
+			Path:     filepath.ToSlash(filepath.Join(workspace.RelativePath(candidate.path), markdown.MetaFilename)),
+			FolderID: id, FolderSlug: candidate.slug, Filename: markdown.MetaFilename,
+			Mtime: info.ModTime().UTC().Format(time.RFC3339Nano), Hash: hashFile(metaPath),
+		})
 	}
 	var files []fileReadModel
 	statuses := make([]domain.Status, 0)
@@ -401,7 +404,7 @@ func scanTopic(workspace config.Workspace, id domain.ID, candidate topicCandidat
 		if entry.Type()&os.ModeSymlink != 0 {
 			return fmt.Errorf("%w: symlink %s", domain.ErrConflict, workspace.RelativePath(path))
 		}
-		if entry.IsDir() || path == metaPath {
+		if entry.IsDir() || path == metaPath || filepath.Base(path) == markdown.LegacyMetaFilename {
 			return nil
 		}
 		relativeOS, err := filepath.Rel(candidate.path, path)
@@ -532,7 +535,7 @@ func scanFile(workspace config.Workspace, path string) (Record, error) {
 
 func inferType(path string) string {
 	base := strings.ToLower(filepath.Base(path))
-	if base == "_meta.md" {
+	if base == markdown.MetaFilename || base == markdown.LegacyMetaFilename {
 		return "meta"
 	}
 	name := strings.TrimSuffix(base, ".md")

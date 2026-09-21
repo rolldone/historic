@@ -13,6 +13,7 @@ import (
 	"historic/internal/domain"
 	"historic/internal/gitproxy"
 	"historic/internal/indexer"
+	"historic/internal/markdown"
 )
 
 // Restore restores one archived topic path from a snapshot into the active
@@ -170,9 +171,12 @@ func extractSnapshotArchive(data []byte, destination, folder string) error {
 }
 
 func validateStagedTopic(staging string, id domain.ID) error {
-	matches, err := filepath.Glob(filepath.Join(staging, "*", "_meta.md"))
+	matches, err := filepath.Glob(filepath.Join(staging, "*", markdown.MetaFilename))
 	if err != nil || len(matches) != 1 {
 		return fmt.Errorf("%w: restored topic metadata is missing", domain.ErrConflict)
+	}
+	if _, err := markdown.ParseTopicMetadataFile(matches[0]); err != nil {
+		return fmt.Errorf("%w: restored topic metadata is invalid: %v", domain.ErrConflict, err)
 	}
 	return nil
 }

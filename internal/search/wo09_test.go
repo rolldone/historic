@@ -23,6 +23,12 @@ func TestFindWO09SearchesTopicsAndFilesWithReadModelFilters(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	writeTopic := func(path string, metadata domain.Frontmatter) {
+		t.Helper()
+		if err := markdown.WriteTopicMetadata(path, markdown.TopicMetadataFromFrontmatter(metadata, "")); err != nil {
+			t.Fatal(err)
+		}
+	}
 	write := func(path string, metadata domain.Frontmatter, body string) {
 		t.Helper()
 		document, err := markdown.NewDocument(metadata, body)
@@ -33,17 +39,17 @@ func TestFindWO09SearchesTopicsAndFilesWithReadModelFilters(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	write(filepath.Join(openTopic, "_meta.md"), domain.Frontmatter{
+	writeTopic(filepath.Join(openTopic, markdown.MetaFilename), domain.Frontmatter{
 		ID: "00001", Title: "Needle Topic", Description: "Topic description", Status: domain.StatusProgress,
 		Created: "2026-09-01", Tags: []string{"architecture"},
-	}, "topic context")
+	})
 	write(filepath.Join(openTopic, "note.md"), domain.Frontmatter{
 		ID: "00001", Title: "Implementation Note", Description: "File description", Status: domain.StatusProgress,
 		Created: "2026-09-02", Tags: []string{"needle"},
 	}, "content only")
-	write(filepath.Join(closedTopic, "_meta.md"), domain.Frontmatter{
-		ID: "00002", Title: "Closed Topic", Status: domain.StatusComplete, Created: "2026-09-03",
-	}, "needle snapshot")
+	writeTopic(filepath.Join(closedTopic, markdown.MetaFilename), domain.Frontmatter{
+		ID: "00002", Title: "Closed Needle Topic", Status: domain.StatusComplete, Created: "2026-09-03",
+	})
 	if _, err := indexer.Rebuild(workspace); err != nil {
 		t.Fatal(err)
 	}
@@ -80,6 +86,13 @@ func TestFindWO09WeightsMetadataAndReportsMatchedFields(t *testing.T) {
 	if err := os.MkdirAll(topic, 0o755); err != nil {
 		t.Fatal(err)
 	}
+	writeTopic := func(name string, metadata domain.Frontmatter) {
+		t.Helper()
+		if err := markdown.WriteTopicMetadata(filepath.Join(topic, name), markdown.TopicMetadataFromFrontmatter(metadata, "")); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeTopic(markdown.MetaFilename, domain.Frontmatter{ID: "00001", Title: "Metadata Needle", Status: domain.StatusProgress, Created: "2026-09-01"})
 	write := func(name string, metadata domain.Frontmatter, body string) {
 		t.Helper()
 		document, err := markdown.NewDocument(metadata, body)
@@ -90,7 +103,6 @@ func TestFindWO09WeightsMetadataAndReportsMatchedFields(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	write("_meta.md", domain.Frontmatter{ID: "00001", Title: "Metadata Needle", Status: domain.StatusProgress, Created: "2026-09-01"}, "context")
 	write("content.md", domain.Frontmatter{ID: "00001", Title: "Content File", Status: domain.StatusProgress, Created: "2026-09-01"}, "content needle")
 	if _, err := indexer.Rebuild(workspace); err != nil {
 		t.Fatal(err)

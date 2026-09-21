@@ -21,8 +21,8 @@ func TestSyncMetaBatchProcessesActiveTopicsDeterministically(t *testing.T) {
 			t.Fatal(err)
 		}
 		id, _ := domain.ParseID(folder[:5])
-		document, _ := markdown.NewDocument(domain.Frontmatter{ID: id, Title: folder, Status: domain.StatusProgress, Created: "2026-09-19"}, "topic")
-		if err := markdown.WriteFile(filepath.Join(topic, "_meta.md"), document); err != nil {
+		metadata := markdown.TopicMetadata{ID: id, Title: folder, Status: domain.StatusProgress, Created: "2026-09-19"}
+		if err := markdown.WriteTopicMetadata(filepath.Join(topic, markdown.MetaFilename), metadata); err != nil {
 			t.Fatal(err)
 		}
 		if err := os.WriteFile(filepath.Join(topic, "plain.txt"), []byte("asset"), 0o644); err != nil {
@@ -41,7 +41,7 @@ func TestSyncMetaBatchProcessesActiveTopicsDeterministically(t *testing.T) {
 		t.Fatalf("ordering = %#v", change.Topics)
 	}
 	for _, topic := range change.Topics {
-		if topic.Assets != 1 || !topic.Updated {
+		if topic.Assets != 1 || topic.Updated {
 			t.Fatalf("topic result = %#v", topic)
 		}
 	}
@@ -62,21 +62,26 @@ func TestSyncMetaBatchContinuesAfterTopicError(t *testing.T) {
 			t.Fatal(err)
 		}
 		id, _ := domain.ParseID(folder[:5])
-		content := []byte("invalid")
 		if folder == "00002-good" {
-			document, _ := markdown.NewDocument(domain.Frontmatter{ID: id, Title: folder, Status: domain.StatusProgress, Created: "2026-09-19"}, "topic")
-			content, _ = markdown.Write(document)
+			metadata := markdown.TopicMetadata{ID: id, Title: folder, Status: domain.StatusProgress, Created: "2026-09-19"}
+			if err := markdown.WriteTopicMetadata(filepath.Join(topic, markdown.MetaFilename), metadata); err != nil {
+				t.Fatal(err)
+			}
+			continue
 		}
-		if err := os.WriteFile(filepath.Join(topic, "_meta.md"), content, 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(topic, markdown.LegacyMetaFilename), []byte("invalid"), 0o644); err != nil {
 			t.Fatal(err)
 		}
 	}
 	change := SyncMetaBatch(workspace)
-	if change.Total != 2 || change.Errors != 1 || len(change.Topics) != 2 {
+	if change.Total != 2 || change.Errors != 2 || len(change.Topics) != 2 {
 		t.Fatalf("batch error result = %#v", change)
 	}
-	if change.Topics[0].Error == "" || change.Topics[1].Error != "" {
+	if change.Topics[0].Error == "" || change.Topics[1].Error == "" {
 		t.Fatalf("continue-on-error results = %#v", change.Topics)
+	}
+	if _, err := os.Stat(filepath.Join(workspace.Histories, "00001-broken", markdown.LegacyMetaFilename)); err != nil {
+		t.Fatalf("invalid legacy metadata was not preserved: %v", err)
 	}
 }
 

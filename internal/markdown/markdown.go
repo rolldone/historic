@@ -57,6 +57,13 @@ func ParseFile(path string) (Document, error) {
 	if err != nil {
 		return Document{}, fmt.Errorf("%s: read: %w", path, err)
 	}
+	if filepath.Base(path) == MetaFilename {
+		metadata, err := ParseTopicMetadata(path, input)
+		if err != nil {
+			return Document{}, err
+		}
+		return Document{Frontmatter: metadata.Frontmatter()}, nil
+	}
 	return Parse(path, input)
 }
 
@@ -112,6 +119,9 @@ func Write(document Document) ([]byte, error) {
 
 // WriteFile writes a document atomically, preserving the destination on errors.
 func WriteFile(path string, document Document) error {
+	if filepath.Base(path) == MetaFilename {
+		return WriteTopicMetadata(path, TopicMetadataFromFrontmatter(document.Frontmatter, ""))
+	}
 	data, err := Write(document)
 	if err != nil {
 		return fmt.Errorf("%s: %w", path, err)

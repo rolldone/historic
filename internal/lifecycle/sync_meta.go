@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"sort"
 	"strings"
 
 	"historic/internal/config"
@@ -26,7 +25,8 @@ type SyncChange struct {
 	Updated bool
 }
 
-// SyncMeta scans a topic and updates only its _meta.md Files and Assets sections.
+// SyncMeta scans a topic and reconciles filesystem-derived counts. Canonical
+// YAML metadata does not contain generated Files or Assets sections.
 func SyncMeta(workspace config.Workspace, input string) (SyncChange, error) {
 	return syncMetaTopic(workspace, input, true)
 }
@@ -36,8 +36,7 @@ func syncMetaTopic(workspace config.Workspace, input string, rebuildIndex bool) 
 	if err != nil {
 		return SyncChange{}, err
 	}
-	metaPath := filepath.Join(topic, "_meta.md")
-	meta, err := markdown.ParseFile(metaPath)
+	_, err = markdown.ReadTopicMetadata(topic)
 	if err != nil {
 		return SyncChange{}, fmt.Errorf("read topic metadata: %w", err)
 	}
@@ -46,24 +45,12 @@ func syncMetaTopic(workspace config.Workspace, input string, rebuildIndex bool) 
 	if err != nil {
 		return SyncChange{}, err
 	}
-	sort.Strings(managed)
-	sort.Strings(assets)
-	body := meta.Body
-	body = syncMetaSection(body, "## Files", managed)
-	body = syncMetaSection(body, "## Assets", assets)
-	changed := body != meta.Body
-	if changed {
-		meta.Body = body
-		if err := markdown.WriteFile(metaPath, meta); err != nil {
-			return SyncChange{}, fmt.Errorf("write topic metadata: %w", err)
-		}
-	}
 	if rebuildIndex {
 		if _, err := indexer.Rebuild(workspace); err != nil {
 			return SyncChange{}, fmt.Errorf("rebuild metadata index: %w", err)
 		}
 	}
-	return SyncChange{ID: id, Path: workspace.RelativePath(topic), Files: len(managed), Assets: len(assets), Updated: changed}, nil
+	return SyncChange{ID: id, Path: workspace.RelativePath(topic), Files: len(managed), Assets: len(assets), Updated: false}, nil
 }
 
 func scanTopicFiles(topic string, id domain.ID) ([]string, []string, error) {
@@ -76,7 +63,7 @@ func scanTopicFiles(topic string, id domain.ID) ([]string, []string, error) {
 		if entry.Type()&os.ModeSymlink != 0 {
 			return fmt.Errorf("%w: symlink %s", domain.ErrConflict, path)
 		}
-		if entry.IsDir() || filepath.Base(path) == "_meta.md" {
+		if entry.IsDir() || filepath.Base(path) == markdown.MetaFilename || filepath.Base(path) == markdown.LegacyMetaFilename {
 			return nil
 		}
 		relative, err := filepath.Rel(topic, path)

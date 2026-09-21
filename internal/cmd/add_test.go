@@ -43,13 +43,6 @@ func TestAddCommandCreatesEntry(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(root, result.Data.File)); err != nil {
 		t.Fatal(err)
 	}
-	meta, err := os.ReadFile(filepath.Join(root, ".historic/00001-topic/_meta.md"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !bytes.Contains(meta, []byte("./wos/01-remove-stale-cost-dashboard-breakdowns.md")) {
-		t.Fatalf("metadata missing canonical path: %s", meta)
-	}
 }
 
 func TestAddCommandCreatesPlainSluggedEntry(t *testing.T) {

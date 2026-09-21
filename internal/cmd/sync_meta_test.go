@@ -46,25 +46,8 @@ func TestSyncMetaCommandClassifiesFilesAndAssets(t *testing.T) {
 	if err := json.Unmarshal(output.Bytes(), &response); err != nil || !response.OK || response.Command != "sync-meta" || response.Data.Files != 1 || response.Data.Assets != 2 {
 		t.Fatalf("response=%q err=%v", output.String(), err)
 	}
-	meta, err := os.ReadFile(filepath.Join(topic, "_meta.md"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	text := string(meta)
-	for _, expected := range []string{"- [manual.md](./manual.md)", "- [plain.md](./plain.md)", "- [image.png](./image.png)"} {
-		if !strings.Contains(text, expected) {
-			t.Fatalf("metadata missing %q: %s", expected, text)
-		}
-	}
 	if _, err := command.ExecuteC(); err != nil {
 		t.Fatalf("repeated sync-meta: %v", err)
-	}
-	meta, err = os.ReadFile(filepath.Join(topic, "_meta.md"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.Count(string(meta), "./manual.md") != 1 || strings.Count(string(meta), "./plain.md") != 1 || strings.Count(string(meta), "./image.png") != 1 {
-		t.Fatalf("repeated sync-meta duplicated links: %s", meta)
 	}
 }
 

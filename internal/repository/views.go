@@ -87,15 +87,14 @@ func (store TopicStore) ShowTopic(id domain.ID, includeClosed bool) (TopicView, 
 }
 
 func (store TopicStore) readTopicView(path string, active, includeBody bool) (TopicView, error) {
-	metaPath := filepath.Join(path, "_meta.md")
-	meta, err := markdown.ParseFile(metaPath)
+	meta, err := markdown.ReadTopicMetadata(path)
 	if err != nil {
-		return TopicView{}, fmt.Errorf("read metadata %s: %w", store.Workspace.RelativePath(metaPath), err)
+		return TopicView{}, fmt.Errorf("read metadata %s: %w", store.Workspace.RelativePath(filepath.Join(path, markdown.MetaFilename)), err)
 	}
 	view := TopicView{
-		ID: meta.Frontmatter.ID.String(), Title: meta.Frontmatter.Title, Description: meta.Frontmatter.Description, Status: meta.Frontmatter.Status.String(),
-		Created: meta.Frontmatter.Created, Updated: meta.Frontmatter.Updated,
-		Path: store.Workspace.RelativePath(path), Body: meta.Body, Active: active,
+		ID: meta.ID.String(), Title: meta.Title, Description: meta.Description, Status: meta.Status.String(),
+		Created: meta.Created, Updated: meta.Updated,
+		Path: store.Workspace.RelativePath(path), Body: "", Active: active,
 		Storage: map[bool]string{true: "open", false: "closed"}[active],
 		Files:   []FileView{},
 	}
@@ -114,7 +113,7 @@ func readFiles(topicPath, root string) ([]FileView, error) {
 		if walkErr != nil {
 			return walkErr
 		}
-		if entry.IsDir() || filepath.Base(path) == "_meta.md" || strings.ToLower(filepath.Ext(path)) != ".md" {
+		if entry.IsDir() || filepath.Base(path) == markdown.MetaFilename || filepath.Base(path) == markdown.LegacyMetaFilename || strings.ToLower(filepath.Ext(path)) != ".md" {
 			return nil
 		}
 		document, err := markdown.ParseFile(path)

@@ -46,27 +46,26 @@ func (service Service) ChangeStatus(id domain.ID, next domain.Status) (Change, e
 		return Change{}, err
 	}
 	path := location.path
-	metaPath := filepath.Join(path, "_meta.md")
-	document, err := markdown.ParseFile(metaPath)
+	meta, err := markdown.ReadTopicMetadata(path)
 	if err != nil {
 		return Change{}, fmt.Errorf("read topic metadata: %w", err)
 	}
-	if document.Frontmatter.ID != id {
-		return Change{}, fmt.Errorf("%w: metadata ID %s does not match path ID %s", domain.ErrConflict, document.Frontmatter.ID, id)
+	if meta.ID != id {
+		return Change{}, fmt.Errorf("%w: metadata ID %s does not match path ID %s", domain.ErrConflict, meta.ID, id)
 	}
-	if err := domain.ValidateTransition(document.Frontmatter.Status, next); err != nil {
+	if err := domain.ValidateTransition(meta.Status, next); err != nil {
 		return Change{}, err
 	}
-	previous := document.Frontmatter.Status
-	document.Frontmatter.Status = next
-	document.Frontmatter.Updated = time.Now().UTC().Format("2006-01-02")
-	if err := markdown.WriteFile(metaPath, document); err != nil {
+	previous := meta.Status
+	meta.Status = next
+	meta.Updated = time.Now().UTC().Format("2006-01-02")
+	if err := markdown.WriteTopicMetadata(filepath.Join(path, markdown.MetaFilename), meta); err != nil {
 		return Change{}, fmt.Errorf("update topic status: %w", err)
 	}
 	if _, err := indexer.Rebuild(service.Workspace); err != nil {
 		return Change{}, fmt.Errorf("rebuild lifecycle index: %w", err)
 	}
-	return Change{ID: id, Title: document.Frontmatter.Title, Previous: previous, Current: next, Path: service.Workspace.RelativePath(path), Storage: location.storage, PreviousStorage: location.storage, Archived: location.storage == domain.StorageClosed}, nil
+	return Change{ID: id, Title: meta.Title, Previous: previous, Current: next, Path: service.Workspace.RelativePath(path), Storage: location.storage, PreviousStorage: location.storage, Archived: location.storage == domain.StorageClosed}, nil
 }
 
 func activeTopicPath(workspace config.Workspace, id domain.ID) (string, error) {

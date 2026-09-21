@@ -471,43 +471,12 @@ func validateCopiedTopic(path string, id domain.ID) (markdown.Document, error) {
 	if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
 		return markdown.Document{}, fmt.Errorf("%w: topic root is not a directory", domain.ErrConflict)
 	}
-	var metadata markdown.Document
-	metaFound := false
-	err = filepath.WalkDir(path, func(current string, entry os.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		entryInfo, err := os.Lstat(current)
-		if err != nil {
-			return err
-		}
-		if entryInfo.Mode()&os.ModeSymlink != 0 || entry.Type()&os.ModeSymlink != 0 {
-			return fmt.Errorf("%w: symlink %s", domain.ErrConflict, current)
-		}
-		if entryInfo.IsDir() {
-			return nil
-		}
-		if !entryInfo.Mode().IsRegular() {
-			return fmt.Errorf("%w: unsupported topic entry %s", domain.ErrConflict, current)
-		}
-		if filepath.Base(current) != "_meta.md" || current != filepath.Join(path, "_meta.md") {
-			return nil
-		}
-		metadata, err = markdown.ParseFile(current)
-		if err != nil {
-			return err
-		}
-		if metadata.Frontmatter.ID != id {
-			return fmt.Errorf("%w: metadata ID %s does not match path ID %s", domain.ErrConflict, metadata.Frontmatter.ID, id)
-		}
-		metaFound = true
-		return nil
-	})
+	metadata, err := markdown.ReadTopicMetadata(path)
 	if err != nil {
 		return markdown.Document{}, err
 	}
-	if !metaFound {
-		return markdown.Document{}, fmt.Errorf("%w: topic metadata is missing", domain.ErrConflict)
+	if metadata.ID != id {
+		return markdown.Document{}, fmt.Errorf("%w: metadata ID %s does not match path ID %s", domain.ErrConflict, metadata.ID, id)
 	}
-	return metadata, nil
+	return markdown.Document{Frontmatter: metadata.Frontmatter()}, nil
 }

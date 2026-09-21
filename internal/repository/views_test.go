@@ -22,7 +22,7 @@ func TestListTopicsDefaultsToActiveAndSortsByID(t *testing.T) {
 	if err := os.MkdirAll(archived, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(archived, "_meta.md"), []byte("---\nid: 00003\ntitle: Archived\nstatus: archived\ncreated: 2026-09-18\n---\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(archived, markdown.MetaFilename), []byte("id: 00003\ntitle: Archived\nstatus: archived\ncreated: 2026-09-18\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	views, err := store.ListTopics(false)
@@ -50,13 +50,13 @@ func TestShowTopicIncludesFilesAndRejectsMissing(t *testing.T) {
 	if _, err := store.AddEntry(topic.ID, "prd", false); err != nil {
 		t.Fatal(err)
 	}
-	metaPath := filepath.Join(topic.Path, "_meta.md")
-	meta, err := markdown.ParseFile(metaPath)
+	metaPath := filepath.Join(topic.Path, markdown.MetaFilename)
+	meta, err := markdown.ParseTopicMetadataFile(metaPath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	meta.Frontmatter.Description = "Topic summary"
-	if err := markdown.WriteFile(metaPath, meta); err != nil {
+	meta.Description = "Topic summary"
+	if err := markdown.WriteTopicMetadata(metaPath, meta); err != nil {
 		t.Fatal(err)
 	}
 	entryPath := filepath.Join(topic.Path, "prd.md")

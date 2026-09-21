@@ -24,6 +24,13 @@ func writeIndexerDocument(t *testing.T, path string, metadata domain.Frontmatter
 	}
 }
 
+func writeIndexerTopicMetadata(t *testing.T, path string, metadata domain.Frontmatter) {
+	t.Helper()
+	if err := markdown.WriteTopicMetadata(path, markdown.TopicMetadataFromFrontmatter(metadata, "")); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestRebuildUsesTopicIdentityAndLogicalPaths(t *testing.T) {
 	workspace, err := config.Initialize(t.TempDir())
 	if err != nil {
@@ -37,9 +44,9 @@ func TestRebuildUsesTopicIdentityAndLogicalPaths(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(closedTopic, "wos"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	writeIndexerDocument(t, filepath.Join(openTopic, "_meta.md"), domain.Frontmatter{ID: "00001", Title: "Renamed Topic", Status: domain.StatusProgress, Created: "2026-09-21"}, "current topic")
+	writeIndexerTopicMetadata(t, filepath.Join(openTopic, markdown.MetaFilename), domain.Frontmatter{ID: "00001", Title: "Renamed Topic", Status: domain.StatusProgress, Created: "2026-09-21"})
 	writeIndexerDocument(t, filepath.Join(openTopic, "wos", "task.md"), domain.Frontmatter{ID: "00001", Title: "Current Task", Status: domain.StatusProgress, Created: "2026-09-21"}, "current task body")
-	writeIndexerDocument(t, filepath.Join(closedTopic, "_meta.md"), domain.Frontmatter{ID: "00001", Title: "Old Snapshot", Status: domain.StatusComplete, Created: "2026-09-21"}, "old snapshot")
+	writeIndexerTopicMetadata(t, filepath.Join(closedTopic, markdown.MetaFilename), domain.Frontmatter{ID: "00001", Title: "Old Snapshot", Status: domain.StatusComplete, Created: "2026-09-21"})
 	writeIndexerDocument(t, filepath.Join(closedTopic, "wos", "task.md"), domain.Frontmatter{ID: "00001", Title: "Old Task", Status: domain.StatusComplete, Created: "2026-09-21"}, "old task body")
 
 	if _, err := Rebuild(workspace); err != nil {
@@ -97,7 +104,7 @@ func TestRebuildRejectsDuplicateTopicIDsInSameRoot(t *testing.T) {
 		if err := os.MkdirAll(topic, 0o755); err != nil {
 			t.Fatal(err)
 		}
-		writeIndexerDocument(t, filepath.Join(topic, "_meta.md"), domain.Frontmatter{ID: "00001", Title: folder, Status: domain.StatusProgress, Created: "2026-09-21"}, folder)
+		writeIndexerTopicMetadata(t, filepath.Join(topic, markdown.MetaFilename), domain.Frontmatter{ID: "00001", Title: folder, Status: domain.StatusProgress, Created: "2026-09-21"})
 	}
 	if _, err := Rebuild(workspace); err == nil || !errors.Is(err, domain.ErrConflict) || !strings.Contains(err.Error(), "duplicate topic ID 00001") {
 		t.Fatalf("duplicate rebuild error = %v", err)
@@ -113,7 +120,7 @@ func TestRebuildKeepsNestedLogicalPathWithinTopic(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(topic, "wos"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	writeIndexerDocument(t, filepath.Join(topic, "_meta.md"), domain.Frontmatter{ID: "00001", Title: "Topic", Status: domain.StatusProgress, Created: "2026-09-21"}, "meta")
+	writeIndexerTopicMetadata(t, filepath.Join(topic, markdown.MetaFilename), domain.Frontmatter{ID: "00001", Title: "Topic", Status: domain.StatusProgress, Created: "2026-09-21"})
 	writeIndexerDocument(t, filepath.Join(topic, "wos", "task.md"), domain.Frontmatter{ID: "00001", Title: "Task", Status: domain.StatusProgress, Created: "2026-09-21"}, "task")
 	if _, err := Rebuild(workspace); err != nil {
 		t.Fatal(err)
@@ -145,9 +152,15 @@ func TestRebuildIndexesDescriptionAndFTS(t *testing.T) {
 		t.Fatal(err)
 	}
 	for name, description := range map[string]string{
-		"_meta.md": "Topic overview",
-		"note.md":  "File details",
+		"_meta.yaml": "Topic overview",
+		"note.md":    "File details",
 	} {
+		if name == markdown.MetaFilename {
+			if err := markdown.WriteTopicMetadata(filepath.Join(topic, name), markdown.TopicMetadata{ID: "00001", Title: name, Description: description, Status: domain.StatusProgress, Created: "2026-09-21"}); err != nil {
+				t.Fatal(err)
+			}
+			continue
+		}
 		document, err := markdown.NewDocument(domain.Frontmatter{ID: "00001", Title: name, Description: description, Status: domain.StatusProgress, Created: "2026-09-21"}, "body")
 		if err != nil {
 			t.Fatal(err)
@@ -181,7 +194,7 @@ func TestRebuildIndexesDescriptionAndFTS(t *testing.T) {
 	if err := rows.Err(); err != nil {
 		t.Fatal(err)
 	}
-	if got["_meta.md"] != "Topic overview" || got["note.md"] != "File details" {
+	if got["_meta.yaml"] != "Topic overview" || got["note.md"] != "File details" {
 		t.Fatalf("indexed descriptions = %#v", got)
 	}
 	for _, keyword := range []string{"Topic overview", "File details"} {
@@ -205,7 +218,13 @@ func TestRebuildIndexesMarkdownAndIsRepeatable(t *testing.T) {
 		t.Fatal(err)
 	}
 	metadata := domain.Frontmatter{ID: "00001", Title: "Topic", Status: domain.StatusProgress, Created: "2026-09-18", Tags: []string{"one"}}
-	for name := range map[string]string{"_meta.md": "meta body", "prd.md": "prd body", "wos/01-task.md": "task body"} {
+	for name := range map[string]string{markdown.MetaFilename: "meta body", "prd.md": "prd body", "wos/01-task.md": "task body"} {
+		if name == markdown.MetaFilename {
+			if err := markdown.WriteTopicMetadata(filepath.Join(topic, name), markdown.TopicMetadataFromFrontmatter(metadata, "")); err != nil {
+				t.Fatal(err)
+			}
+			continue
+		}
 		document, err := markdown.NewDocument(metadata, name+" body")
 		if err != nil {
 			t.Fatal(err)
@@ -284,7 +303,7 @@ func TestRebuildReadModelClassifiesAssetsAndAggregatesStatus(t *testing.T) {
 	if err := os.MkdirAll(topic, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	writeIndexerDocument(t, filepath.Join(topic, "_meta.md"), domain.Frontmatter{ID: "00001", Title: "Topic", Status: domain.StatusComplete, Created: "2026-09-21"}, "topic")
+	writeIndexerTopicMetadata(t, filepath.Join(topic, markdown.MetaFilename), domain.Frontmatter{ID: "00001", Title: "Topic", Status: domain.StatusComplete, Created: "2026-09-21"})
 	writeIndexerDocument(t, filepath.Join(topic, "active.md"), domain.Frontmatter{ID: "00001", Title: "Active", Status: domain.StatusProgress, Created: "2026-09-21"}, "active")
 	writeIndexerDocument(t, filepath.Join(topic, "done.md"), domain.Frontmatter{ID: "00001", Title: "Done", Status: domain.StatusComplete, Created: "2026-09-21"}, "done")
 	if err := os.WriteFile(filepath.Join(topic, "brief.md"), []byte("plain Markdown asset"), 0o644); err != nil {
@@ -330,17 +349,18 @@ func TestRebuildRejectsInvalidTopicMetadataAndPreservesIndex(t *testing.T) {
 		t.Fatal(err)
 	}
 	document, _ := markdown.NewDocument(domain.Frontmatter{ID: "00001", Title: "Valid", Status: domain.StatusProgress, Created: "2026-09-18"}, "valid")
-	if err := markdown.WriteFile(filepath.Join(topic, "_meta.md"), document); err != nil {
+	if err := markdown.WriteTopicMetadata(filepath.Join(topic, markdown.MetaFilename), markdown.TopicMetadataFromFrontmatter(document.Frontmatter, "")); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := Rebuild(workspace); err != nil {
 		t.Fatal(err)
 	}
-	before, err := os.ReadFile(filepath.Join(topic, "_meta.md"))
+	before, err := os.ReadFile(filepath.Join(topic, markdown.MetaFilename))
+
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(topic, "_meta.md"), []byte("invalid metadata"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(topic, markdown.MetaFilename), []byte("invalid metadata"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := RebuildWithPreparation(workspace, func() error { return nil }); err == nil {
@@ -350,7 +370,8 @@ func TestRebuildRejectsInvalidTopicMetadataAndPreservesIndex(t *testing.T) {
 	if err != nil || count != 1 {
 		t.Fatalf("old index changed: count=%d err=%v", count, err)
 	}
-	if err := os.WriteFile(filepath.Join(topic, "_meta.md"), before, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(topic, markdown.MetaFilename), before, 0o644); err != nil {
+
 		t.Fatal(err)
 	}
 }

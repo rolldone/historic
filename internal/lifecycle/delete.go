@@ -11,6 +11,7 @@ import (
 	"historic/internal/config"
 	"historic/internal/domain"
 	"historic/internal/indexer"
+	"historic/internal/markdown"
 )
 
 // DeleteChange describes a destructive filesystem operation that completed
@@ -53,10 +54,10 @@ func (service Service) deleteFile(path, topic string) (DeleteChange, error) {
 	if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
 		return DeleteChange{}, fmt.Errorf("%w: delete target must be a regular file", domain.ErrConflict)
 	}
-	if filepath.Base(path) == "_meta.md" {
+	if filepath.Base(path) == markdown.MetaFilename || filepath.Base(path) == markdown.LegacyMetaFilename {
 		return DeleteChange{}, fmt.Errorf("%w: topic metadata is protected", domain.ErrConflict)
 	}
-	metaPath := filepath.Join(topic, "_meta.md")
+	metaPath := filepath.Join(topic, markdown.MetaFilename)
 	metaBytes, err := os.ReadFile(metaPath)
 	if err != nil {
 		return DeleteChange{}, fmt.Errorf("backup topic metadata: %w", err)
@@ -243,7 +244,7 @@ func resolveDeleteFile(workspace config.Workspace, input string) (string, string
 		return "", "", fmt.Errorf("%w: file path %q matches multiple open files", domain.ErrConflict, input)
 	}
 	path := openMatches[0]
-	if filepath.Base(path) == "_meta.md" {
+	if filepath.Base(path) == markdown.MetaFilename || filepath.Base(path) == markdown.LegacyMetaFilename {
 		return "", "", fmt.Errorf("%w: topic metadata is protected", domain.ErrConflict)
 	}
 	topic := filepath.Dir(path)

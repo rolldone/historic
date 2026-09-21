@@ -21,7 +21,7 @@ func TestChangeStatusUpdatesMetadataAndIndex(t *testing.T) {
 		t.Fatal(err)
 	}
 	document, _ := markdown.NewDocument(domain.Frontmatter{ID: "00001", Title: "Topic", Status: domain.StatusCreate, Created: "2026-09-18"}, "body")
-	if err := markdown.WriteFile(filepath.Join(topic, "_meta.md"), document); err != nil {
+	if err := markdown.WriteTopicMetadata(filepath.Join(topic, markdown.MetaFilename), markdown.TopicMetadataFromFrontmatter(document.Frontmatter, "")); err != nil {
 		t.Fatal(err)
 	}
 	change, err := NewService(workspace).ChangeStatus("00001", domain.StatusProgress)
@@ -31,9 +31,9 @@ func TestChangeStatusUpdatesMetadataAndIndex(t *testing.T) {
 	if change.Previous != domain.StatusCreate || change.Current != domain.StatusProgress || change.Archived {
 		t.Fatalf("change = %#v", change)
 	}
-	updated, err := markdown.ParseFile(filepath.Join(topic, "_meta.md"))
-	if err != nil || updated.Frontmatter.Status != domain.StatusProgress || updated.Frontmatter.Updated == "" {
-		t.Fatalf("metadata = %#v err=%v", updated.Frontmatter, err)
+	updated, err := markdown.ParseTopicMetadataFile(filepath.Join(topic, markdown.MetaFilename))
+	if err != nil || updated.Status != domain.StatusProgress || updated.Updated == "" {
+		t.Fatalf("metadata = %#v err=%v", updated, err)
 	}
 }
 
@@ -47,7 +47,7 @@ func TestChangeStatusRejectsInvalidAndClosedTransitions(t *testing.T) {
 		t.Fatal(err)
 	}
 	document, _ := markdown.NewDocument(domain.Frontmatter{ID: "00001", Title: "Topic", Status: domain.StatusComplete, Created: "2026-09-18"}, "body")
-	if err := markdown.WriteFile(filepath.Join(topic, "_meta.md"), document); err != nil {
+	if err := markdown.WriteTopicMetadata(filepath.Join(topic, markdown.MetaFilename), markdown.TopicMetadataFromFrontmatter(document.Frontmatter, "")); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := NewService(workspace).ChangeStatus("00001", domain.StatusProgress); !errors.Is(err, domain.ErrConflict) {

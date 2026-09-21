@@ -39,7 +39,7 @@ func TestRestoreResolvesSnapshotFolder(t *testing.T) {
 		t.Fatal(err)
 	}
 	meta, _ := markdown.NewDocument(domain.Frontmatter{ID: "00001", Title: "Restore Topic", Status: domain.StatusComplete, Created: "2026-09-18"}, "snapshot")
-	if err := markdown.WriteFile(filepath.Join(archive, "_meta.md"), meta); err != nil {
+	if err := markdown.WriteFile(filepath.Join(archive, markdown.MetaFilename), meta); err != nil {
 		t.Fatal(err)
 	}
 	repository, err := gitproxy.Open(workspace.Database)
@@ -56,7 +56,7 @@ func TestRestoreResolvesSnapshotFolder(t *testing.T) {
 	if err := Restore(workspace, "00001", commit, false); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(filepath.Join(workspace.Histories, "00001-restore-topic", "_meta.md")); err != nil {
+	if _, err := os.Stat(filepath.Join(workspace.Histories, "00001-restore-topic", markdown.MetaFilename)); err != nil {
 		t.Fatal(err)
 	}
 }

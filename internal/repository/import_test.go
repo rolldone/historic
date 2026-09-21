@@ -35,9 +35,9 @@ func TestImportTopicOpensWithoutChangingStatusOrContent(t *testing.T) {
 	if err != nil || string(got) != string(entryContent) {
 		t.Fatalf("content = %q err=%v", got, err)
 	}
-	opened, err := markdown.ParseFile(filepath.Join(topic.Path, "_meta.md"))
-	if err != nil || opened.Frontmatter.Status != domain.StatusComplete {
-		t.Fatalf("metadata = %#v err=%v", opened.Frontmatter, err)
+	opened, err := markdown.ParseTopicMetadataFile(filepath.Join(topic.Path, markdown.MetaFilename))
+	if err != nil || opened.Status != domain.StatusComplete {
+		t.Fatalf("metadata = %#v err=%v", opened, err)
 	}
 }
 

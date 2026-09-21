@@ -4,7 +4,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"historic/internal/config"
@@ -28,7 +27,7 @@ func setupDeleteTopic(t *testing.T) (config.Workspace, string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := markdown.WriteFile(filepath.Join(topic, "_meta.md"), meta); err != nil {
+	if err := markdown.WriteFile(filepath.Join(topic, markdown.MetaFilename), meta); err != nil {
 		t.Fatal(err)
 	}
 	entry, err := markdown.NewDocument(domain.Frontmatter{ID: "00001", Title: "Delete Task", Status: domain.StatusProgress, Created: "2026-09-21"}, "unique-delete-content")
@@ -64,9 +63,8 @@ func TestDeleteFileRebuildsReadModelAndIgnoresAssets(t *testing.T) {
 	if err != nil || len(summaries) != 1 || summaries[0].TotalFiles != 0 {
 		t.Fatalf("aggregate after delete = %#v err=%v", summaries, err)
 	}
-	meta, err := markdown.ParseFile(filepath.Join(topic, "_meta.md"))
-	if err != nil || len(meta.Body) == 0 || strings.Contains(meta.Body, "01-task.md") {
-		t.Fatalf("stale Files metadata after delete = %q err=%v", meta.Body, err)
+	if _, err := os.Stat(filepath.Join(topic, markdown.MetaFilename)); err != nil {
+		t.Fatalf("canonical metadata missing after delete: %v", err)
 	}
 }
 

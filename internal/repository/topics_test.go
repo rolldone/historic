@@ -37,15 +37,15 @@ func TestCreateTopicAutoIDUsesFirstGapAcrossActiveAndArchive(t *testing.T) {
 	if topic.ID != "00004" {
 		t.Fatalf("auto ID = %s, want 00004", topic.ID)
 	}
-	if _, err := os.Stat(filepath.Join(topic.Path, "_meta.md")); err != nil {
+	if _, err := os.Stat(filepath.Join(topic.Path, markdown.MetaFilename)); err != nil {
 		t.Fatalf("metadata: %v", err)
 	}
-	meta, err := markdown.ParseFile(filepath.Join(topic.Path, "_meta.md"))
+	meta, err := markdown.ParseTopicMetadataFile(filepath.Join(topic.Path, markdown.MetaFilename))
 	if err != nil {
 		t.Fatalf("parse metadata: %v", err)
 	}
-	if meta.Frontmatter.Description != "" || topic.Description != "" {
-		t.Fatalf("description = %q, topic description = %q, want empty", meta.Frontmatter.Description, topic.Description)
+	if meta.Description != "" || topic.Description != "" {
+		t.Fatalf("description = %q, topic description = %q, want empty", meta.Description, topic.Description)
 	}
 }
 
