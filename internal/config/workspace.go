@@ -155,6 +155,9 @@ func initializeIndex(path string) error {
 	if err := database.Ping(); err != nil {
 		return fmt.Errorf("initialize index %s: %w", path, err)
 	}
+	if err := ensureIndexStorageColumn(database); err != nil {
+		return fmt.Errorf("migrate index schema %s: %w", path, err)
+	}
 	const schema = `
 CREATE TABLE IF NOT EXISTS historic_metadata (key TEXT PRIMARY KEY, value INTEGER NOT NULL);
 INSERT INTO historic_metadata(key, value) VALUES ('workspace_format_version', 1) ON CONFLICT(key) DO NOTHING;
