@@ -117,3 +117,30 @@ func TestDeleteRejectsTraversalAndSymlink(t *testing.T) {
 		t.Fatalf("outside symlink target changed: %v", err)
 	}
 }
+
+func TestDeletePurgeSafetySmokeIsolated(t *testing.T) {
+	workspace, topic := setupDeleteTopic(t)
+	service := NewService(workspace)
+	if _, err := service.DeleteFile("wos/01-task.md"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(topic, "wos", "01-task.md")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("deleted file remains: %v", err)
+	}
+	if _, err := search.Find(workspace, search.Options{Keyword: "unique-delete-content", OpenOnly: true}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.PurgeTopic("00001", domain.StorageOpen); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(topic); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("purged topic remains: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(workspace.Database, ".git")); err != nil {
+		t.Fatalf("internal git was affected by purge: %v", err)
+	}
+	results, err := search.Find(workspace, search.Options{Keyword: "Delete Topic"})
+	if err != nil || len(results) != 0 {
+		t.Fatalf("search after purge = %#v err=%v", results, err)
+	}
+}

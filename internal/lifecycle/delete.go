@@ -58,13 +58,16 @@ func (service Service) deleteFile(path, topic string) (DeleteChange, error) {
 		return DeleteChange{}, fmt.Errorf("%w: topic metadata is protected", domain.ErrConflict)
 	}
 	metaPath := filepath.Join(topic, markdown.MetaFilename)
+	metaInfo, err := os.Lstat(metaPath)
+	if err != nil {
+		return DeleteChange{}, fmt.Errorf("inspect topic metadata: %w", err)
+	}
+	if metaInfo.Mode()&os.ModeSymlink != 0 || !metaInfo.Mode().IsRegular() {
+		return DeleteChange{}, fmt.Errorf("%w: topic metadata is not a regular file", domain.ErrConflict)
+	}
 	metaBytes, err := os.ReadFile(metaPath)
 	if err != nil {
 		return DeleteChange{}, fmt.Errorf("backup topic metadata: %w", err)
-	}
-	metaInfo, err := os.Lstat(metaPath)
-	if err != nil || metaInfo.Mode()&os.ModeSymlink != 0 {
-		return DeleteChange{}, fmt.Errorf("%w: topic metadata is not a regular file", domain.ErrConflict)
 	}
 
 	trash, err := uniqueTrashPath(filepath.Dir(path), ".trash-delete-file-")
@@ -90,10 +93,21 @@ func (service Service) deleteFile(path, topic string) (DeleteChange, error) {
 	}
 	if _, err := indexer.Rebuild(service.Workspace); err != nil {
 		rollbackErr := rollback()
+		if rollbackErr == nil {
+			if _, rebuildErr := indexer.Rebuild(service.Workspace); rebuildErr != nil {
+				rollbackErr = fmt.Errorf("rebuild rollback index: %w", rebuildErr)
+			}
+		}
 		return DeleteChange{}, combineDeleteErrors(fmt.Errorf("rebuild delete index: %w", err), rollbackErr)
 	}
 	if err := os.Remove(trash); err != nil {
 		rollbackErr := rollback()
+		if rollbackErr == nil {
+			_, rollbackErr = indexer.Rebuild(service.Workspace)
+			if rollbackErr != nil {
+				rollbackErr = fmt.Errorf("rebuild rollback index: %w", rollbackErr)
+			}
+		}
 		return DeleteChange{}, combineDeleteErrors(fmt.Errorf("remove delete trash: %w", err), rollbackErr)
 	}
 	return DeleteChange{ID: id, Title: meta.Frontmatter.Title, Path: service.Workspace.RelativePath(path), Storage: domain.StorageOpen, Target: "file", Permanent: true}, nil
@@ -139,14 +153,62 @@ func (service Service) deleteTopic(id domain.ID, scope domain.StorageState, perm
 	}
 	if _, err := indexer.Rebuild(service.Workspace); err != nil {
 		rollbackErr := os.Rename(trash, location.path)
+		if rollbackErr == nil {
+			if _, rebuildErr := indexer.Rebuild(service.Workspace); rebuildErr != nil {
+				rollbackErr = fmt.Errorf("rebuild rollback index: %w", rebuildErr)
+			}
+		}
 		return DeleteChange{}, combineDeleteErrors(fmt.Errorf("rebuild delete index: %w", err), rollbackErr)
 	}
 	if permanent {
-		if err := os.RemoveAll(trash); err != nil {
-			return DeleteChange{}, fmt.Errorf("remove topic trash: %w", err)
+		if err := removeDeleteTrash(trash); err != nil {
+			rollbackErr := os.Rename(trash, location.path)
+			if rollbackErr == nil {
+				if _, rebuildErr := indexer.Rebuild(service.Workspace); rebuildErr != nil {
+					rollbackErr = fmt.Errorf("rebuild rollback index: %w", rebuildErr)
+				}
+			}
+			return DeleteChange{}, combineDeleteErrors(fmt.Errorf("remove topic trash: %w", err), rollbackErr)
 		}
 	}
 	return DeleteChange{ID: id, Title: meta.Frontmatter.Title, Path: service.Workspace.RelativePath(location.path), Storage: location.storage, Target: "topic", Permanent: permanent}, nil
+}
+
+func removeDeleteTrash(path string) error {
+	info, err := os.Lstat(path)
+	if err != nil {
+		return err
+	}
+	if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
+		return fmt.Errorf("%w: delete trash is not a directory", domain.ErrConflict)
+	}
+	return removeDeleteTree(path)
+}
+
+func removeDeleteTree(path string) error {
+	entries, err := os.ReadDir(path)
+	if err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		child := filepath.Join(path, entry.Name())
+		if entry.Type()&os.ModeSymlink != 0 {
+			return fmt.Errorf("%w: delete trash contains symlink %s", domain.ErrConflict, child)
+		}
+		if entry.IsDir() {
+			if err := removeDeleteTree(child); err != nil {
+				return err
+			}
+			continue
+		}
+		if !entry.Type().IsRegular() {
+			return fmt.Errorf("%w: delete trash contains unsupported entry %s", domain.ErrConflict, child)
+		}
+		if err := os.Remove(child); err != nil {
+			return err
+		}
+	}
+	return os.Remove(path)
 }
 
 func resolveDeleteTopic(workspace config.Workspace, id domain.ID, scope domain.StorageState) (topicLocation, error) {
@@ -172,7 +234,9 @@ func resolveDeleteTopic(workspace config.Workspace, id domain.ID, scope domain.S
 			}
 			if entry.IsDir() {
 				locations = append(locations, topicLocation{path: filepath.Join(candidate.root, entry.Name()), storage: candidate.storage})
+				continue
 			}
+			return topicLocation{}, fmt.Errorf("%w: topic path conflict at %s", domain.ErrConflict, workspace.RelativePath(filepath.Join(candidate.root, entry.Name())))
 		}
 	}
 	if scope != "" {
@@ -201,7 +265,7 @@ func resolveDeleteTopic(workspace config.Workspace, id domain.ID, scope domain.S
 
 func resolveDeleteFile(workspace config.Workspace, input string) (string, string, error) {
 	value := strings.TrimSpace(input)
-	if value == "" || filepath.IsAbs(value) {
+	if value == "" || filepath.IsAbs(value) || strings.Contains(value, `\`) {
 		return "", "", fmt.Errorf("%w: file path must be workspace-relative", domain.ErrConflict)
 	}
 	normalized := filepath.ToSlash(value)
@@ -249,12 +313,15 @@ func resolveDeleteFile(workspace config.Workspace, input string) (string, string
 	}
 	topic := filepath.Dir(path)
 	for topic != workspace.Histories && isInside(workspace.Histories, topic) {
-		if filepath.Base(topic) != "" && len(filepath.Base(topic)) >= 6 && filepath.Base(topic)[5] == '-' {
+		if syncTopicFolderPattern.MatchString(filepath.Base(topic)) {
+			if filepath.Dir(topic) != workspace.Histories {
+				return "", "", fmt.Errorf("%w: delete target is not inside a direct open topic", domain.ErrConflict)
+			}
 			return path, topic, nil
 		}
 		topic = filepath.Dir(topic)
 	}
-	return "", "", fmt.Errorf("%w: delete target is not inside a topic", domain.ErrConflict)
+	return "", "", fmt.Errorf("%w: delete target is not inside a direct open topic", domain.ErrConflict)
 }
 
 func findFileMatches(workspace config.Workspace, root string, storage domain.StorageState, normalized string) ([]string, error) {
@@ -267,15 +334,15 @@ func findFileMatches(workspace config.Workspace, root string, storage domain.Sto
 			return walkErr
 		}
 		if entry.Type()&os.ModeSymlink != 0 {
-			if pathMatchesInput(workspace, path, normalized) {
-				return fmt.Errorf("%w: symlink file is not a valid delete target", domain.ErrConflict)
-			}
-			return nil
+			return fmt.Errorf("%w: symlink %s cannot be used as a delete target", domain.ErrConflict, workspace.RelativePath(path))
 		}
 		if entry.IsDir() {
 			if filepath.Base(path) == ".git" || (root == workspace.Histories && path == workspace.Database) {
 				return filepath.SkipDir
 			}
+			return nil
+		}
+		if path == workspace.Index || filepath.Base(path) == config.IndexFileName {
 			return nil
 		}
 		if pathMatchesInput(workspace, path, normalized) {
