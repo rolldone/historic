@@ -78,7 +78,7 @@ func scanTopicFiles(topic string, id domain.ID) ([]markdown.ManifestFile, []mark
 		relative = filepath.ToSlash(relative)
 		if strings.EqualFold(filepath.Ext(path), ".md") && filepath.Base(path) != "_meta.md" {
 			document, parseErr := markdown.ParseFile(path)
-			if parseErr == nil && document.Frontmatter.ID == id {
+			if parseErr == nil {
 				managed = append(managed, markdown.ManifestFile{Path: relative, Type: manifestFileType(relative), Status: document.Frontmatter.Status})
 				return nil
 			}

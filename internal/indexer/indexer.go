@@ -410,7 +410,7 @@ func scanTopic(workspace config.Workspace, id domain.ID, candidate topicCandidat
 		}
 		if strings.EqualFold(filepath.Ext(path), ".md") && filepath.Base(path) != "_meta.md" {
 			document, parseErr := markdown.ParseFile(path)
-			if parseErr == nil && document.Frontmatter.ID == id {
+			if parseErr == nil {
 				record, recordErr := scanFile(workspace, path)
 				if recordErr != nil {
 					return recordErr

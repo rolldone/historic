@@ -41,9 +41,6 @@ func ChangeFileStatus(workspace config.Workspace, inputPath string, next domain.
 		}
 		return FileChange{}, fmt.Errorf("file status unsupported: target must be a Markdown file")
 	}
-	if document.Frontmatter.ID != topicIDFromPath(workspace, path) {
-		return FileChange{}, fmt.Errorf("file status unsupported: target frontmatter ID does not match topic")
-	}
 	previous := document.Frontmatter.Status
 	updated := time.Now().UTC().Format("2006-01-02")
 	document.Frontmatter.Status = next
