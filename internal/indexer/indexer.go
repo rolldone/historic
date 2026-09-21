@@ -82,6 +82,7 @@ type topicReadModel struct {
 	Tags           []string
 	Related        []domain.ID
 	ComputedStatus domain.Status
+	Content        string
 }
 
 type scanResult struct {
@@ -147,7 +148,8 @@ func rebuildInto(workspace config.Workspace) (int, error) {
 		return 0, fmt.Errorf("replace FTS5 table: %w", err)
 	}
 	if _, err := transaction.Exec(`CREATE VIRTUAL TABLE historic_fts USING fts5(
-		path, filename, title, description, content, tokenize = 'unicode61'
+		entity_type UNINDEXED, entity_id UNINDEXED,
+		path, filename, title, description, tags, content, tokenize = 'unicode61'
 	)`); err != nil {
 		return 0, fmt.Errorf("create FTS5 table: %w", err)
 	}
@@ -166,11 +168,6 @@ func rebuildInto(workspace config.Workspace) (int, error) {
 		return 0, fmt.Errorf("prepare index insert: %w", err)
 	}
 	defer statement.Close()
-	ftsStatement, err := transaction.Prepare(`INSERT INTO historic_fts(rowid, path, filename, title, description, content) VALUES (?, ?, ?, ?, ?, ?)`)
-	if err != nil {
-		return 0, fmt.Errorf("prepare FTS5 insert: %w", err)
-	}
-	defer ftsStatement.Close()
 	indexed := 0
 	for _, record := range records {
 		if _, exists := seenPaths[record.Path]; exists {
@@ -179,18 +176,17 @@ func rebuildInto(workspace config.Workspace) (int, error) {
 		seenPaths[record.Path] = struct{}{}
 		tags, _ := json.Marshal(record.Tags)
 		related, _ := json.Marshal(record.Related)
-		result, err := statement.Exec(record.Num, record.NumPadded, record.Type, record.Title, nullable(record.Description), record.Status.String(), record.Storage.String(), string(tags), string(related), record.CreatedAt, nullable(record.UpdatedAt), record.Path, record.FolderID.String(), record.FolderSlug, record.Subfolder, record.Filename, record.FileOrder, record.Content, record.WordCount, record.Mtime, record.Hash)
-		if err != nil {
+		if _, err := statement.Exec(record.Num, record.NumPadded, record.Type, record.Title, nullable(record.Description), record.Status.String(), record.Storage.String(), string(tags), string(related), record.CreatedAt, nullable(record.UpdatedAt), record.Path, record.FolderID.String(), record.FolderSlug, record.Subfolder, record.Filename, record.FileOrder, record.Content, record.WordCount, record.Mtime, record.Hash); err != nil {
 			return 0, fmt.Errorf("insert %s: %w", record.Path, err)
 		}
-		rowID, err := result.LastInsertId()
-		if err != nil {
-			return 0, fmt.Errorf("read index row ID for %s: %w", record.Path, err)
-		}
-		if _, err := ftsStatement.Exec(rowID, record.Path, record.Filename, record.Title, record.Description, record.Content); err != nil {
-			return 0, fmt.Errorf("insert FTS5 record %s: %w", record.Path, err)
-		}
 		indexed++
+	}
+	if _, err := transaction.Exec(`INSERT INTO historic_fts(entity_type, entity_id, path, filename, title, description, tags, content)
+		SELECT 'topic', t.id, t.path, '_meta.md', t.title, COALESCE(t.description, ''), t.tags, COALESCE(r.content, '')
+		FROM topics AS t LEFT JOIN index_records AS r ON r.num_padded = t.num_padded AND r.filename = '_meta.md'
+		UNION ALL
+		SELECT 'file', CAST(id AS TEXT), path, filename, title, COALESCE(description, ''), tags, content FROM files`); err != nil {
+		return 0, fmt.Errorf("populate FTS5 index: %w", err)
 	}
 	if err := ensureSchemaMetadata(transaction); err != nil {
 		return 0, err
@@ -380,6 +376,7 @@ func scanTopic(workspace config.Workspace, id domain.ID, candidate topicCandidat
 		topic.UpdatedAt = meta.Frontmatter.Updated
 		topic.Tags = meta.Frontmatter.Tags
 		topic.Related = meta.Frontmatter.Related
+		topic.Content = meta.Body
 	}
 	var records []Record
 	if !metaMissing {
