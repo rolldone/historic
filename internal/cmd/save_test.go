@@ -33,6 +33,13 @@ func TestSaveCommandCreatesCommitAndCleanSaveIsSafe(t *testing.T) {
 	command = NewRootCommand()
 	output.Reset()
 	ConfigureOutput(command, &output, &output)
+	command.SetArgs([]string{"close", "00001"})
+	if err := command.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	command = NewRootCommand()
+	output.Reset()
+	ConfigureOutput(command, &output, &output)
 	command.SetArgs([]string{"save", "-m", "initial", "--json"})
 	if err := command.Execute(); err != nil {
 		t.Fatalf("save: %v", err)

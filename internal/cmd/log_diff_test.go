@@ -33,6 +33,13 @@ func TestLogAndDiffCommands(t *testing.T) {
 	command = NewRootCommand()
 	output.Reset()
 	ConfigureOutput(command, &output, &output)
+	command.SetArgs([]string{"close", "00001"})
+	if err := command.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	command = NewRootCommand()
+	output.Reset()
+	ConfigureOutput(command, &output, &output)
 	command.SetArgs([]string{"save", "-m", "topic snapshot"})
 	if err := command.Execute(); err != nil {
 		t.Fatal(err)

@@ -11,7 +11,7 @@ import (
 	"historic/internal/markdown"
 )
 
-func TestArchiveStatusMovesCloseTopicAndPreservesFiles(t *testing.T) {
+func TestArchiveStatusChangesWorkStatusWithoutMovingTopic(t *testing.T) {
 	workspace, err := config.Initialize(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -32,14 +32,46 @@ func TestArchiveStatusMovesCloseTopicAndPreservesFiles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !change.Archived || change.Current != domain.StatusComplete || change.Path != ".historic/.database/00001-topic" {
+	if change.Archived || change.Current != domain.StatusComplete || change.Storage != domain.StorageOpen || change.Path != ".historic/00001-topic" {
 		t.Fatalf("change = %#v", change)
 	}
-	if _, err := os.Stat(source); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("source still exists: %v", err)
-	}
-	if _, err := os.Stat(filepath.Join(workspace.Database, "00001-topic", "wos", "01-task.md")); err != nil {
+	if _, err := os.Stat(source); err != nil {
 		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(workspace.Database, "00001-topic")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("closed topic exists: %v", err)
+	}
+}
+
+func TestCloseAndOpenPreserveStatusAndFiles(t *testing.T) {
+	workspace, err := config.Initialize(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := filepath.Join(workspace.Histories, "00001-topic")
+	if err := os.MkdirAll(filepath.Join(source, "wos"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	document, _ := markdown.NewDocument(domain.Frontmatter{ID: "00001", Title: "Topic", Status: domain.StatusBlocked, Created: "2026-09-18"}, "meta")
+	if err := markdown.WriteFile(filepath.Join(source, "_meta.md"), document); err != nil {
+		t.Fatal(err)
+	}
+	content := []byte("entry bytes\n")
+	if err := os.WriteFile(filepath.Join(source, "wos", "01-task.md"), content, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	service := NewService(workspace)
+	closed, err := service.Close("00001")
+	if err != nil || closed.Storage != domain.StorageClosed {
+		t.Fatalf("close = %#v err=%v", closed, err)
+	}
+	opened, err := service.Open("00001")
+	if err != nil || opened.Storage != domain.StorageOpen || opened.Current != domain.StatusBlocked {
+		t.Fatalf("open = %#v err=%v", opened, err)
+	}
+	got, err := os.ReadFile(filepath.Join(source, "wos", "01-task.md"))
+	if err != nil || string(got) != string(content) {
+		t.Fatalf("content = %q err=%v", got, err)
 	}
 }
 

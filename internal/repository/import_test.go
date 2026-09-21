@@ -10,7 +10,7 @@ import (
 	"historic/internal/markdown"
 )
 
-func TestImportTopicCopiesArchiveAndReopensStatus(t *testing.T) {
+func TestImportTopicOpensWithoutChangingStatusOrContent(t *testing.T) {
 	store := newTestStore(t)
 	source := filepath.Join(store.Workspace.Database, "00001-topic")
 	if err := os.MkdirAll(filepath.Join(source, "wos"), 0o755); err != nil {
@@ -20,23 +20,24 @@ func TestImportTopicCopiesArchiveAndReopensStatus(t *testing.T) {
 	if err := markdown.WriteFile(filepath.Join(source, "_meta.md"), meta); err != nil {
 		t.Fatal(err)
 	}
-	entry, _ := markdown.NewDocument(domain.Frontmatter{ID: "00001", Title: "Task", Status: domain.StatusComplete, Created: "2026-09-18"}, "entry")
-	if err := markdown.WriteFile(filepath.Join(source, "wos", "01-task.md"), entry); err != nil {
+	entryContent := []byte("entry content\n")
+	if err := os.WriteFile(filepath.Join(source, "wos", "01-task.md"), entryContent, 0o644); err != nil {
 		t.Fatal(err)
 	}
 	topic, err := store.ImportTopic("00001", false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if topic.Status != domain.StatusProgress || topic.Path != filepath.Join(store.Workspace.Histories, "00001-topic") {
+	if topic.Status != domain.StatusComplete || topic.Path != filepath.Join(store.Workspace.Histories, "00001-topic") {
 		t.Fatalf("topic = %#v", topic)
 	}
-	if _, err := os.Stat(filepath.Join(source, "wos", "01-task.md")); err != nil {
-		t.Fatal(err)
+	got, err := os.ReadFile(filepath.Join(topic.Path, "wos", "01-task.md"))
+	if err != nil || string(got) != string(entryContent) {
+		t.Fatalf("content = %q err=%v", got, err)
 	}
-	imported, err := markdown.ParseFile(filepath.Join(topic.Path, "_meta.md"))
-	if err != nil || imported.Frontmatter.Status != domain.StatusProgress {
-		t.Fatalf("imported metadata = %#v err=%v", imported.Frontmatter, err)
+	opened, err := markdown.ParseFile(filepath.Join(topic.Path, "_meta.md"))
+	if err != nil || opened.Frontmatter.Status != domain.StatusComplete {
+		t.Fatalf("metadata = %#v err=%v", opened.Frontmatter, err)
 	}
 }
 

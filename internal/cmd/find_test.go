@@ -33,7 +33,7 @@ func TestFindCommandJSONAndFilters(t *testing.T) {
 	command = NewRootCommand()
 	output.Reset()
 	ConfigureOutput(command, &output, &output)
-	command.SetArgs([]string{"find", "needle", "--active", "--json"})
+	command.SetArgs([]string{"find", "needle", "--open", "--json"})
 	if err := command.Execute(); err != nil {
 		t.Fatalf("find: %v", err)
 	}

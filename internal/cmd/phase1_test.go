@@ -53,7 +53,7 @@ func TestPhase1EndToEndWorkflow(t *testing.T) {
 	if err != nil || !jsonHasOK(rebuildOutput) || !strings.Contains(rebuildOutput, `"records":3`) {
 		t.Fatalf("rebuild output=%q err=%v", rebuildOutput, err)
 	}
-	findOutput, err := executeCommand(t, "find", "scaffold", "--active", "--json")
+	findOutput, err := executeCommand(t, "find", "scaffold", "--open", "--json")
 	if err != nil || !jsonHasOK(findOutput) || !strings.Contains(findOutput, "01-scaffold.md") {
 		t.Fatalf("find output=%q err=%v", findOutput, err)
 	}

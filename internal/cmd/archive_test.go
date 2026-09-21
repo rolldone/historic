@@ -8,13 +8,13 @@ import (
 	"testing"
 )
 
-func TestCompleteCommandArchivesTopic(t *testing.T) {
+func TestCompleteCommandOnlyChangesWorkStatus(t *testing.T) {
 	root := t.TempDir()
 	t.Chdir(root)
 	command := NewRootCommand()
 	var output bytes.Buffer
 	ConfigureOutput(command, &output, &output)
-	command.SetArgs([]string{"create", "Archive Topic", "--id", "00001"})
+	command.SetArgs([]string{"create", "Topic", "--id", "00001"})
 	if err := command.Execute(); err != nil {
 		t.Fatal(err)
 	}
@@ -28,14 +28,19 @@ func TestCompleteCommandArchivesTopic(t *testing.T) {
 	var response struct {
 		OK   bool `json:"ok"`
 		Data struct {
-			Archived bool   `json:"archived"`
+			Current  string `json:"current"`
+			Storage  string `json:"storage"`
 			Path     string `json:"path"`
+			Archived bool   `json:"archived"`
 		} `json:"data"`
 	}
-	if err := json.Unmarshal(output.Bytes(), &response); err != nil || !response.OK || !response.Data.Archived || response.Data.Path != ".historic/.database/00001-archive-topic" {
+	if err := json.Unmarshal(output.Bytes(), &response); err != nil || !response.OK || response.Data.Current != "complete" || response.Data.Storage != "open" || response.Data.Archived || response.Data.Path != ".historic/00001-topic" {
 		t.Fatalf("response = %q, %v", output.String(), err)
 	}
-	if _, err := os.Stat(filepath.Join(root, ".historic", ".database", "00001-archive-topic")); err != nil {
+	if _, err := os.Stat(filepath.Join(root, ".historic", "00001-topic")); err != nil {
 		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(root, ".historic", ".database", "00001-topic")); !os.IsNotExist(err) {
+		t.Fatalf("closed topic exists: %v", err)
 	}
 }
