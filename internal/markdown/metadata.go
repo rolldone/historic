@@ -132,13 +132,19 @@ func WriteTopicMetadata(path string, metadata TopicMetadata) error {
 func ReadTopicMetadata(topicPath string) (TopicMetadata, error) {
 	canonical := filepath.Join(topicPath, MetaFilename)
 	legacy := filepath.Join(topicPath, LegacyMetaFilename)
-	canonicalInfo, canonicalErr := os.Stat(canonical)
-	legacyInfo, legacyErr := os.Stat(legacy)
+	canonicalInfo, canonicalErr := os.Lstat(canonical)
+	legacyInfo, legacyErr := os.Lstat(legacy)
 	if canonicalErr != nil && !errors.Is(canonicalErr, os.ErrNotExist) {
 		return TopicMetadata{}, fmt.Errorf("inspect topic metadata %s: %w", canonical, canonicalErr)
 	}
 	if legacyErr != nil && !errors.Is(legacyErr, os.ErrNotExist) {
 		return TopicMetadata{}, fmt.Errorf("inspect legacy metadata %s: %w", legacy, legacyErr)
+	}
+	if canonicalErr == nil && canonicalInfo.Mode()&os.ModeSymlink != 0 {
+		return TopicMetadata{}, fmt.Errorf("%w: metadata symlink %s", domain.ErrConflict, canonical)
+	}
+	if legacyErr == nil && legacyInfo.Mode()&os.ModeSymlink != 0 {
+		return TopicMetadata{}, fmt.Errorf("%w: legacy metadata symlink %s", domain.ErrConflict, legacy)
 	}
 	if canonicalErr == nil && canonicalInfo.IsDir() {
 		return TopicMetadata{}, fmt.Errorf("%s: metadata is a directory", canonical)

@@ -31,6 +31,28 @@ func writeIndexerTopicMetadata(t *testing.T, path string, metadata domain.Frontm
 	}
 }
 
+func TestRebuildRejectsSymlinkedTopicContent(t *testing.T) {
+	workspace, err := config.Initialize(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	topic := filepath.Join(workspace.Histories, "00022-safe-topic")
+	if err := os.MkdirAll(topic, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeIndexerTopicMetadata(t, filepath.Join(topic, markdown.MetaFilename), domain.Frontmatter{ID: "00022", Title: "Safe Topic", Status: domain.StatusProgress, Created: "2026-09-21"})
+	outside := filepath.Join(t.TempDir(), "outside.md")
+	if err := os.WriteFile(outside, []byte("outside"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(topic, "linked.md")); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	if _, err := Rebuild(workspace); err == nil || !errors.Is(err, domain.ErrConflict) {
+		t.Fatalf("symlink rebuild error = %v, want conflict", err)
+	}
+}
+
 func TestRebuildUsesTopicIdentityAndLogicalPaths(t *testing.T) {
 	workspace, err := config.Initialize(t.TempDir())
 	if err != nil {

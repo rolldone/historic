@@ -14,6 +14,9 @@ import (
 // TopicLocation resolves one logical topic in either storage root. When an
 // open workdir and closed snapshot coexist, the open workdir is authoritative.
 func TopicLocation(workspace config.Workspace, id domain.ID) (string, domain.StorageState, error) {
+	if !id.Valid() {
+		return "", "", fmt.Errorf("%w: %q", domain.ErrInvalidID, id)
+	}
 	locations := make([]struct {
 		path    string
 		storage domain.StorageState
@@ -29,40 +32,50 @@ func TopicLocation(workspace config.Workspace, id domain.ID) (string, domain.Sto
 		if err != nil {
 			return "", "", err
 		}
+		prefix := id.String() + "-"
 		for _, entry := range entries {
-			if !strings.HasPrefix(entry.Name(), id.String()+"-") || strings.HasPrefix(entry.Name(), ".staging-") {
+			if !strings.HasPrefix(entry.Name(), prefix) || strings.HasPrefix(entry.Name(), ".staging-") {
 				continue
 			}
-			if entry.IsDir() || entry.Type()&os.ModeSymlink != 0 {
-				locations = append(locations, struct {
-					path    string
-					storage domain.StorageState
-				}{filepath.Join(candidate.root, entry.Name()), candidate.storage})
+			path := filepath.Join(candidate.root, entry.Name())
+			info, err := os.Lstat(path)
+			if err != nil {
+				return "", "", err
 			}
+			if info.Mode()&os.ModeSymlink != 0 {
+				return "", "", fmt.Errorf("%w: topic symlink %s", domain.ErrConflict, filepath.ToSlash(path))
+			}
+			if !info.IsDir() {
+				continue
+			}
+			locations = append(locations, struct {
+				path    string
+				storage domain.StorageState
+			}{path, candidate.storage})
 		}
 	}
 	if len(locations) == 0 {
 		return "", "", fmt.Errorf("%w: %s", domain.ErrTopicMissing, id)
 	}
-	if len(locations) == 1 {
-		return locations[0].path, locations[0].storage, nil
-	}
-	var openLocation *struct {
-		path    string
-		storage domain.StorageState
-	}
-	for index := range locations {
-		if locations[index].storage == domain.StorageOpen {
-			if openLocation != nil {
+	var openPath, closedPath string
+	for _, location := range locations {
+		switch location.storage {
+		case domain.StorageOpen:
+			if openPath != "" {
 				return "", "", fmt.Errorf("%w: duplicate open topic ID %s", domain.ErrConflict, id)
 			}
-			openLocation = &locations[index]
+			openPath = location.path
+		case domain.StorageClosed:
+			if closedPath != "" {
+				return "", "", fmt.Errorf("%w: duplicate closed topic ID %s", domain.ErrConflict, id)
+			}
+			closedPath = location.path
 		}
 	}
-	if openLocation != nil {
-		return openLocation.path, openLocation.storage, nil
+	if openPath != "" {
+		return openPath, domain.StorageOpen, nil
 	}
-	return "", "", fmt.Errorf("%w: duplicate closed topic ID %s", domain.ErrConflict, id)
+	return closedPath, domain.StorageClosed, nil
 }
 
 // ActiveTopicPath is the compatibility resolver for operations that require open storage.

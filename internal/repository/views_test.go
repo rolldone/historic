@@ -10,6 +10,42 @@ import (
 	"historic/internal/markdown"
 )
 
+func TestListTopicsDeduplicatesOpenAndClosedSlugCopies(t *testing.T) {
+	store := newTestStore(t)
+	for _, folder := range []string{"00020-old-slug", "00020-current-slug"} {
+		root := store.Workspace.Database
+		if folder == "00020-current-slug" {
+			root = store.Workspace.Histories
+		}
+		topic := filepath.Join(root, folder)
+		if err := os.MkdirAll(topic, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		metadata := markdown.TopicMetadata{ID: "00020", Title: folder, Status: domain.StatusProgress, Created: "2026-09-21"}
+		if err := markdown.WriteTopicMetadata(filepath.Join(topic, markdown.MetaFilename), metadata); err != nil {
+			t.Fatal(err)
+		}
+	}
+	views, err := store.ListTopics(true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(views) != 1 || views[0].ID != "00020" || views[0].Storage != "open" || views[0].Path != ".historic/00020-current-slug" {
+		t.Fatalf("deduplicated views = %#v", views)
+	}
+}
+
+func TestListTopicsRejectsSymlinkedTopicRoot(t *testing.T) {
+	store := newTestStore(t)
+	target := t.TempDir()
+	if err := os.Symlink(target, filepath.Join(store.Workspace.Histories, "00021-linked-topic")); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	if _, err := store.ListTopics(true); !errors.Is(err, domain.ErrConflict) {
+		t.Fatalf("symlink topic error = %v, want conflict", err)
+	}
+}
+
 func TestListTopicsDefaultsToActiveAndSortsByID(t *testing.T) {
 	store := newTestStore(t)
 	if _, err := store.CreateTopic("Second", "00002"); err != nil {

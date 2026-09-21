@@ -42,17 +42,12 @@ func (store TopicStore) ListTopics(includeClosed bool) ([]TopicView, error) {
 		return nil, fmt.Errorf("list topics: %w", err)
 	}
 	views := make([]TopicView, 0, len(paths))
-	seen := make(map[string]struct{}, len(paths))
 	for _, path := range paths {
 		active := filepath.Dir(path) == store.Workspace.Histories
 		view, err := store.readTopicView(path, active, false)
 		if err != nil {
 			return nil, err
 		}
-		if _, exists := seen[view.ID]; exists {
-			return nil, fmt.Errorf("%w: topic %s exists in open and closed storage", domain.ErrConflict, view.ID)
-		}
-		seen[view.ID] = struct{}{}
 		if !includeClosed && view.Storage == "closed" {
 			continue
 		}
@@ -71,16 +66,14 @@ func (store TopicStore) ShowTopic(id domain.ID, includeClosed bool) (TopicView, 
 	if err != nil {
 		return TopicView{}, fmt.Errorf("find topic: %w", err)
 	}
-	matched := false
 	for _, path := range paths {
 		if !strings.HasPrefix(filepath.Base(path), id.String()+"-") {
 			continue
 		}
 		active := filepath.Dir(path) == store.Workspace.Histories
-		if matched {
-			return TopicView{}, fmt.Errorf("%w: topic %s exists in open and closed storage", domain.ErrConflict, id)
+		if !includeClosed && !active {
+			return TopicView{}, fmt.Errorf("%w: topic %s is closed", domain.ErrTopicMissing, id)
 		}
-		matched = true
 		return store.readTopicView(path, active, true)
 	}
 	return TopicView{}, fmt.Errorf("%w: %s", domain.ErrTopicMissing, id)
@@ -112,6 +105,13 @@ func readFiles(topicPath, root string) ([]FileView, error) {
 	err := filepath.WalkDir(topicPath, func(path string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
+		}
+		info, err := os.Lstat(path)
+		if err != nil {
+			return err
+		}
+		if info.Mode()&os.ModeSymlink != 0 || entry.Type()&os.ModeSymlink != 0 {
+			return fmt.Errorf("%w: symlink %s", domain.ErrConflict, filepath.ToSlash(path))
 		}
 		if entry.IsDir() || filepath.Base(path) == markdown.MetaFilename || filepath.Base(path) == markdown.LegacyMetaFilename || strings.ToLower(filepath.Ext(path)) != ".md" {
 			return nil

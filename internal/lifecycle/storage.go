@@ -21,38 +21,11 @@ type topicLocation struct {
 }
 
 func resolveTopic(workspace config.Workspace, id domain.ID) (topicLocation, error) {
-	locations := make([]topicLocation, 0, 2)
-	for _, candidate := range []struct {
-		root    string
-		storage domain.StorageState
-	}{
-		{workspace.Histories, domain.StorageOpen},
-		{workspace.Database, domain.StorageClosed},
-	} {
-		entries, err := os.ReadDir(candidate.root)
-		if errors.Is(err, os.ErrNotExist) {
-			continue
-		}
-		if err != nil {
-			return topicLocation{}, fmt.Errorf("scan %s topics: %w", candidate.storage, err)
-		}
-		prefix := id.String() + "-"
-		for _, entry := range entries {
-			if !strings.HasPrefix(entry.Name(), prefix) || strings.HasPrefix(entry.Name(), ".staging-") {
-				continue
-			}
-			if entry.IsDir() || entry.Type()&os.ModeSymlink != 0 {
-				locations = append(locations, topicLocation{path: filepath.Join(candidate.root, entry.Name()), storage: candidate.storage})
-			}
-		}
+	path, storage, err := TopicLocation(workspace, id)
+	if err != nil {
+		return topicLocation{}, err
 	}
-	if len(locations) == 0 {
-		return topicLocation{}, fmt.Errorf("%w: %s", domain.ErrTopicMissing, id)
-	}
-	if len(locations) > 1 {
-		return topicLocation{}, fmt.Errorf("%w: topic %s exists in open and closed storage", domain.ErrConflict, id)
-	}
-	return locations[0], nil
+	return topicLocation{path: path, storage: storage}, nil
 }
 
 func (service Service) Close(id domain.ID) (Change, error) {
@@ -470,6 +443,18 @@ func validateCopiedTopic(path string, id domain.ID) (markdown.Document, error) {
 	}
 	if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
 		return markdown.Document{}, fmt.Errorf("%w: topic root is not a directory", domain.ErrConflict)
+	}
+	metaPath := filepath.Join(path, markdown.MetaFilename)
+	metaInfo, err := os.Lstat(metaPath)
+	if errors.Is(err, os.ErrNotExist) {
+		metaPath = filepath.Join(path, markdown.LegacyMetaFilename)
+		metaInfo, err = os.Lstat(metaPath)
+	}
+	if err != nil {
+		return markdown.Document{}, err
+	}
+	if metaInfo.Mode()&os.ModeSymlink != 0 || !metaInfo.Mode().IsRegular() {
+		return markdown.Document{}, fmt.Errorf("%w: topic metadata is not a regular file", domain.ErrConflict)
 	}
 	metadata, err := markdown.ReadTopicMetadata(path)
 	if err != nil {

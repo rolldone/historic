@@ -12,6 +12,11 @@ func (service Service) ArchiveStatus(id domain.ID, next domain.Status) (Change, 
 	if !next.IsClose() {
 		return Change{}, fmt.Errorf("%w: archive requires close status %s", domain.ErrInvalidStatus, next)
 	}
+	if archive, err := findClosedTopic(service.Workspace, id); err != nil {
+		return Change{}, err
+	} else if archive.path != "" {
+		return Change{}, fmt.Errorf("%w: topic %s already has a closed snapshot", domain.ErrConflict, id)
+	}
 	change, err := service.ChangeStatus(id, next)
 	if err != nil {
 		return Change{}, err

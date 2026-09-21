@@ -122,12 +122,31 @@ func (store TopicStore) activeTopicPath(id domain.ID) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("scan active topics: %w", err)
 	}
+	var found string
 	for _, entry := range entries {
-		if entry.IsDir() && strings.HasPrefix(entry.Name(), prefix) {
-			return filepath.Join(store.Workspace.Histories, entry.Name()), nil
+		if !strings.HasPrefix(entry.Name(), prefix) || strings.HasPrefix(entry.Name(), ".staging-") {
+			continue
 		}
+		path := filepath.Join(store.Workspace.Histories, entry.Name())
+		info, err := os.Lstat(path)
+		if err != nil {
+			return "", err
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return "", fmt.Errorf("%w: topic symlink %s", domain.ErrConflict, store.Workspace.RelativePath(path))
+		}
+		if !info.IsDir() {
+			continue
+		}
+		if found != "" {
+			return "", fmt.Errorf("%w: duplicate open topic ID %s", domain.ErrConflict, id)
+		}
+		found = path
 	}
-	return "", fmt.Errorf("%w: %s", domain.ErrTopicMissing, id)
+	if found == "" {
+		return "", fmt.Errorf("%w: %s", domain.ErrTopicMissing, id)
+	}
+	return found, nil
 }
 
 func normalizeEntryName(name string) (string, error) {
@@ -306,9 +325,16 @@ func (store TopicStore) topicIDExists(id domain.ID) bool {
 
 // ListTopicDirectories returns canonical topic folders from active and archive roots.
 func (store TopicStore) ListTopicDirectories() ([]string, error) {
-	var result []string
-	for _, directory := range []string{store.Workspace.Histories, store.Workspace.Database} {
-		entries, err := os.ReadDir(directory)
+	type location struct {
+		path    string
+		storage string
+	}
+	byID := make(map[string]location)
+	for _, directory := range []struct {
+		path    string
+		storage string
+	}{{store.Workspace.Histories, "open"}, {store.Workspace.Database, "closed"}} {
+		entries, err := os.ReadDir(directory.path)
 		if errors.Is(err, os.ErrNotExist) {
 			continue
 		}
@@ -316,10 +342,35 @@ func (store TopicStore) ListTopicDirectories() ([]string, error) {
 			return nil, err
 		}
 		for _, entry := range entries {
-			if entry.IsDir() && topicFolderPattern.MatchString(entry.Name()) {
-				result = append(result, filepath.Join(directory, entry.Name()))
+			match := topicFolderPattern.FindStringSubmatch(entry.Name())
+			if len(match) != 3 {
+				continue
 			}
+			path := filepath.Join(directory.path, entry.Name())
+			info, err := os.Lstat(path)
+			if err != nil {
+				return nil, err
+			}
+			if info.Mode()&os.ModeSymlink != 0 {
+				return nil, fmt.Errorf("%w: topic symlink %s", domain.ErrConflict, store.Workspace.RelativePath(path))
+			}
+			if !info.IsDir() {
+				continue
+			}
+			if previous, exists := byID[match[1]]; exists {
+				if previous.storage == directory.storage {
+					return nil, fmt.Errorf("%w: duplicate %s topic ID %s", domain.ErrConflict, directory.storage, match[1])
+				}
+				if previous.storage == "open" {
+					continue
+				}
+			}
+			byID[match[1]] = location{path: path, storage: directory.storage}
 		}
+	}
+	result := make([]string, 0, len(byID))
+	for _, topic := range byID {
+		result = append(result, topic.path)
 	}
 	sort.Strings(result)
 	return result, nil
