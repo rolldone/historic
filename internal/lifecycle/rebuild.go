@@ -7,7 +7,6 @@ import (
 	"sort"
 
 	"historic/internal/config"
-	"historic/internal/domain"
 	"historic/internal/indexer"
 )
 
@@ -25,20 +24,19 @@ func RebuildMetadata(workspace config.Workspace) (RebuildChange, error) {
 		return RebuildChange{}, err
 	}
 	result := RebuildChange{Topics: len(paths)}
-	for _, path := range paths {
-		change, syncErr := syncMetaTopic(workspace, workspace.RelativePath(path), false)
-		if syncErr != nil {
-			result.Errors++
-			continue
+	count, err := indexer.RebuildWithPreparation(workspace, func() error {
+		for _, path := range paths {
+			change, syncErr := syncMetaTopic(workspace, workspace.RelativePath(path), false)
+			if syncErr != nil {
+				result.Errors++
+				return fmt.Errorf("reconcile metadata failed for %d topic(s): %w", result.Errors, syncErr)
+			}
+			if change.Updated {
+				result.Updated++
+			}
 		}
-		if change.Updated {
-			result.Updated++
-		}
-	}
-	if result.Errors > 0 {
-		return result, fmt.Errorf("reconcile metadata failed for %d topic(s)", result.Errors)
-	}
-	count, err := indexer.Rebuild(workspace)
+		return nil
+	})
 	if err != nil {
 		return result, fmt.Errorf("rebuild unified index: %w", err)
 	}
@@ -65,5 +63,3 @@ func allTopicPaths(workspace config.Workspace) ([]string, error) {
 	sort.Strings(paths)
 	return paths, nil
 }
-
-var _ = domain.StorageOpen

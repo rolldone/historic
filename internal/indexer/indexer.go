@@ -313,7 +313,10 @@ func scan(workspace config.Workspace) (scanResult, error) {
 			if err != nil {
 				return scanResult{}, fmt.Errorf("inspect topic %s: %w", workspace.RelativePath(candidatePath), err)
 			}
-			if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
+			if info.Mode()&os.ModeSymlink != 0 {
+				return scanResult{}, fmt.Errorf("%w: topic symlink %s", domain.ErrConflict, workspace.RelativePath(candidatePath))
+			}
+			if !info.IsDir() {
 				continue
 			}
 			if previous, exists := seenRoot[id]; exists {

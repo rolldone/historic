@@ -275,6 +275,86 @@ func TestRebuildCanRecreateDeletedIndex(t *testing.T) {
 	}
 }
 
+func TestRebuildReadModelClassifiesAssetsAndAggregatesStatus(t *testing.T) {
+	workspace, err := config.Initialize(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	topic := filepath.Join(workspace.Histories, "00001-topic")
+	if err := os.MkdirAll(topic, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeIndexerDocument(t, filepath.Join(topic, "_meta.md"), domain.Frontmatter{ID: "00001", Title: "Topic", Status: domain.StatusComplete, Created: "2026-09-21"}, "topic")
+	writeIndexerDocument(t, filepath.Join(topic, "active.md"), domain.Frontmatter{ID: "00001", Title: "Active", Status: domain.StatusProgress, Created: "2026-09-21"}, "active")
+	writeIndexerDocument(t, filepath.Join(topic, "done.md"), domain.Frontmatter{ID: "00001", Title: "Done", Status: domain.StatusComplete, Created: "2026-09-21"}, "done")
+	if err := os.WriteFile(filepath.Join(topic, "brief.md"), []byte("plain Markdown asset"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Rebuild(workspace); err != nil {
+		t.Fatal(err)
+	}
+	database, err := sql.Open("sqlite", workspace.Index)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer database.Close()
+	var computed string
+	if err := database.QueryRow("SELECT computed_status FROM topics WHERE id = '00001'").Scan(&computed); err != nil {
+		t.Fatal(err)
+	}
+	if computed != domain.StatusProgress.String() {
+		t.Fatalf("computed status = %q, want progress", computed)
+	}
+	var managed, assets, nullAssets int
+	if err := database.QueryRow("SELECT COUNT(*) FROM files WHERE topic_id = '00001' AND type = 'historic_file'").Scan(&managed); err != nil {
+		t.Fatal(err)
+	}
+	if err := database.QueryRow("SELECT COUNT(*) FROM files WHERE topic_id = '00001' AND type = 'asset'").Scan(&assets); err != nil {
+		t.Fatal(err)
+	}
+	if err := database.QueryRow("SELECT COUNT(*) FROM files WHERE topic_id = '00001' AND type = 'asset' AND status IS NULL").Scan(&nullAssets); err != nil {
+		t.Fatal(err)
+	}
+	if managed != 2 || assets != 1 || nullAssets != 1 {
+		t.Fatalf("read model counts managed=%d assets=%d nullAssets=%d", managed, assets, nullAssets)
+	}
+}
+
+func TestRebuildRejectsInvalidTopicMetadataAndPreservesIndex(t *testing.T) {
+	workspace, err := config.Initialize(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	topic := filepath.Join(workspace.Histories, "00001-topic")
+	if err := os.MkdirAll(topic, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	document, _ := markdown.NewDocument(domain.Frontmatter{ID: "00001", Title: "Valid", Status: domain.StatusProgress, Created: "2026-09-18"}, "valid")
+	if err := markdown.WriteFile(filepath.Join(topic, "_meta.md"), document); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Rebuild(workspace); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.ReadFile(filepath.Join(topic, "_meta.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(topic, "_meta.md"), []byte("invalid metadata"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := RebuildWithPreparation(workspace, func() error { return nil }); err == nil {
+		t.Fatal("invalid topic metadata rebuild succeeded")
+	}
+	count, err := Count(workspace)
+	if err != nil || count != 1 {
+		t.Fatalf("old index changed: count=%d err=%v", count, err)
+	}
+	if err := os.WriteFile(filepath.Join(topic, "_meta.md"), before, 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestIndexDatabaseHasExpectedRecords(t *testing.T) {
 	workspace, err := config.Initialize(t.TempDir())
 	if err != nil {

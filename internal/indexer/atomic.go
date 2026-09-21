@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 
 	"historic/internal/config"
+	"historic/internal/markdown"
 )
 
 var ErrUpgradeLocked = errors.New("index upgrade is already in progress")
@@ -26,14 +27,64 @@ func acquireUpgradeLock(workspace config.Workspace) (func(), error) {
 	return func() { _ = os.Remove(lockPath(workspace)) }, nil
 }
 
+func RebuildWithPreparation(workspace config.Workspace, prepare func() error) (int, error) {
+	return atomicRebuildWithPreparation(workspace, prepare)
+}
+
 func atomicRebuild(workspace config.Workspace) (int, error) {
+	return atomicRebuildWithPreparation(workspace, nil)
+}
+
+func atomicRebuildWithPreparation(workspace config.Workspace, prepare func() error) (int, error) {
 	unlock, err := acquireUpgradeLock(workspace)
 	if err != nil {
 		return 0, err
 	}
 	defer unlock()
+
+	// Validate the source before preparation can modify generated metadata. This
+	// keeps both Markdown and the current index intact when the scan is invalid.
+	if prepare != nil {
+		if err := validateRebuildSource(workspace); err != nil {
+			return 0, err
+		}
+		if err := prepare(); err != nil {
+			return 0, err
+		}
+	}
 	return atomicRebuildUnlocked(workspace)
 }
+
+func validateRebuildSource(workspace config.Workspace) error {
+	if _, err := scan(workspace); err != nil {
+		return err
+	}
+	for _, root := range []string{workspace.Histories, workspace.Database} {
+		entries, err := os.ReadDir(root)
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return fmt.Errorf("validate %s: %w", workspace.RelativePath(root), err)
+		}
+		for _, entry := range entries {
+			if !topicFolderPattern.MatchString(entry.Name()) || !entry.IsDir() {
+				continue
+			}
+			metaPath := filepath.Join(root, entry.Name(), "_meta.md")
+			if _, err := os.Stat(metaPath); errors.Is(err, os.ErrNotExist) {
+				continue
+			} else if err != nil {
+				return fmt.Errorf("inspect topic metadata %s: %w", workspace.RelativePath(metaPath), err)
+			}
+			if _, err := markdown.ParseFile(metaPath); err != nil {
+				return fmt.Errorf("invalid topic metadata %s: %w", workspace.RelativePath(metaPath), err)
+			}
+		}
+	}
+	return nil
+}
+
 func atomicRebuildUnlocked(workspace config.Workspace) (int, error) {
 	if err := os.MkdirAll(filepath.Dir(workspace.Index), 0o755); err != nil {
 		return 0, err
