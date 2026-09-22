@@ -16,13 +16,16 @@ Markdown files remain the source of truth. Archive and import use staging direct
 ## Recovery commands
 
 ```sh
-historic rebuild
-historic list --archived
-historic show 00014 --archived
+historic rebuild --json
+historic doctor --json
 ```
 
-- If a rebuild reports invalid Markdown, do not delete `.historic/.index.sqlite`; the previous index is preserved by the transaction. Correct the source file and retry.
-- Search uses SQLite FTS5 only. If `historic find` reports `FTS5 index unavailable`, run `historic rebuild`; there is no silent filesystem fallback.
+- `rebuild` scans both open and closed topics recursively and rebuilds SQLite/FTS5 from Markdown.
+- If a valid topic folder is missing `_meta.yaml`, rebuild creates minimal canonical metadata using the folder ID and slug title, then regenerates `files` and `assets`.
+- If the scan or index replacement fails, recovered metadata is rolled back and the previous index remains protected.
+- Invalid existing `_meta.yaml` is not silently overwritten; fix it or resolve the reported conflict before rebuilding.
+- A second rebuild without filesystem changes is idempotent and reports `updated: 0`.
+
 
 ## Safety policy
 

@@ -45,7 +45,9 @@ historic status 19-fts5-index.md complete --json
 historic status .historic/00001-historic-cli/wos/20-advanced-query-filters.md review
 ```
 
-`historic status` changes only the target Markdown frontmatter, sets `updated`, rejects absolute/traversal paths, and rebuilds the SQLite/FTS index. It accepts `create`, `pending`, `progress`, `review`, `blocked`, `complete`, `failed`, `cancelled`, and `archived`. Use it for individual Work Orders; use topic lifecycle commands only when the entire topic should change or be archived.
+`historic status` changes only the target managed Markdown frontmatter, sets `updated`, rejects absolute/traversal paths, and rebuilds the SQLite/FTS index. It accepts `create`, `draft`, `pending`, `progress`, `review`, `blocked`, `complete`, `failed`, and `cancelled`. Topic status commands such as `historic complete <id>` are not used: topics have no work status; update the member file path instead.
+
+Canonical topic metadata is stored in `_meta.yaml`. It contains identity, manual topic metadata, and generated `files`/`assets` manifests. Every valid Historic Markdown file anywhere under the topic is a member file; files under `wos/` use type `task`. `_meta.yaml` is excluded and `_meta.md` is an asset.
 
 Synchronize manually created topic files into `_meta.md`:
 
@@ -55,7 +57,7 @@ historic sync-meta .historic/00014-admin-dashboard --json
 historic sync-meta --json
 ```
 
-`historic sync-meta` fully reconciles the generated `## Files` and `## Assets` sections from the current filesystem. Valid managed Markdown goes to `Files`; plain Markdown, images, PDFs, office files, archives, and binaries go to `Assets`. It excludes `_meta.md`, removes stale and duplicate links, reflects rename/move/delete and classification changes, uses deterministic relative POSIX links, preserves other metadata sections, and rebuilds the index. Without a target, it processes every active topic directly under `.historic/` and excludes `.historic/.database/`. Batch mode continues after per-topic errors and exits non-zero if any topic fails. Assets are not errors; only managed Markdown files are accepted by `historic status`.
+`historic sync-meta` fully regenerates `_meta.yaml.files` and `_meta.yaml.assets` from the recursive topic filesystem. Valid Historic Markdown goes to `files` with status; plain/invalid Markdown and other non-managed files go to `assets`. It excludes `_meta.yaml`, treats `_meta.md` as an asset, removes stale entries, preserves manual metadata, and writes atomically.
 
 Interactive read-only search:
 
@@ -67,20 +69,13 @@ historic search
 
 ## Work status and storage state
 
-Work status and filesystem storage are independent.
+Work status belongs to managed member files only. Topics have no work status. Storage remains independent:
 
 - Open topic: `.historic/<id>-<slug>/`
 - Closed topic: `.historic/.database/<id>-<slug>/`
 
-A topic may be `complete + open` or `complete + closed`. Completing a topic changes only its work status; it does not move files.
+Use `historic status <member-path> <status>` for work status and `historic close/open <id>` for storage movement.
 
-```sh
-historic complete 00014 --json
-historic close 00014 --json
-historic open 00014 --json
-```
-
-`close` and `open` preserve frontmatter status and all topic contents. They use safe staged moves, reject duplicate IDs and destination conflicts, and rebuild the index after a successful move. `import <id>` remains as a compatibility alias for opening a closed topic without changing its work status.
 
 Read topics with explicit closed scope when needed:
 
@@ -114,7 +109,7 @@ historic rebuild
 historic rebuild --json
 ```
 
-`historic rebuild` processes both open and closed topics in one workflow. It fully reconciles `## Files` and `## Assets`, reflects rename/move/delete/classification changes, preserves other metadata sections and work status, then builds and atomically replaces the schema-aware SQLite/FTS5 index. Markdown remains the source of truth; temporary database, backup, rollback, lock, and cleanup safeguards protect the previous index.
+`historic rebuild` processes both open and closed topics in one workflow. It recursively scans each topic, regenerates `_meta.yaml.files` and `_meta.yaml.assets`, computes aggregate status only in SQLite, and atomically replaces the schema-aware SQLite/FTS5 index. If `_meta.yaml` is missing, it recovers minimal metadata using the folder ID and folder slug title. Markdown remains the source of truth.
 
 Every JSON-capable command uses the stable envelope `{ "command", "ok", "data", "error" }`. Successful empty list/find results return `ok: true` with an empty `data` array. Errors return a non-zero exit code and a message on stderr; JSON mode also emits the error envelope on stdout.
 

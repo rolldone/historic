@@ -16,25 +16,19 @@ Topic IDs use five digits and topic folders use `<id>-<slug>`.
 
 ## Work status and storage state
 
-Work status is independent from storage location:
+Work status belongs only to managed member Markdown files. Topics have no work-status field or topic lifecycle status command.
 
 - `open`: `.historic/<id>-<slug>/`
 - `closed`: `.historic/.database/<id>-<slug>/`
 
 ```sh
-historic progress <id> [--json]
-historic pending <id> [--json]
-historic review <id> [--json]
-historic blocked <id> [--json]
-historic complete <id> [--json]
-historic failed <id> [--json]
-historic cancelled <id> [--json]
+historic status <member-path> <status> [--json]
 historic close <id> [--json]
 historic open <id> [--json]
 historic import <id> [--json]
 ```
 
-Lifecycle commands update work status only. `close` and `open` are the explicit storage moves; they preserve frontmatter status and topic contents. `import` is a compatibility alias for `open`. Duplicate IDs, destination conflicts, missing topics, and symlink topic roots are rejected.
+`close`, `open`, and `import` change storage only and preserve member frontmatter statuses and topic contents.
 
 ## File status
 
@@ -42,7 +36,7 @@ Lifecycle commands update work status only. `close` and `open` are the explicit 
 historic status <path> <status> [--json]
 ```
 
-This command is only for managed Markdown with valid Historic frontmatter whose ID matches the topic. It updates that file's `status` and `updated`, then rebuilds the index. It rejects regular assets and Markdown without valid managed frontmatter.
+This command is for any managed Markdown file with valid Historic frontmatter. It updates that member file's `status` and `updated`, then rebuilds the index. The member frontmatter ID may differ from the parent topic ID. It rejects regular assets, Markdown without valid Historic frontmatter, unsafe paths, and symlink targets. Valid statuses include `create`, `draft`, `pending`, `progress`, `review`, `blocked`, `complete`, `failed`, and `cancelled`.
 
 ## Synchronize metadata
 
@@ -56,15 +50,15 @@ historic sync-meta
 historic sync-meta --json
 ```
 
-`sync-meta` fully reconciles the generated `## Files` and `## Assets` sections from the current topic filesystem:
+`sync-meta` fully regenerates `_meta.yaml.files` and `_meta.yaml.assets` from the recursive topic filesystem:
 
-- valid managed Markdown goes to `Files`;
-- plain Markdown and other files go to `Assets`;
-- `_meta.md` is excluded;
+- valid Historic Markdown anywhere under the topic goes to `files` with its frontmatter status;
+- valid Markdown under `wos/` uses manifest type `task`;
+- plain/invalid Markdown and other non-managed files go to `assets`;
+- `_meta.yaml` is excluded and `_meta.md` is an asset;
 - rename, move, delete, and classification changes are reflected automatically;
-- stale and duplicate links are removed;
-- links are relative POSIX paths sorted deterministically;
-- all other `_meta.md` sections are preserved.
+- generated arrays are sorted deterministically and stale entries are removed;
+- manual topic metadata fields are preserved and writes are atomic.
 
 Targeted mode processes one active topic. No-target mode processes all active topics directly under `.historic/`, excluding `.historic/.database/`. Batch mode continues after per-topic errors, reports them, and exits non-zero if any topic fails. A second run without filesystem changes reports `updated: false`.
 
@@ -140,4 +134,4 @@ Every JSON-capable command uses the envelope:
 {"command":"...","ok":true,"data":{},"error":null}
 ```
 
-`historic rebuild` is the unified workflow for all open and closed topics. It reconciles `## Files` and `## Assets`, reflects filesystem changes, preserves other metadata sections and work status, rebuilds storage-aware SQLite/FTS5, validates the temporary index, and atomically replaces the prior index with backup, rollback, lock, and cleanup safeguards.
+`historic rebuild` is the unified workflow for all open and closed topics. It recursively scans every topic file, regenerates the `_meta.yaml` files/assets manifest, computes aggregate status only in SQLite, rebuilds storage-aware SQLite/FTS5, validates the temporary index, and atomically replaces the prior index. If `_meta.yaml` is missing, it is minimally recovered from the folder ID/slug; recovery is rolled back if rebuild fails.

@@ -5,7 +5,7 @@ description: "Use when operating the installed Historic CLI as a user or AI assi
 
 # Historic — User Operations Skill
 
-Use this skill with the installed or compiled `historic` command. The user only needs the binary and this skill; the source repository and Go toolchain are not required.
+Use this skill with the installed or compiled `historic` command. Markdown is the source of truth; SQLite/FTS5 is a rebuildable read model/cache and the internal Git repository is local-only.
 
 ## What Historic is
 
@@ -49,17 +49,15 @@ historic sync-meta [<id>|<topic-path>] [--json]
 - With an ID or path, sync only that active topic.
 - Without a target, sync every active topic directly under `.historic/`; archived topics under `.historic/.database/` are excluded.
 - Batch processing is deterministic and uses continue-on-error. Remaining topics are processed, errors are collected, and the command exits non-zero if any topic fails.
-- `Files` and `Assets` are generated sections derived from the current filesystem.
-- Every successful sync fully rebuilds both sections; it does not append to or preserve stale links.
-- Managed Markdown with valid Historic frontmatter goes to `## Files`.
-- Plain Markdown, images, PDFs, office files, archives, binaries, and other non-managed files go to `## Assets`.
-- `_meta.md` is excluded from both sections.
-- Rename, move, delete, and classification changes are reflected automatically on the next sync.
-- Links are relative POSIX paths and sorted deterministically.
-- Sections other than `Files` and `Assets` are preserved.
-- Writes are atomic and the index is rebuilt after successful sync.
-- Reject absolute/traversal paths, missing or ambiguous topics, symlink topics/files, and invalid `_meta.md`.
-- A second sync without filesystem changes returns `updated: false`.
+- `_meta.yaml` is canonical topic metadata. `files` and `assets` are generated manifest arrays, not manual fields.
+- Every successful sync fully regenerates both arrays from the recursive topic filesystem; stale entries are removed.
+- Any Markdown with valid Historic frontmatter goes to `files`, regardless of filename, subfolder, or frontmatter ID.
+- Valid Markdown under `wos/` uses manifest type `task` and always carries its frontmatter status.
+- Plain/invalid Markdown, images, PDFs, office files, archives, binaries, and other non-managed files go to `assets`.
+- `_meta.yaml` is excluded; `_meta.md` is an asset.
+- Rename, move, delete, and classification changes are reflected automatically.
+- Links/paths are logical relative POSIX paths and sorted deterministically.
+- Writes are atomic and idempotent; other manual metadata fields are preserved.
 
 ## Search and TUI
 
@@ -78,37 +76,31 @@ historic sync-meta [<id>|<topic-path>] [--json]
 
 ## File and topic lifecycle
 
-Update one managed Markdown file:
+Update one managed Markdown member file:
 
 ```sh
 historic status <path> progress
+historic status <path> draft
 historic status <path> complete
 ```
 
-Update a whole topic's work status without moving its storage location:
+- Work status belongs only to managed member frontmatter.
+- Topics have no work-status field or topic status command.
+- `computed_status` is an SQLite aggregate/cache value only.
+- `close` and `open` change storage only and never change member status.
 
-```sh
-historic progress 00001
-historic pending 00001
-historic review 00001
-historic blocked 00001
-historic complete 00001
-historic failed 00001
-historic cancelled 00001
-```
-
-Move a topic between storage states explicitly:
+Move a topic between storage states:
 
 ```sh
 historic close 00001
 historic open 00001
+historic import 00001
 ```
 
 - `open` means `.historic/<id>-<slug>/`.
 - `closed` means `.historic/.database/<id>-<slug>/`.
-- Work status and storage state are independent: `complete + open` and `complete + closed` are both valid.
-- Close/open preserve frontmatter status and all topic bytes. They reject missing topics, duplicate IDs, destination conflicts, and symlink topic roots.
-- `historic import 00001` is a compatibility alias for opening a closed topic and preserves its work status.
+- Close/open preserve all topic bytes and member frontmatter statuses.
+- `import` is a compatibility alias for opening a closed topic.
 
 ## Schema compatibility and recovery
 
@@ -120,11 +112,13 @@ historic rebuild [--json]
 
 - `doctor` is read-only. It reports binary version, executable path, workspace format version, current and required index schema versions, Markdown validity, compatibility status, and an actionable recommendation.
 - Status values include `compatible`, `upgrade required`, `rebuild required`, `binary too old`, and `workspace invalid`.
-- `historic rebuild --json` is the unified recovery workflow: it processes open and closed topics, reconciles `## Files` and `## Assets`, preserves other metadata sections and work status, updates storage-aware SQLite/FTS5 records, and atomically replaces the validated index.
+- `historic rebuild --json` processes open and closed topics, recursively scans every topic file, regenerates `_meta.yaml.files` and `_meta.yaml.assets`, computes aggregate status in SQLite, and atomically replaces the validated index.
+- If `_meta.yaml` is missing from a valid topic folder, rebuild creates minimal metadata atomically using the folder ID and folder slug title, then regenerates the manifest.
+- Recovered metadata is rolled back if scan/index replacement fails; the previous index remains protected.
+- If an existing `_meta.yaml` is invalid, rebuild does not silently overwrite it.
 - If the index is missing or damaged, run `historic rebuild` to recreate it from Markdown.
 - If the index schema is older, run `historic upgrade`. Upgrade validates the workspace, builds a temporary schema, scans Markdown as source of truth, validates the new index, backs up the old index, and atomically replaces it.
-- Upgrade and rebuild use temporary files, cleanup, rollback safeguards, and a lock to prevent concurrent index replacement. Markdown is never modified.
-- A failed scan or invalid workspace leaves the existing index protected. Do not add SQLite columns manually or delete the index manually.
+- Upgrade and rebuild use temporary files, cleanup, rollback safeguards, and a lock to prevent concurrent index replacement.
 
 
 ## JSON output
