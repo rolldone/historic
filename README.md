@@ -49,15 +49,14 @@ historic status .historic/00001-historic-cli/wos/20-advanced-query-filters.md re
 
 Canonical topic metadata is stored in `_meta.yaml`. It contains identity, manual topic metadata, and generated `files`/`assets` manifests. Every valid Historic Markdown file anywhere under the topic is a member file; files under `wos/` use type `task`. `_meta.yaml` is excluded and `_meta.md` is an asset.
 
-Synchronize manually created topic files into `_meta.md`:
+Metadata reconciliation and index recovery use the unified rebuild workflow:
 
 ```sh
-historic sync-meta 00014 --json
-historic sync-meta .historic/00014-admin-dashboard --json
-historic sync-meta --json
+historic rebuild 00014 --json
+historic rebuild --json
 ```
 
-`historic sync-meta` fully regenerates `_meta.yaml.files` and `_meta.yaml.assets` from the recursive topic filesystem. Valid Historic Markdown goes to `files` with status; plain/invalid Markdown and other non-managed files go to `assets`. It excludes `_meta.yaml`, treats `_meta.md` as an asset, removes stale entries, preserves manual metadata, and writes atomically.
+`historic rebuild` fully regenerates `_meta.yaml.files` and `_meta.yaml.assets` from the recursive topic filesystem. Valid Historic Markdown goes to `files` with status; plain/invalid Markdown and other non-managed files go to `assets`. It excludes `_meta.yaml`, treats `_meta.md` as an asset, removes stale entries, preserves manual metadata, updates both open and closed topics, and writes atomically. Run it after manually creating, moving, renaming, or deleting topic files.
 
 Interactive read-only search:
 
@@ -95,8 +94,6 @@ historic find "oauth" --closed --json
 ```
 
 `--active` and `--archived` are no longer supported. Human search output marks results as `[OPEN]` or `[CLOSED]`; JSON results include `status`, `storage`, and the actual `path`.
-
-Synchronize manually created topic files into `_meta.md`:
 
 FTS results are ranked by relevance with ascending path as a deterministic tie-breaker. Human output includes a contextual snippet with yellow ANSI emphasis (`ESC[1;33m...ESC[0m`) around matched terms; JSON output contains plain data without terminal highlight codes. Empty results are successful JSON responses with `ok: true`. Query terms are treated as literal terms, so punctuation and FTS operators do not execute shell commands or alter the source Markdown.
 

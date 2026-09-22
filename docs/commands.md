@@ -38,30 +38,6 @@ historic status <path> <status> [--json]
 
 This command is for any managed Markdown file with valid Historic frontmatter. It updates that member file's `status` and `updated`, then rebuilds the index. The member frontmatter ID may differ from the parent topic ID. It rejects regular assets, Markdown without valid Historic frontmatter, unsafe paths, and symlink targets. Valid statuses include `create`, `draft`, `pending`, `progress`, `review`, `blocked`, `complete`, `failed`, and `cancelled`.
 
-## Synchronize metadata
-
-```sh
-# One active topic
-historic sync-meta 00014
-historic sync-meta .historic/00014-topic
-
-# Every active topic in the workdir
-historic sync-meta
-historic sync-meta --json
-```
-
-`sync-meta` fully regenerates `_meta.yaml.files` and `_meta.yaml.assets` from the recursive topic filesystem:
-
-- valid Historic Markdown anywhere under the topic goes to `files` with its frontmatter status;
-- valid Markdown under `wos/` uses manifest type `task`;
-- plain/invalid Markdown and other non-managed files go to `assets`;
-- `_meta.yaml` is excluded and `_meta.md` is an asset;
-- rename, move, delete, and classification changes are reflected automatically;
-- generated arrays are sorted deterministically and stale entries are removed;
-- manual topic metadata fields are preserved and writes are atomic.
-
-Targeted mode processes one active topic. No-target mode processes all active topics directly under `.historic/`, excluding `.historic/.database/`. Batch mode continues after per-topic errors, reports them, and exits non-zero if any topic fails. A second run without filesystem changes reports `updated: false`.
-
 ## One-shot search
 
 ```sh

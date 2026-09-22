@@ -40,25 +40,6 @@ historic show 00001
 
 Use `historic add` to create notes or Work Orders. When multiple topics are active, provide an explicit `--id` for commands that need to select a topic.
 
-## Sync metadata
-
-```sh
-historic sync-meta [<id>|<topic-path>] [--json]
-```
-
-- With an ID or path, sync only that active topic.
-- Without a target, sync every active topic directly under `.historic/`; archived topics under `.historic/.database/` are excluded.
-- Batch processing is deterministic and uses continue-on-error. Remaining topics are processed, errors are collected, and the command exits non-zero if any topic fails.
-- `_meta.yaml` is canonical topic metadata. `files` and `assets` are generated manifest arrays, not manual fields.
-- Every successful sync fully regenerates both arrays from the recursive topic filesystem; stale entries are removed.
-- Any Markdown with valid Historic frontmatter goes to `files`, regardless of filename, subfolder, or frontmatter ID.
-- Valid Markdown under `wos/` uses manifest type `task` and always carries its frontmatter status.
-- Plain/invalid Markdown, images, PDFs, office files, archives, binaries, and other non-managed files go to `assets`.
-- `_meta.yaml` is excluded; `_meta.md` is an asset.
-- Rename, move, delete, and classification changes are reflected automatically.
-- Links/paths are logical relative POSIX paths and sorted deterministically.
-- Writes are atomic and idempotent; other manual metadata fields are preserved.
-
 ## Search and TUI
 
 - `historic find "query" [--json]` is the one-shot interface for AI, scripts, and automation.

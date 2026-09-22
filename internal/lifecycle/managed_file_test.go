@@ -34,7 +34,7 @@ func TestSyncMetaClassifiesWorkOrderWithDifferentIDAndPreservesStatus(t *testing
 	if err := markdown.WriteFile(path, workOrder); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := SyncMeta(workspace, "00005"); err != nil {
+	if _, err := RebuildMetadata(workspace); err != nil {
 		t.Fatal(err)
 	}
 	metadata, err := markdown.ReadTopicMetadata(topic)

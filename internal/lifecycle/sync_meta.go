@@ -27,12 +27,8 @@ type SyncChange struct {
 	Updated bool
 }
 
-// SyncMeta scans a topic and reconciles the filesystem-derived Files and
-// Assets manifest in canonical YAML metadata.
-func SyncMeta(workspace config.Workspace, input string) (SyncChange, error) {
-	return syncMetaTopic(workspace, input, true)
-}
-
+// syncMetaTopic reconciles generated canonical metadata during rebuild and
+// destructive file operations. It is intentionally not a user-facing command.
 func syncMetaTopic(workspace config.Workspace, input string, rebuildIndex bool) (SyncChange, error) {
 	topic, id, err := resolveSyncTopic(workspace, input)
 	if err != nil {
@@ -166,46 +162,6 @@ func manifestAssetType(path string) string {
 		return "file"
 	}
 	return strings.TrimPrefix(ext, ".")
-}
-
-func syncMetaSection(body, heading string, paths []string) string {
-	lines := strings.SplitAfter(body, "\n")
-	start := -1
-	for index, line := range lines {
-		if strings.TrimSpace(line) == heading {
-			start = index
-			break
-		}
-	}
-	generated := heading + "\n\n"
-	for _, path := range paths {
-		generated += metaLink(path)
-	}
-	generated += "\n"
-	if start < 0 {
-		insert := len(lines)
-		for index, line := range lines {
-			if strings.TrimSpace(line) == "## Progress" {
-				insert = index
-				break
-			}
-		}
-		lines = append(lines, "")
-		copy(lines[insert+1:], lines[insert:])
-		lines[insert] = generated
-		return strings.Join(lines, "")
-	}
-	end := start + 1
-	for end < len(lines) && !strings.HasPrefix(strings.TrimSpace(lines[end]), "## ") {
-		end++
-	}
-	lines = append(lines[:start], append([]string{generated}, lines[end:]...)...)
-	return strings.Join(lines, "")
-}
-
-func metaLink(path string) string {
-	path = filepath.ToSlash(path)
-	return fmt.Sprintf("- [%s](./%s)\n", filepath.Base(path), path)
 }
 
 func resolveSyncTopic(workspace config.Workspace, input string) (string, domain.ID, error) {
