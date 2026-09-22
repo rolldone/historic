@@ -1,0 +1,78 @@
+id: "1790078640415"
+title: search read model v2
+created: "2026-09-21"
+updated: "2026-09-22"
+files:
+    - id: 01a0c844-83fb-76a5-a406-af5e09890ee9
+      path: spec.md
+      type: spec
+      status: complete
+    - id: 01a0c844-83fb-7f12-8a20-84fab90cf04d
+      path: wos/01-two-table-search-read-model.md
+      type: task
+      status: complete
+    - id: 01a0c844-83fb-7718-a4a1-6287aa508067
+      path: wos/02-sqlite-topics-files-schema.md
+      type: task
+      status: complete
+    - id: 01a0c844-83fb-794b-910f-a42341613784
+      path: wos/03-manual-description-frontmatter.md
+      type: task
+      status: complete
+    - id: 01a0c844-83fb-7758-ae86-c294aac4be13
+      path: wos/04-topic-identity-logical-paths.md
+      type: task
+      status: complete
+    - id: 01a0c844-83fb-78a7-90ee-15d511972c50
+      path: wos/05-copy-based-open.md
+      type: task
+      status: complete
+    - id: 01a0c844-83fb-76b4-a6d6-1a6425c8a4ff
+      path: wos/06-differential-close-archive.md
+      type: task
+      status: complete
+    - id: 01a0c844-83fb-7574-b582-d607677364d5
+      path: wos/07-unified-rebuild-read-model.md
+      type: task
+      status: complete
+    - id: 01a0c844-83fb-737b-91ba-4de4e6b9155f
+      path: wos/08-aggregate-topic-file-queries.md
+      type: task
+      status: complete
+    - id: 01a0c844-83fb-7095-b169-1894f80e72b1
+      path: wos/09-fts-search-ai-output.md
+      type: task
+      status: complete
+    - id: 01a0c844-83fb-7172-aee3-4fcd48a7a008
+      path: wos/10-delete-purge-lifecycle.md
+      type: task
+      status: complete
+    - id: 01a0c844-83fb-7e87-942c-76d8b819f150
+      path: wos/11-yaml-metadata-legacy-migration.md
+      type: task
+      status: complete
+    - id: 01a0c844-83fb-74e7-b007-819c5810fa87
+      path: wos/12-topic-identity-archive-normalization.md
+      type: task
+      status: complete
+    - id: 01a0c844-83fb-7705-b22d-671cd27c28cc
+      path: wos/13-copy-open-differential-close.md
+      type: task
+      status: complete
+    - id: 01a0c844-83fb-7fae-a530-126b5aee2d3b
+      path: wos/14-unified-rebuild-read-model.md
+      type: task
+      status: complete
+    - id: 01a0c844-83fb-74bd-a540-c59197921a33
+      path: wos/15-aggregate-query-api.md
+      type: task
+      status: complete
+    - id: 01a0c844-83fb-7e60-856b-69bf3f39a47b
+      path: wos/16-fts-search-filters-ai-json.md
+      type: task
+      status: complete
+    - id: 01a0c844-83fb-78f6-812a-b922a47d80ca
+      path: wos/17-delete-purge-lifecycle-safety.md
+      type: task
+      status: complete
+assets: []

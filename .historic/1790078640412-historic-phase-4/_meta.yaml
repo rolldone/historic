@@ -1,0 +1,21 @@
+id: "1790078640412"
+title: historic phase 4
+created: "2026-09-19"
+files:
+    - id: 01a0c844-83f7-7b32-b76b-bdb50a9dcfc7
+      path: note-dogfooding-findings.md
+      type: note
+      status: progress
+    - id: 01a0c844-83ef-79b5-8f1d-7bdc4249b0b2
+      path: note-dogfooding.md
+      type: note
+      status: create
+    - id: 01a0c844-83ef-7ffb-a82f-b01493a2f614
+      path: spec.md
+      type: spec
+      status: create
+    - id: 01a0c844-83ef-7aa3-8ff1-c24af8943504
+      path: wos/01-fts-search.md
+      type: task
+      status: create
+assets: []

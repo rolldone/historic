@@ -1,0 +1,118 @@
+id: "1790078640411"
+title: historic cli
+created: "2026-09-18"
+updated: "2026-09-19"
+files:
+    - id: 01a0c844-83f3-7803-8087-544ed284ce3c
+      path: spec-interactive-search-tui.md
+      type: spec
+      status: draft
+    - id: 01a0c844-83f3-730a-b005-c4496cdb93c6
+      path: spec.md
+      type: spec
+      status: progress
+    - id: 01a0c844-83f3-79b4-83f1-7f4d782c70cb
+      path: wos/01-project-bootstrap.md
+      type: task
+      status: complete
+    - id: 01a0c844-83f3-726f-b0a9-bc1f1233835b
+      path: wos/02-domain-model.md
+      type: task
+      status: complete
+    - id: 01a0c844-83f3-7c1b-b190-da8178e0ef16
+      path: wos/03-markdown-frontmatter.md
+      type: task
+      status: complete
+    - id: 01a0c844-83f3-7e1e-b560-63bb314c26be
+      path: wos/04-init-command.md
+      type: task
+      status: progress
+    - id: 01a0c844-83f3-7cfc-b18c-e76379e06ec1
+      path: wos/05-create-command.md
+      type: task
+      status: create
+    - id: 01a0c844-83f3-71ca-b8ce-b8272c0d5f88
+      path: wos/06-add-command.md
+      type: task
+      status: create
+    - id: 01a0c844-83f3-7883-ad9b-b5070b9f22f3
+      path: wos/07-list-and-show.md
+      type: task
+      status: create
+    - id: 01a0c844-83f3-7b83-a86f-0aeb31987948
+      path: wos/08-find-command.md
+      type: task
+      status: create
+    - id: 01a0c844-83f3-7fcc-9cfc-91ba615fb1fb
+      path: wos/09-rebuild-and-index.md
+      type: task
+      status: create
+    - id: 01a0c844-83f3-7920-ada9-3c99f35c63c7
+      path: wos/10-mvp-quality-gate.md
+      type: task
+      status: complete
+    - id: 01a0c844-83f3-7237-a2d0-2fd80dc599d6
+      path: wos/11-lifecycle-commands.md
+      type: task
+      status: create
+    - id: 01a0c844-83f3-7da3-99f4-d6872cbe8028
+      path: wos/12-archive-complete.md
+      type: task
+      status: create
+    - id: 01a0c844-83f3-7d57-8750-1c32ac47b357
+      path: wos/13-import-archived-topic.md
+      type: task
+      status: complete
+    - id: 01a0c844-83f3-7845-ac51-c3c04d01b1f3
+      path: wos/14-lifecycle-recovery.md
+      type: task
+      status: complete
+    - id: 01a0c844-83f3-70bf-9f85-228eb3894639
+      path: wos/15-internal-git-repository.md
+      type: task
+      status: complete
+    - id: 01a0c844-83f3-7cf5-92b9-d2bbbf45b89e
+      path: wos/16-save-command.md
+      type: task
+      status: complete
+    - id: 01a0c844-83f3-70a9-98b4-17d6967d06e5
+      path: wos/17-log-and-diff.md
+      type: task
+      status: complete
+    - id: 01a0c844-83f3-7403-9f14-d2bd1561a412
+      path: wos/18-restore-and-phase-3-gate.md
+      type: task
+      status: complete
+    - id: 01a0c844-83f3-7264-babb-c8e6aab6d03d
+      path: wos/19-fts5-index.md
+      type: task
+      status: complete
+    - id: 01a0c844-83f3-7dd9-a0d6-0f09095f5e37
+      path: wos/20-advanced-query-filters.md
+      type: task
+      status: complete
+    - id: 01a0c844-83f3-788d-8133-7f3e1e81564c
+      path: wos/21-ranking-snippet-highlight.md
+      type: task
+      status: complete
+    - id: 01a0c844-83f3-7611-9ba2-ba17ca45233f
+      path: wos/22-search-quality-gate.md
+      type: task
+      status: complete
+    - id: 01a0c844-83f3-7589-9af3-b2d86ac1dca3
+      path: wos/23-sync-meta.md
+      type: task
+      status: progress
+    - id: 01a0c844-83f3-7659-a790-afc64338f9c5
+      path: wos/24-interactive-search-tui.md
+      type: task
+      status: progress
+    - id: 01a0c844-83f3-7e15-98f6-145b78479c72
+      path: wos/25-batch-sync-meta.md
+      type: task
+      status: complete
+    - id: 01a0c844-83f3-7700-bc98-c4a197f2b64f
+      path: wos/26-reconcile-sync-meta.md
+      type: task
+      status: complete
+assets: []

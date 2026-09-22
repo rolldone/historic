@@ -1,9 +1,10 @@
-id: "00003"
+id: "1790078640413"
 title: topic storage open close
 created: "2026-09-21"
 updated: "2026-09-21"
 files:
-    - path: wos/01-separate-work-status-storage-state.md
+    - id: 01a0c844-83f8-7cd3-9893-217a57347209
+      path: wos/01-separate-work-status-storage-state.md
       type: task
       status: complete
 assets: []

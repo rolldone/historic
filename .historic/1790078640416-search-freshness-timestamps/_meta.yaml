@@ -1,0 +1,23 @@
+id: "1790078640416"
+title: Search Freshness and Timestamp Ordering
+description: Freshness read model dan deterministic timestamp ordering untuk search AI.
+created: "2026-09-22"
+updated: "2026-09-22"
+tags:
+    - spec
+    - search
+    - timestamps
+    - freshness
+    - sorting
+    - rebuild
+    - ai
+files:
+    - id: 01a0c844-83fe-78a5-899a-af67022f2994
+      path: spec.md
+      type: spec
+      status: draft
+    - id: 01a0c88c-8acc-7305-b71c-5588d2bd95b4
+      path: wos/01-file-freshness-search-ordering.md
+      type: task
+      status: planned
+assets: []

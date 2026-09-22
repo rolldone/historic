@@ -1,0 +1,18 @@
+id: "1790078640414"
+title: workspace schema calibration
+created: "2026-09-21"
+updated: "2026-09-21"
+files:
+    - id: 01a0c844-83f9-7383-9b1c-7f5dd6a16b1b
+      path: wos/01-schema-calibration-upgrade.md
+      type: task
+      status: complete
+    - id: 01a0c844-83f9-717e-ac03-3bf95a81c5bc
+      path: wos/02-unified-rebuild-metadata.md
+      type: task
+      status: complete
+    - id: 01a0c844-83f9-7f85-8dc3-de4230b15c01
+      path: wos/03-automatic-slugging-for-add-filenames.md
+      type: task
+      status: complete
+assets: []

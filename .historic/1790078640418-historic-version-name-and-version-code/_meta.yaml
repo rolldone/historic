@@ -1,0 +1,13 @@
+id: "1790078640418"
+title: Historic Version Name and Version Code
+created: "2026-09-22"
+files:
+    - id: 01a0c851-cf69-7a46-b30c-17f5705eb405
+      path: spec.md
+      type: spec
+      status: complete
+    - id: 01a0c851-cfba-7cd8-90c5-a32969beeac0
+      path: wos/01-version-metadata-compatibility-and-rebuild.md
+      type: task
+      status: complete
+assets: []
