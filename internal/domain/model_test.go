@@ -64,7 +64,7 @@ func TestStatusParsingIsCaseSensitive(t *testing.T) {
 }
 
 func TestStatusOpenAndCloseSets(t *testing.T) {
-	for _, status := range []Status{StatusCreate, StatusPending, StatusProgress, StatusReview, StatusBlocked} {
+	for _, status := range []Status{StatusCreate, StatusDraft, StatusPending, StatusProgress, StatusReview, StatusBlocked} {
 		if !status.IsOpen() || status.IsClose() {
 			t.Errorf("%q should be open only", status)
 		}
@@ -77,7 +77,7 @@ func TestStatusOpenAndCloseSets(t *testing.T) {
 }
 
 func TestTransitionMatrix(t *testing.T) {
-	valid := []Status{StatusCreate, StatusPending, StatusProgress, StatusReview, StatusBlocked, StatusComplete, StatusFailed, StatusCancelled, StatusArchived}
+	valid := []Status{StatusCreate, StatusDraft, StatusPending, StatusProgress, StatusReview, StatusBlocked, StatusComplete, StatusFailed, StatusCancelled, StatusArchived}
 	for _, current := range valid {
 		for _, next := range valid {
 			want := current == next || !current.IsClose()

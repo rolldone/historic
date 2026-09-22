@@ -11,6 +11,7 @@ import (
 
 const (
 	StatusCreate    Status = "create"
+	StatusDraft     Status = "draft"
 	StatusPending   Status = "pending"
 	StatusProgress  Status = "progress"
 	StatusReview    Status = "review"
@@ -59,12 +60,12 @@ func ParseStatus(value string) (Status, error) {
 }
 
 var validStatuses = map[Status]struct{}{
-	StatusCreate: {}, StatusPending: {}, StatusProgress: {}, StatusReview: {}, StatusBlocked: {},
+	StatusCreate: {}, StatusDraft: {}, StatusPending: {}, StatusProgress: {}, StatusReview: {}, StatusBlocked: {},
 	StatusComplete: {}, StatusFailed: {}, StatusCancelled: {}, StatusArchived: {},
 }
 
 var openStatuses = map[Status]struct{}{
-	StatusCreate: {}, StatusPending: {}, StatusProgress: {}, StatusReview: {}, StatusBlocked: {},
+	StatusCreate: {}, StatusDraft: {}, StatusPending: {}, StatusProgress: {}, StatusReview: {}, StatusBlocked: {},
 }
 
 var closeStatuses = map[Status]struct{}{
