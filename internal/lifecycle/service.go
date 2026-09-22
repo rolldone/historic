@@ -5,6 +5,7 @@ import (
 
 	"historic/internal/config"
 	"historic/internal/domain"
+	"historic/internal/identifier"
 )
 
 // Change describes one successful lifecycle status change.
@@ -21,12 +22,13 @@ type Change struct {
 
 // Service updates topic metadata and rebuilds the source-derived index.
 type Service struct {
-	Workspace config.Workspace
+	Workspace       config.Workspace
+	FileIDGenerator identifier.Generator
 }
 
 // NewService creates a lifecycle service for a workspace.
 func NewService(workspace config.Workspace) Service {
-	return Service{Workspace: workspace}
+	return Service{Workspace: workspace, FileIDGenerator: identifier.Default}
 }
 
 // ChangeStatus is retained for API compatibility. Topic work status is not

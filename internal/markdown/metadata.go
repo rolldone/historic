@@ -125,6 +125,75 @@ func validateManifestFiles(files []ManifestFile) error {
 	return nil
 }
 
+// ParseTopicMetadataLenient parses _meta.yaml without requiring valid file IDs.
+// Used by the FileID migration command to read legacy metadata.
+func ParseTopicMetadataLenient(path string, input []byte) (TopicMetadata, error) {
+	if !utf8Valid(input) {
+		return TopicMetadata{}, documentError(path, "metadata", errors.New("file is not valid UTF-8"))
+	}
+	var metadata TopicMetadata
+	decoder := yaml.NewDecoder(bytes.NewReader(input))
+	decoder.KnownFields(false)
+	if err := decoder.Decode(&metadata); err != nil {
+		return TopicMetadata{}, documentError(path, "metadata", fmt.Errorf("%w: %v", ErrInvalidFrontmatter, err))
+	}
+	if err := ValidateTopicMetadataLenient(metadata); err != nil {
+		return TopicMetadata{}, documentError(path, "metadata", err)
+	}
+	return metadata, nil
+}
+
+// ValidateTopicMetadataLenient validates canonical YAML fields without requiring
+// valid file IDs. File path, type, and status are still validated.
+func ValidateTopicMetadataLenient(metadata TopicMetadata) error {
+	if !metadata.ID.Valid() {
+		return fmt.Errorf("%w: field %q must be a five-digit ID", ErrInvalidFrontmatter, "id")
+	}
+	if strings.TrimSpace(metadata.Title) == "" {
+		return fmt.Errorf("%w: field %q is required", ErrInvalidFrontmatter, "title")
+	}
+	if _, err := time.Parse(dateLayout, metadata.Created); err != nil {
+		return fmt.Errorf("%w: field %q must use YYYY-MM-DD", ErrInvalidFrontmatter, "created")
+	}
+	if metadata.Updated != "" {
+		if _, err := time.Parse(dateLayout, metadata.Updated); err != nil {
+			return fmt.Errorf("%w: field %q must use YYYY-MM-DD", ErrInvalidFrontmatter, "updated")
+		}
+	}
+	for index, related := range metadata.Related {
+		if !validRelatedReference(string(related)) {
+			return fmt.Errorf("%w: field %q item %d must be a five-digit ID or relative path", ErrInvalidFrontmatter, "related", index)
+		}
+	}
+	if err := validateManifestFilesLenient(metadata.Files); err != nil {
+		return fmt.Errorf("%w: %v", ErrInvalidFrontmatter, err)
+	}
+	if err := validateManifestAssets(metadata.Assets); err != nil {
+		return fmt.Errorf("%w: %v", ErrInvalidFrontmatter, err)
+	}
+	return nil
+}
+
+func validateManifestFilesLenient(files []ManifestFile) error {
+	seenPaths := make(map[string]struct{}, len(files))
+	for index, file := range files {
+		if err := validateManifestPath(file.Path); err != nil {
+			return fmt.Errorf("field %q item %d: %v", "files", index, err)
+		}
+		if strings.TrimSpace(file.Type) == "" {
+			return fmt.Errorf("field %q item %d type is required", "files", index)
+		}
+		if !file.Status.IsValid() {
+			return fmt.Errorf("field %q item %d has invalid status %q", "files", index, file.Status)
+		}
+		if _, exists := seenPaths[file.Path]; exists {
+			return fmt.Errorf("field %q contains duplicate path %q", "files", file.Path)
+		}
+		seenPaths[file.Path] = struct{}{}
+	}
+	return nil
+}
+
 func validateManifestAssets(assets []ManifestAsset) error {
 	seen := make(map[string]struct{}, len(assets))
 	for index, asset := range assets {

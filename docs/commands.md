@@ -14,6 +14,16 @@ historic show <id> [--closed] [--json]
 
 Topic IDs use five digits and topic folders use `<id>-<slug>`.
 
+Managed file IDs use lowercase canonical UUIDv7 values. Legacy manifests can be migrated with:
+
+```sh
+historic migrate-file-ids --dry-run
+historic migrate-file-ids --json --dry-run
+historic migrate-file-ids [--id 00014] [--open|--closed]
+```
+
+The migration changes only `_meta.yaml` `files[].id` values, preserves Markdown bytes and existing UUIDv7 IDs, and is atomic and idempotent. `--force` is rejected.
+
 ## Work status and storage state
 
 Work status belongs only to managed member Markdown files. Topics have no work-status field or topic lifecycle status command.

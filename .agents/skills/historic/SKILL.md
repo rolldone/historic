@@ -89,7 +89,10 @@ historic import 00001
 historic doctor [--json]
 historic upgrade [--json]
 historic rebuild [--json]
+historic migrate-file-ids [--dry-run] [--json] [--id <topic-id>] [--open|--closed]
 ```
+
+`migrate-file-ids` assigns UUIDv7 IDs to legacy `_meta.yaml.files[]` entries without changing Markdown, topic IDs, paths, types, statuses, or assets. It supports dry-run, deterministic JSON mappings, atomic rollback, and idempotent reruns. `--force` is not supported.
 
 - `doctor` is read-only. It reports binary version, executable path, workspace format version, current and required index schema versions, Markdown validity, compatibility status, and an actionable recommendation.
 - Status values include `compatible`, `upgrade required`, `rebuild required`, `binary too old`, and `workspace invalid`.
