@@ -1,11 +1,38 @@
 ---
-id: 00005
+id: "00005"
 title: Historic Search Read Model and Workspace Lifecycle SPEC
-status: draft
-created: 2026-09-21
-updated: 2026-09-21
-tags: [spec, search, sqlite, fts5, aggregate, ai, lifecycle, open, close]
-related: [./wos/01-two-table-search-read-model.md]
+description: ""
+status: complete
+created: "2026-09-21"
+updated: "2026-09-22"
+tags:
+    - spec
+    - search
+    - sqlite
+    - fts5
+    - aggregate
+    - ai
+    - lifecycle
+    - open
+    - close
+related:
+    - ./wos/01-two-table-search-read-model.md
+    - ./wos/02-sqlite-topics-files-schema.md
+    - ./wos/03-manual-description-frontmatter.md
+    - ./wos/04-topic-identity-logical-paths.md
+    - ./wos/05-copy-based-open.md
+    - ./wos/06-differential-close-archive.md
+    - ./wos/07-unified-rebuild-read-model.md
+    - ./wos/08-aggregate-topic-file-queries.md
+    - ./wos/09-fts-search-ai-output.md
+    - ./wos/10-delete-purge-lifecycle.md
+    - ./wos/11-yaml-metadata-legacy-migration.md
+    - ./wos/12-topic-identity-archive-normalization.md
+    - ./wos/13-copy-open-differential-close.md
+    - ./wos/14-unified-rebuild-read-model.md
+    - ./wos/15-aggregate-query-api.md
+    - ./wos/16-fts-search-filters-ai-json.md
+    - ./wos/17-delete-purge-lifecycle-safety.md
 ---
 # Historic Search Read Model and Workspace Lifecycle SPEC
 
@@ -130,7 +157,7 @@ Satu logical file tidak boleh menjadi duplicate hanya karena memiliki current co
 - `_meta.yaml` adalah metadata topic canonical tanpa status pekerjaan; status hanya boleh berasal dari frontmatter managed member files.
 - `_meta.md` bukan metadata canonical dan tidak dimigrasikan; ia diperlakukan sebagai asset Markdown.
 - File dan frontmatter Markdown managed adalah source of truth untuk keberadaan, isi, identitas dokumen, dan status pekerjaan.
-- `status: draft` adalah status Historic yang valid untuk topic maupun managed file dan termasuk status active/unresolved.
+- `status: draft` adalah status Historic yang valid hanya untuk managed member file dan termasuk status active/unresolved; topic tidak memiliki status.
 - `related` pada frontmatter menerima ID Historic lima digit atau logical relative path Markdown seperti `../spec.md` dan `./wos/01-task.md`; path absolut dan traversal unsafe ditolak.
 - Metadata manifest `files` dan `assets` di `_meta.yaml` adalah hasil generate filesystem/rebuild yang terlihat oleh user, bukan field manual.
 - SQLite menyalin manifest dan metadata file sebagai read model/cache; SQLite dan FTS tidak boleh dianggap sebagai sumber status atau isi utama.

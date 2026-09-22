@@ -21,7 +21,7 @@ func TestSyncMetaBatchProcessesActiveTopicsDeterministically(t *testing.T) {
 			t.Fatal(err)
 		}
 		id, _ := domain.ParseID(folder[:5])
-		metadata := markdown.TopicMetadata{ID: id, Title: folder, Status: domain.StatusProgress, Created: "2026-09-19"}
+		metadata := markdown.TopicMetadata{ID: id, Title: folder, Created: "2026-09-19"}
 		if err := markdown.WriteTopicMetadata(filepath.Join(topic, markdown.MetaFilename), metadata); err != nil {
 			t.Fatal(err)
 		}
@@ -30,7 +30,7 @@ func TestSyncMetaBatchProcessesActiveTopicsDeterministically(t *testing.T) {
 		}
 	}
 	archived := filepath.Join(workspace.Database, "00003-archived")
-	if err := markdown.WriteTopicMetadata(filepath.Join(archived, markdown.MetaFilename), markdown.TopicMetadata{ID: "00003", Title: "Archived", Status: domain.StatusComplete, Created: "2026-09-19"}); err != nil {
+	if err := markdown.WriteTopicMetadata(filepath.Join(archived, markdown.MetaFilename), markdown.TopicMetadata{ID: "00003", Title: "Archived", Created: "2026-09-19"}); err != nil {
 		t.Fatal(err)
 	}
 	change := SyncMetaBatch(workspace)
@@ -63,7 +63,7 @@ func TestSyncMetaBatchContinuesAfterTopicError(t *testing.T) {
 		}
 		id, _ := domain.ParseID(folder[:5])
 		if folder == "00002-good" {
-			metadata := markdown.TopicMetadata{ID: id, Title: folder, Status: domain.StatusProgress, Created: "2026-09-19"}
+			metadata := markdown.TopicMetadata{ID: id, Title: folder, Created: "2026-09-19"}
 			if err := markdown.WriteTopicMetadata(filepath.Join(topic, markdown.MetaFilename), metadata); err != nil {
 				t.Fatal(err)
 			}

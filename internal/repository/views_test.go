@@ -21,7 +21,7 @@ func TestListTopicsDeduplicatesOpenAndClosedSlugCopies(t *testing.T) {
 		if err := os.MkdirAll(topic, 0o755); err != nil {
 			t.Fatal(err)
 		}
-		metadata := markdown.TopicMetadata{ID: "00020", Title: folder, Status: domain.StatusProgress, Created: "2026-09-21"}
+		metadata := markdown.TopicMetadata{ID: "00020", Title: folder, Created: "2026-09-21"}
 		if err := markdown.WriteTopicMetadata(filepath.Join(topic, markdown.MetaFilename), metadata); err != nil {
 			t.Fatal(err)
 		}

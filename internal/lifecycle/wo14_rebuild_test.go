@@ -27,8 +27,8 @@ func TestWO14UnifiedRebuildSmokeUsesCanonicalMetadataAndReadModel(t *testing.T) 
 			t.Fatal(err)
 		}
 	}
-	writeWO14Metadata(t, openTopic, markdown.TopicMetadata{ID: "00001", Title: "Open Topic", Status: domain.StatusComplete, Created: "2026-09-21", Description: "open description"})
-	writeWO14Metadata(t, closedTopic, markdown.TopicMetadata{ID: "00002", Title: "Closed Topic", Status: domain.StatusProgress, Created: "2026-09-21", Description: "closed description"})
+	writeWO14Metadata(t, openTopic, markdown.TopicMetadata{ID: "00001", Title: "Open Topic", Created: "2026-09-21", Description: "open description"})
+	writeWO14Metadata(t, closedTopic, markdown.TopicMetadata{ID: "00002", Title: "Closed Topic", Created: "2026-09-21", Description: "closed description"})
 	writeWO14File(t, filepath.Join(openTopic, "wos", "01-active.md"), domain.Frontmatter{ID: "00001", Title: "Active task", Description: "active description", Status: domain.StatusProgress, Created: "2026-09-21"}, "active body")
 	writeWO14File(t, filepath.Join(openTopic, "wos", "02-done.md"), domain.Frontmatter{ID: "00001", Title: "Done task", Status: domain.StatusComplete, Created: "2026-09-21"}, "done body")
 	writeWO14File(t, filepath.Join(closedTopic, "wos", "01-done.md"), domain.Frontmatter{ID: "00002", Title: "Closed task", Status: domain.StatusComplete, Created: "2026-09-21"}, "closed body")

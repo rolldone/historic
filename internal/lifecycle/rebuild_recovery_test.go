@@ -89,7 +89,7 @@ func TestRebuildRecoveryRollbackPreservesMissingMetadataAndIndex(t *testing.T) {
 		t.Fatal(err)
 	}
 	validTopic := writeRecoveryTopic(t, workspace.Histories, "00001-valid", map[string]markdown.Document{"note.md": valid})
-	if err := markdown.WriteTopicMetadata(filepath.Join(validTopic, markdown.MetaFilename), markdown.TopicMetadata{ID: "00001", Title: "Valid", Status: domain.StatusProgress, Created: "2026-09-20"}); err != nil {
+	if err := markdown.WriteTopicMetadata(filepath.Join(validTopic, markdown.MetaFilename), markdown.TopicMetadata{ID: "00001", Title: "Valid", Created: "2026-09-20"}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := RebuildMetadata(workspace); err != nil {

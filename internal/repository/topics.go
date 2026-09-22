@@ -111,7 +111,7 @@ func (store TopicStore) AddEntry(topicID domain.ID, name string, force bool) (do
 	if err := markdown.WriteFile(entryPath, document); err != nil {
 		return domain.Entry{}, fmt.Errorf("write entry: %w", err)
 	}
-	return domain.Entry{ID: topicID, Title: metadata.Title, Description: metadata.Description, Status: metadata.Status, Created: parseDate(created), Path: entryPath, Filename: relativeName, Content: document.Body}, nil
+	return domain.Entry{ID: topicID, Title: metadata.Title, Description: metadata.Description, Created: parseDate(created), Path: entryPath, Filename: relativeName, Content: document.Body}, nil
 }
 
 func (store TopicStore) activeTopicPath(id domain.ID) (string, error) {

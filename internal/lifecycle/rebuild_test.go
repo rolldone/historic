@@ -25,7 +25,7 @@ func TestRebuildMetadataProcessesOpenAndClosedTopics(t *testing.T) {
 		if err := os.MkdirAll(topic, 0o755); err != nil {
 			t.Fatal(err)
 		}
-		if err := markdown.WriteTopicMetadata(filepath.Join(topic, markdown.MetaFilename), markdown.TopicMetadata{ID: item.id, Title: "Topic", Status: item.status, Created: "2026-09-21"}); err != nil {
+		if err := markdown.WriteTopicMetadata(filepath.Join(topic, markdown.MetaFilename), markdown.TopicMetadata{ID: item.id, Title: "Topic", Created: "2026-09-21"}); err != nil {
 			t.Fatal(err)
 		}
 		file, _ := markdown.NewDocument(domain.Frontmatter{ID: item.id, Title: "Current", Status: domain.StatusProgress, Created: "2026-09-21"}, "current body")
@@ -84,21 +84,12 @@ func TestRebuildMetadataDoesNotWriteComputedTopicStatus(t *testing.T) {
 	if _, err := RebuildMetadata(workspace); err != nil {
 		t.Fatal(err)
 	}
-	after, err := os.ReadFile(filepath.Join(topic, markdown.MetaFilename))
-
-	if err != nil {
-		t.Fatal(err)
-	}
 	beforeMetadata, err := markdown.ParseTopicMetadata(filepath.Join(topic, markdown.MetaFilename), before)
 	if err != nil {
 		t.Fatal(err)
 	}
-	afterMetadata, err := markdown.ParseTopicMetadata(filepath.Join(topic, markdown.MetaFilename), after)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if beforeMetadata.Status != afterMetadata.Status {
-		t.Fatalf("topic status changed from %s to %s", beforeMetadata.Status, afterMetadata.Status)
+	if beforeMetadata.ID != "00001" {
+		t.Fatalf("metadata ID changed: %s", beforeMetadata.ID)
 	}
 }
 

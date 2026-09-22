@@ -178,7 +178,7 @@ func TestRebuildIndexesDescriptionAndFTS(t *testing.T) {
 		"note.md":    "File details",
 	} {
 		if name == markdown.MetaFilename {
-			if err := markdown.WriteTopicMetadata(filepath.Join(topic, name), markdown.TopicMetadata{ID: "00001", Title: name, Description: description, Status: domain.StatusProgress, Created: "2026-09-21"}); err != nil {
+			if err := markdown.WriteTopicMetadata(filepath.Join(topic, name), markdown.TopicMetadata{ID: "00001", Title: name, Description: description, Created: "2026-09-21"}); err != nil {
 				t.Fatal(err)
 			}
 			continue

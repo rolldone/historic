@@ -28,7 +28,7 @@ func TestRebuildWritesManifestPreservesManualMetadataAndClassifiesLegacyAsset(t 
 			t.Fatal(err)
 		}
 		metadata := markdown.TopicMetadata{
-			ID: item.id, Title: item.title, Description: "manual description", Status: domain.StatusProgress,
+			ID: item.id, Title: item.title, Description: "manual description",
 			Created: "2026-09-21", Updated: "2026-09-22", Tags: []string{"manual", "search"}, Related: []domain.ID{"00003"},
 		}
 		if err := markdown.WriteTopicMetadata(filepath.Join(topic, markdown.MetaFilename), metadata); err != nil {
@@ -105,7 +105,7 @@ func TestRebuildManifestUpdatesAfterAddDeleteAndClassificationAndIsIdempotent(t 
 	if err := os.MkdirAll(topic, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := markdown.WriteTopicMetadata(filepath.Join(topic, markdown.MetaFilename), markdown.TopicMetadata{ID: "00005", Title: "Topic", Status: domain.StatusProgress, Created: "2026-09-21"}); err != nil {
+	if err := markdown.WriteTopicMetadata(filepath.Join(topic, markdown.MetaFilename), markdown.TopicMetadata{ID: "00005", Title: "Topic", Created: "2026-09-21"}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := RebuildMetadata(workspace); err != nil {

@@ -98,7 +98,6 @@ type Topic struct {
 	ID          ID
 	Title       string
 	Description string
-	Status      Status
 	Created     time.Time
 	Updated     *time.Time
 	Tags        []string

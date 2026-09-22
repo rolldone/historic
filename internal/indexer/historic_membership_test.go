@@ -21,7 +21,7 @@ func TestRebuildTreatsAnyHistoricMarkdownAsTopicMember(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := markdown.WriteTopicMetadata(filepath.Join(topic, markdown.MetaFilename), markdown.TopicMetadata{
-		ID: "00005", Title: "Topic", Status: domain.StatusProgress, Created: "2026-09-22",
+		ID: "00005", Title: "Topic", Created: "2026-09-22",
 	}); err != nil {
 		t.Fatal(err)
 	}

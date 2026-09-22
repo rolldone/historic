@@ -46,7 +46,7 @@ func TestTopicMetadataInvalidCanonicalDoesNotReadLegacy(t *testing.T) {
 func TestWriteTopicMetadataManifestRejectsInvalidManifestAtomically(t *testing.T) {
 	topic := t.TempDir()
 	path := filepath.Join(topic, MetaFilename)
-	metadata := TopicMetadata{ID: "00005", Title: "Topic", Status: domain.StatusProgress, Created: "2026-09-21"}
+	metadata := TopicMetadata{ID: "00005", Title: "Topic", Created: "2026-09-21"}
 	if err := WriteTopicMetadata(path, metadata); err != nil {
 		t.Fatal(err)
 	}

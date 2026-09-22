@@ -25,7 +25,7 @@ func TestFindMatchesFilenameTitleAndBody(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := markdown.WriteTopicMetadata(filepath.Join(filepath.Dir(path), markdown.MetaFilename), markdown.TopicMetadata{ID: "00001", Title: "Topic", Status: domain.StatusProgress, Created: "2026-09-18"}); err != nil {
+	if err := markdown.WriteTopicMetadata(filepath.Join(filepath.Dir(path), markdown.MetaFilename), markdown.TopicMetadata{ID: "00001", Title: "Topic", Created: "2026-09-18"}); err != nil {
 		t.Fatal(err)
 	}
 	if err := markdown.WriteFile(path, doc); err != nil {
@@ -56,7 +56,7 @@ func TestFindFiltersAndEmptyResult(t *testing.T) {
 	}
 	write := func(path string, id domain.ID, status domain.Status) {
 		t.Helper()
-		if err := markdown.WriteTopicMetadata(filepath.Join(path, markdown.MetaFilename), markdown.TopicMetadata{ID: id, Title: "Target", Status: status, Created: "2026-09-18"}); err != nil {
+		if err := markdown.WriteTopicMetadata(filepath.Join(path, markdown.MetaFilename), markdown.TopicMetadata{ID: id, Title: "Target", Created: "2026-09-18"}); err != nil {
 			t.Fatal(err)
 		}
 		doc, _ := markdown.NewDocument(domain.Frontmatter{ID: id, Title: "Target", Status: status, Created: "2026-09-18"}, "target body")
@@ -89,7 +89,7 @@ func TestFindSupportsPhase4FiltersAndUnicode(t *testing.T) {
 		t.Fatal(err)
 	}
 	doc, _ := markdown.NewDocument(domain.Frontmatter{ID: "00014", Title: "Phase 4 Search", Status: domain.StatusProgress, Created: "2026-09-19"}, "Unicode café punctuation: FTS ranking and filter.")
-	if err := markdown.WriteTopicMetadata(filepath.Join(topic, markdown.MetaFilename), markdown.TopicMetadata{ID: "00014", Title: "Phase 4 Search", Status: domain.StatusProgress, Created: "2026-09-19"}); err != nil {
+	if err := markdown.WriteTopicMetadata(filepath.Join(topic, markdown.MetaFilename), markdown.TopicMetadata{ID: "00014", Title: "Phase 4 Search", Created: "2026-09-19"}); err != nil {
 		t.Fatal(err)
 	}
 	if err := markdown.WriteFile(filepath.Join(topic, "wos", "01-fts-search.md"), doc); err != nil {
