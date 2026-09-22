@@ -23,16 +23,18 @@ const (
 // Status is retained for lifecycle compatibility; child Markdown frontmatter
 // remains authoritative for managed file status.
 type TopicMetadata struct {
-	ID          domain.ID       `yaml:"id"`
-	Title       string          `yaml:"title"`
-	Description string          `yaml:"description,omitempty"`
-	Status      domain.Status   `yaml:"status,omitempty"`
-	Created     string          `yaml:"created"`
-	Updated     string          `yaml:"updated,omitempty"`
-	Tags        []string        `yaml:"tags,omitempty"`
-	Related     []domain.ID     `yaml:"related,omitempty"`
-	Files       []ManifestFile  `yaml:"files"`
-	Assets      []ManifestAsset `yaml:"assets"`
+	ID          domain.ID `yaml:"id"`
+	Title       string    `yaml:"title"`
+	Description string    `yaml:"description,omitempty"`
+	// Status is retained only to read legacy metadata; topic status is not
+	// authoritative and is never emitted by canonical writes.
+	Status  domain.Status   `yaml:"status,omitempty"`
+	Created string          `yaml:"created"`
+	Updated string          `yaml:"updated,omitempty"`
+	Tags    []string        `yaml:"tags,omitempty"`
+	Related []domain.ID     `yaml:"related,omitempty"`
+	Files   []ManifestFile  `yaml:"files"`
+	Assets  []ManifestAsset `yaml:"assets"`
 }
 
 // ManifestFile describes a managed Markdown file discovered below a topic.
@@ -53,7 +55,7 @@ type ManifestAsset struct {
 func TopicMetadataFromFrontmatter(frontmatter domain.Frontmatter, _ string) TopicMetadata {
 	return TopicMetadata{
 		ID: frontmatter.ID, Title: frontmatter.Title, Description: frontmatter.Description,
-		Status: frontmatter.Status, Created: frontmatter.Created, Updated: frontmatter.Updated,
+		Created: frontmatter.Created, Updated: frontmatter.Updated,
 		Tags: append([]string(nil), frontmatter.Tags...), Related: append([]domain.ID(nil), frontmatter.Related...),
 	}
 }
@@ -63,7 +65,7 @@ func TopicMetadataFromFrontmatter(frontmatter domain.Frontmatter, _ string) Topi
 func (metadata TopicMetadata) Frontmatter() domain.Frontmatter {
 	return domain.Frontmatter{
 		ID: metadata.ID, Title: metadata.Title, Description: metadata.Description,
-		Status: metadata.Status, Created: metadata.Created, Updated: metadata.Updated,
+		Created: metadata.Created, Updated: metadata.Updated,
 		Tags: append([]string(nil), metadata.Tags...), Related: append([]domain.ID(nil), metadata.Related...),
 	}
 }
@@ -76,6 +78,8 @@ func ValidateTopicMetadata(metadata TopicMetadata) error {
 	if strings.TrimSpace(metadata.Title) == "" {
 		return fmt.Errorf("%w: field %q is required", ErrInvalidFrontmatter, "title")
 	}
+	// Legacy topic status is accepted on read for compatibility, but canonical
+	// metadata must not make it authoritative.
 	if metadata.Status != "" && !metadata.Status.IsValid() {
 		return fmt.Errorf("%w: field %q has invalid value %q", ErrInvalidFrontmatter, "status", metadata.Status)
 	}
@@ -210,6 +214,8 @@ func WriteTopicMetadataManifest(path string, metadata TopicMetadata, files []Man
 }
 
 func writeTopicMetadata(path string, metadata TopicMetadata) error {
+	// Topic work status is legacy-only. Canonical YAML never emits it.
+	metadata.Status = ""
 	if err := ValidateTopicMetadata(metadata); err != nil {
 		return fmt.Errorf("%s: %w", path, err)
 	}

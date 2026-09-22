@@ -25,7 +25,7 @@ func (store TopicStore) ImportTopic(id domain.ID, force bool) (domain.Topic, err
 	if err != nil {
 		return domain.Topic{}, err
 	}
-	return domain.Topic{ID: id, Title: change.Title, Status: change.Current, Path: filepath.Join(store.Workspace.Root, filepath.FromSlash(change.Path))}, nil
+	return domain.Topic{ID: id, Title: change.Title, Path: filepath.Join(store.Workspace.Root, filepath.FromSlash(change.Path))}, nil
 }
 
 func archivedTopicPath(workspace config.Workspace, id domain.ID) (string, error) {

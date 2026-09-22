@@ -84,7 +84,7 @@ func TestRebuildWritesManifestPreservesManualMetadataAndClassifiesLegacyAsset(t 
 		if err != nil {
 			t.Fatal(err)
 		}
-		if metadata.Description != "manual description" || metadata.Status != domain.StatusProgress || metadata.Updated != "2026-09-22" || len(metadata.Tags) != 2 || len(metadata.Related) != 1 {
+		if metadata.Description != "manual description" || metadata.Updated != "2026-09-22" || len(metadata.Tags) != 2 || len(metadata.Related) != 1 {
 			t.Fatalf("manual metadata was not preserved: %#v", metadata)
 		}
 		if len(metadata.Files) != item.files || metadata.Files[0].Path != "wos/01-task.md" || metadata.Files[0].Type != "task" || metadata.Files[0].Status != domain.StatusProgress {

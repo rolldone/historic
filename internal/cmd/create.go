@@ -19,10 +19,9 @@ type createOutput struct {
 }
 
 type createdTopicOutput struct {
-	ID     string `json:"id"`
-	Title  string `json:"title"`
-	Status string `json:"status"`
-	Path   string `json:"path"`
+	ID    string `json:"id"`
+	Title string `json:"title"`
+	Path  string `json:"path"`
 }
 
 func newCreateCommand() *cobra.Command {
@@ -54,7 +53,7 @@ func newCreateCommand() *cobra.Command {
 				}
 				return err
 			}
-			result := createdTopicOutput{ID: topic.ID.String(), Title: topic.Title, Status: topic.Status.String(), Path: workspace.RelativePath(topic.Path)}
+			result := createdTopicOutput{ID: topic.ID.String(), Title: topic.Title, Path: workspace.RelativePath(topic.Path)}
 			if jsonOutput {
 				return writeCreateJSON(cmd, createOutput{Command: "create", OK: true, Data: result, Error: nil})
 			}

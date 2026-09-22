@@ -27,7 +27,7 @@ func TestImportTopicOpensWithoutChangingStatusOrContent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if topic.Status != domain.StatusComplete || topic.Path != filepath.Join(store.Workspace.Histories, "00001-topic") {
+	if topic.Path != filepath.Join(store.Workspace.Histories, "00001-topic") {
 		t.Fatalf("topic = %#v", topic)
 	}
 	got, err := os.ReadFile(filepath.Join(topic.Path, "wos", "01-task.md"))
@@ -35,7 +35,7 @@ func TestImportTopicOpensWithoutChangingStatusOrContent(t *testing.T) {
 		t.Fatalf("content = %q err=%v", got, err)
 	}
 	opened, err := markdown.ParseTopicMetadataFile(filepath.Join(topic.Path, markdown.MetaFilename))
-	if err != nil || opened.Status != domain.StatusComplete {
+	if err != nil {
 		t.Fatalf("metadata = %#v err=%v", opened, err)
 	}
 }

@@ -17,7 +17,6 @@ type TopicView struct {
 	ID          string     `json:"id"`
 	Title       string     `json:"title"`
 	Description string     `json:"description"`
-	Status      string     `json:"status"`
 	Created     string     `json:"created"`
 	Updated     string     `json:"updated,omitempty"`
 	Path        string     `json:"path"`
@@ -85,7 +84,7 @@ func (store TopicStore) readTopicView(path string, active, includeBody bool) (To
 		return TopicView{}, fmt.Errorf("read metadata %s: %w", store.Workspace.RelativePath(filepath.Join(path, markdown.MetaFilename)), err)
 	}
 	view := TopicView{
-		ID: meta.ID.String(), Title: meta.Title, Description: meta.Description, Status: meta.Status.String(),
+		ID: meta.ID.String(), Title: meta.Title, Description: meta.Description,
 		Created: meta.Created, Updated: meta.Updated,
 		Path: store.Workspace.RelativePath(path), Body: "", Active: active,
 		Storage: map[bool]string{true: "open", false: "closed"}[active],

@@ -29,7 +29,7 @@ func newImportCommand() *cobra.Command {
 			if err != nil {
 				return writeCommandError(cmd, "import", jsonOutput, err)
 			}
-			response := importOutput{Command: "import", OK: true, Data: importData{ID: topic.ID.String(), Title: topic.Title, Status: topic.Status.String(), Storage: "open", Path: workspace.RelativePath(topic.Path)}, Error: nil}
+			response := importOutput{Command: "import", OK: true, Data: importData{ID: topic.ID.String(), Title: topic.Title, Storage: "open", Path: workspace.RelativePath(topic.Path)}, Error: nil}
 			if jsonOutput {
 				return json.NewEncoder(cmd.OutOrStdout()).Encode(response)
 			}
@@ -52,7 +52,6 @@ type importOutput struct {
 type importData struct {
 	ID      string `json:"id"`
 	Title   string `json:"title"`
-	Status  string `json:"status"`
 	Storage string `json:"storage"`
 	Path    string `json:"path"`
 }

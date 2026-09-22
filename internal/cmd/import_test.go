@@ -35,11 +35,10 @@ func TestImportCommandCopiesArchivedTopic(t *testing.T) {
 	var response struct {
 		OK   bool `json:"ok"`
 		Data struct {
-			Status  string `json:"status"`
 			Storage string `json:"storage"`
 		} `json:"data"`
 	}
-	if err := json.Unmarshal(output.Bytes(), &response); err != nil || !response.OK || response.Data.Status != "complete" || response.Data.Storage != "open" {
+	if err := json.Unmarshal(output.Bytes(), &response); err != nil || !response.OK || response.Data.Storage != "open" {
 		t.Fatalf("response = %q, %v", output.String(), err)
 	}
 	if _, err := os.Stat(filepath.Join(root, ".historic", "00001-topic", "_meta.yaml")); err != nil {

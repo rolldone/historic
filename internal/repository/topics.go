@@ -58,16 +58,16 @@ func (store TopicStore) CreateTopic(title string, requestedID string) (domain.To
 	}
 
 	created := dateToday()
-	metadata := domain.Frontmatter{ID: id, Title: title, Description: "", Status: domain.StatusCreate, Created: created}
+	metadata := markdown.TopicMetadata{ID: id, Title: title, Description: "", Created: created}
 	if err := os.Mkdir(topicPath, 0o755); err != nil {
 		return domain.Topic{}, fmt.Errorf("create topic directory %s: %w", topicPath, err)
 	}
 	metaPath := filepath.Join(topicPath, markdown.MetaFilename)
-	if err := markdown.WriteTopicMetadata(metaPath, markdown.TopicMetadataFromFrontmatter(metadata, "")); err != nil {
+	if err := markdown.WriteTopicMetadata(metaPath, metadata); err != nil {
 		_ = os.Remove(topicPath)
 		return domain.Topic{}, fmt.Errorf("create topic metadata: %w", err)
 	}
-	return domain.Topic{ID: id, Title: title, Description: metadata.Description, Status: domain.StatusCreate, Created: parseDate(created), Path: topicPath, Slug: slug}, nil
+	return domain.Topic{ID: id, Title: title, Description: metadata.Description, Created: parseDate(created), Path: topicPath, Slug: slug}, nil
 }
 
 // AddEntry creates a Markdown entry in an active topic and keeps canonical
@@ -101,8 +101,9 @@ func (store TopicStore) AddEntry(topicID domain.ID, name string, force bool) (do
 	if err != nil {
 		return domain.Entry{}, fmt.Errorf("read topic metadata: %w", err)
 	}
+	_ = meta
 	created := dateToday()
-	metadata := domain.Frontmatter{ID: topicID, Title: entryTitle(relativeName), Description: "", Status: meta.Frontmatter().Status, Created: created}
+	metadata := domain.Frontmatter{ID: topicID, Title: entryTitle(relativeName), Description: "", Status: domain.StatusCreate, Created: created}
 	document, err := markdown.NewDocument(metadata, "# "+metadata.Title+"\n")
 	if err != nil {
 		return domain.Entry{}, fmt.Errorf("create entry metadata: %w", err)

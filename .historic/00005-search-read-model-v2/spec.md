@@ -24,7 +24,7 @@ Mendefinisikan model data dan perilaku workspace Historic untuk kebutuhan AI mem
 
 ### 2.1 Topic
 
-Topic adalah wrapper identitas dan container filesystem. Topic tidak memiliki work status authoritative.
+Topic adalah wrapper identitas dan container filesystem. Topic tidak memiliki work status authoritative dan `_meta.yaml` tidak memiliki field `status`.
 
 Storage state ditentukan oleh lokasi:
 
@@ -127,7 +127,7 @@ Satu logical file tidak boleh menjadi duplicate hanya karena memiliki current co
 
 ## 4. Source of truth dan description
 
-- `_meta.yaml` adalah metadata topic canonical dan satu-satunya metadata topic yang dibaca/ditulis oleh workspace baru.
+- `_meta.yaml` adalah metadata topic canonical tanpa status pekerjaan; status hanya boleh berasal dari frontmatter managed member files.
 - `_meta.md` bukan metadata canonical dan tidak dimigrasikan; ia diperlakukan sebagai asset Markdown.
 - File dan frontmatter Markdown managed adalah source of truth untuk keberadaan, isi, identitas dokumen, dan status pekerjaan.
 - `status: draft` adalah status Historic yang valid untuk topic maupun managed file dan termasuk status active/unresolved.
@@ -136,7 +136,7 @@ Satu logical file tidak boleh menjadi duplicate hanya karena memiliki current co
 - SQLite menyalin manifest dan metadata file sebagai read model/cache; SQLite dan FTS tidak boleh dianggap sebagai sumber status atau isi utama.
 - Status managed file berasal dari `frontmatter.status` dan harus tercermin identik pada `files[].status` serta `files.status` SQLite.
 - Validitas managed file tidak mensyaratkan `frontmatter.id` sama dengan ID topic parent. ID topic berasal dari folder topic, sedangkan ID file/WO berasal dari frontmatter file.
-- File Markdown valid di subfolder `wos/` tetap managed Historic file dan diklasifikasikan sebagai `type: task` pada manifest.
+- `create`, `list`, `show`, `open`, dan `close` tidak membaca atau mengubah status topic; lifecycle status command harus menargetkan path member file melalui `historic status <path> <status>`.
 
 ## 4.1 Format `_meta.yaml`
 
@@ -329,7 +329,7 @@ Rebuild adalah workflow utama:
 8. validate temporary index;
 9. atomic replace index.
 
-Rebuild tidak mengubah work status file dan tidak menulis computed topic status sebagai authoritative field ke `_meta.yaml`.
+- Rebuild tidak mengubah work status file dan tidak menulis computed topic status atau status authoritative apa pun ke `_meta.yaml`.
 
 `historic sync-meta` targeted tetap tersedia sebagai operasi metadata khusus, tetapi rebuild menjadi workflow normal untuk kalibrasi penuh workspace.
 

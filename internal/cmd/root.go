@@ -48,9 +48,6 @@ func NewRootCommand() *cobra.Command {
 	root.AddCommand(newPurgeCommand())
 	root.AddCommand(newStorageCommand("close", func(service lifecycle.Service, id domain.ID) (lifecycle.Change, error) { return service.Close(id) }))
 	root.AddCommand(newStorageCommand("open", func(service lifecycle.Service, id domain.ID) (lifecycle.Change, error) { return service.Open(id) }))
-	for _, status := range []domain.Status{domain.StatusDraft, domain.StatusProgress, domain.StatusPending, domain.StatusReview, domain.StatusBlocked, domain.StatusComplete, domain.StatusFailed, domain.StatusCancelled, domain.StatusArchived} {
-		root.AddCommand(newLifecycleCommand(status))
-	}
 	return root
 }
 

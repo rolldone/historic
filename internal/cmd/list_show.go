@@ -37,7 +37,7 @@ func newListCommand() *cobra.Command {
 				return err
 			}
 			for _, view := range views {
-				if _, err = fmt.Fprintf(cmd.OutOrStdout(), "%s  %-10s  %-6s  %s  %s\n", view.ID, view.Status, view.Storage, view.Title, view.Path); err != nil {
+				if _, err = fmt.Fprintf(cmd.OutOrStdout(), "%s  %-6s  %s  %s\n", view.ID, view.Storage, view.Title, view.Path); err != nil {
 					return err
 				}
 			}
@@ -72,7 +72,7 @@ func newShowCommand() *cobra.Command {
 			if jsonOutput {
 				return json.NewEncoder(cmd.OutOrStdout()).Encode(result)
 			}
-			_, err = fmt.Fprintf(cmd.OutOrStdout(), "%s  %s  [%s] [%s]\nPath: %s\n", view.ID, view.Title, view.Status, view.Storage, view.Path)
+			_, err = fmt.Fprintf(cmd.OutOrStdout(), "%s  %s [%s]\nPath: %s\n", view.ID, view.Title, view.Storage, view.Path)
 			if err != nil {
 				return err
 			}

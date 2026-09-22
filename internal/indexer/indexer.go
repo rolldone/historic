@@ -381,7 +381,7 @@ func scanTopic(workspace config.Workspace, id domain.ID, candidate topicCandidat
 	}
 	records := []Record{{
 		Num: id.Number(), NumPadded: id.String(), Type: "meta", Title: meta.Title, Description: meta.Description,
-		Status: meta.Status, Tags: meta.Tags, Related: meta.Related, CreatedAt: meta.Created,
+		Status: "", Tags: meta.Tags, Related: meta.Related, CreatedAt: meta.Created,
 		UpdatedAt: meta.Updated, Storage: candidate.storage,
 		Path:     filepath.ToSlash(filepath.Join(workspace.RelativePath(candidate.path), markdown.MetaFilename)),
 		FolderID: id, FolderSlug: candidate.slug, Filename: markdown.MetaFilename,
