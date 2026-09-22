@@ -5,9 +5,9 @@ files:
     - id: 01a0c991-72d9-7556-918b-aa3671285dbe
       path: spec.md
       type: spec
-      status: draft
+      status: complete
     - id: 01a0c991-7314-7518-b24e-aad4442019e8
       path: wos/01-search-pagination-and-more-indicator.md
       type: task
-      status: pending
+      status: complete
 assets: []
