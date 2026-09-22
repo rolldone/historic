@@ -53,6 +53,9 @@ func (service Service) ChangeStatus(id domain.ID, next domain.Status) (Change, e
 	if meta.ID != id {
 		return Change{}, fmt.Errorf("%w: metadata ID %s does not match path ID %s", domain.ErrConflict, meta.ID, id)
 	}
+	if meta.Status == "" {
+		meta.Status = domain.StatusDraft
+	}
 	if err := domain.ValidateTransition(meta.Status, next); err != nil {
 		return Change{}, err
 	}
