@@ -1,7 +1,7 @@
 ---
 id: 00006
 title: Search Freshness and Timestamp Ordering SPEC
-status: draft
+status: complete
 created: 2026-09-22
 updated: 2026-09-22
 tags: [spec, search, timestamps, freshness, sorting, rebuild, ai]
@@ -193,4 +193,4 @@ JSON harus membedakan timestamp manual (`created_at`, `updated_at`) dan timestam
 
 ## 10. Status
 
-Draft. Implementasi harus mengikuti WO 01 setelah SPEC disetujui.
+Complete. Scope implemented and validated by Search Improvement commit `6826933` (`feat: improve search freshness and filtering`) and Search Pagination commit `87cfe42` (`feat: add search pagination`). Freshness fields, deterministic sorting, status exclusion, empty/recent browsing, pagination, rebuild reconciliation, SQLite/FTS regression tests, documentation, and quality gates are complete.

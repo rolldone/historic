@@ -15,9 +15,9 @@ files:
     - id: 01a0c844-83fe-78a5-899a-af67022f2994
       path: spec.md
       type: spec
-      status: draft
+      status: complete
     - id: 01a0c88c-8acc-7305-b71c-5588d2bd95b4
       path: wos/01-file-freshness-search-ordering.md
       type: task
-      status: planned
+      status: complete
 assets: []
