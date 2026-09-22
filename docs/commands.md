@@ -77,14 +77,17 @@ This command is for any managed Markdown file with valid Historic frontmatter. I
 
 ```sh
 historic find "keyword"
+historic find "" --status-not complete,cancelled,failed,archived
 historic find "keyword" --open --json
-historic find "keyword" --status progress
-historic find "keyword" --folder .historic/<topic-id>-<slug>
-historic find "keyword" --closed
-historic find "keyword" --type task --id <topic-id> --json
+historic find "keyword" --status draft,progress
+historic find "keyword" --status-not complete,cancelled,failed,archived
+historic find "keyword" --sort relevance
+historic find "keyword" --sort updated
+historic find "keyword" --sort created
+historic find "keyword" --sort title
 ```
 
-`find` searches open and closed storage by default and uses the shared SQLite FTS5 index. Use `--open` for open topics only or `--closed` for closed topics only; combining them is rejected. Results expose work `status`, `storage`, and actual `path`. Legacy `--active` and `--archived` flags are not supported. If the index is missing or invalid, run `historic rebuild`.
+`find` searches open and closed storage by default and uses the shared SQLite FTS5 index. `--status` is a comma-separated inclusion filter; `--status-not` is a comma-separated exclusion filter. Statuses are validated and overlap between the two flags is rejected. Empty keyword (`historic find ""`) browses recent topics consistently with the TUI. Use `--open` for open topics only or `--closed` for closed topics only; combining them is rejected. `--sort` accepts `relevance`, `updated`, `created`, or `title`; keyword defaults to relevance with freshness/path tie-breakers, and empty queries default to updated/created/path order. Results expose work `status`, `storage`, actual `path`, and for files `created_at`, `updated_at`, `mtime`, `hash`, and `size`. Legacy `--active` and `--archived` flags are not supported. If the index is missing or invalid, run `historic rebuild`.
 
 ## Interactive search TUI
 

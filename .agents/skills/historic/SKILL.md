@@ -44,7 +44,10 @@ historic show <timestamp-topic-id>
 
 ## Search and TUI
 
-- `historic find "query" [--json]` is the one-shot interface for AI, scripts, and automation.
+- `historic find "query" [--json]` is the one-shot interface for AI, scripts, and automation; `historic find ""` browses recent topics.
+- `--status` accepts comma-separated inclusion statuses and `--status-not` accepts comma-separated exclusions. Overlapping statuses and unknown statuses are rejected.
+- `--sort` accepts `relevance`, `updated`, `created`, or `title`; results use deterministic path tie-breakers.
+- File results expose SQLite-backed `created_at`, `updated_at`, `mtime`, `hash`, and `size` fields.
 - Search includes both open and closed storage by default.
 - Use `--open` for `.historic/<id>-<slug>/` only and `--closed` for `.historic/.database/<id>-<slug>/` only. Combining them is rejected.
 - Legacy `--active` and `--archived` flags are not supported.

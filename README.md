@@ -105,6 +105,8 @@ Search both storage states by default:
 
 ```sh
 historic find "oauth"
+historic find "" --status-not complete,cancelled,failed,archived
+historic find "oauth" --status draft,progress --sort updated --json
 historic find "oauth" --open --json
 historic find "oauth" --closed --json
 ```

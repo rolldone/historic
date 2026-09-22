@@ -16,7 +16,8 @@ historic find "keyword"
 historic search
 ```
 
-Use `historic find "keyword" --json` for AI agents, scripts, and automation. Use `historic search` for interactive human exploration in the terminal.
+Use `historic find "keyword" --json` for AI agents, scripts, and automation. Use `historic find ""` or `historic search` for recent interactive browsing. Search supports comma-separated `--status` inclusion, `--status-not` exclusion, and deterministic `--sort relevance|updated|created|title`. File results include SQLite-backed freshness metadata (`created_at`, `updated_at`, `mtime`, `hash`, `size`).
+
 
 ## Workspace and identity
 

@@ -29,17 +29,19 @@ const (
 // Options contains composable filters for topic and file queries. Dates are
 // compared lexically, so callers should provide ISO-8601 values.
 type Options struct {
-	Status  domain.Status
-	Tags    []string
-	Storage domain.StorageState
-	Type    string
-	TopicID domain.ID
-	Folder  string
+	Status    domain.Status
+	StatusNot []domain.Status
+	Tags      []string
+	Storage   domain.StorageState
+	Type      string
+	TopicID   domain.ID
+	Folder    string
 
 	CreatedAfter  string
 	CreatedBefore string
 	UpdatedAfter  string
 	UpdatedBefore string
+	Sort          string
 
 	// MinFiles and MaxFiles are aggregate filters. A zero MaxFiles means no
 	// upper bound; MinFiles defaults to zero and therefore includes empty topics.
@@ -155,7 +157,7 @@ func (service Service) QueryTopics(options Options) ([]TopicSummary, error) {
 		END AS computed_status,
 		last_file_updated_at
 	FROM grouped
-	ORDER BY num_padded ASC, path ASC, id ASC`
+	ORDER BY ` + aggregateOrder(options.Sort)
 
 	rows, err := database.Query(query, args...)
 	if err != nil {
@@ -212,7 +214,7 @@ func (service Service) QueryFiles(options Options) ([]FileResult, error) {
 		f.size, f.word_count
 		FROM files AS f JOIN topics AS t ON t.id = f.topic_id
 		WHERE `+strings.Join(topicWhere, " AND ")+` AND `+joinPredicate+`
-		ORDER BY t.num_padded ASC, f.path ASC, f.id ASC`, args...)
+		ORDER BY `+fileOrder(options.Sort), args...)
 	if err != nil {
 		return nil, fmt.Errorf("query files: %w", err)
 	}
@@ -241,6 +243,32 @@ func (service Service) QueryFiles(options Options) ([]FileResult, error) {
 	return results, nil
 }
 
+func aggregateOrder(sortOption string) string {
+	switch sortOption {
+	case "title":
+		return "title ASC, path ASC, id ASC"
+	case "created":
+		return "created_at DESC, path ASC, id ASC"
+	case "updated":
+		return "last_file_updated_at DESC, updated_at DESC, path ASC, id ASC"
+	default:
+		return "num_padded ASC, path ASC, id ASC"
+	}
+}
+
+func fileOrder(sortOption string) string {
+	switch sortOption {
+	case "title":
+		return "f.title ASC, f.path ASC, f.id ASC"
+	case "created":
+		return "f.created_at DESC, f.path ASC, f.id ASC"
+	case "updated":
+		return "COALESCE(f.updated_at, f.created_at, f.mtime) DESC, f.path ASC, f.id ASC"
+	default:
+		return "t.num_padded ASC, f.path ASC, f.id ASC"
+	}
+}
+
 func topicContextOptions(options Options) Options {
 	context := options
 	context.Status = ""
@@ -251,6 +279,7 @@ func topicContextOptions(options Options) Options {
 	context.CreatedBefore = ""
 	context.UpdatedAfter = ""
 	context.UpdatedBefore = ""
+	context.Sort = ""
 	context.MinFiles = 0
 	context.MaxFiles = 0
 	return context
@@ -284,11 +313,22 @@ func validateOptions(options Options) error {
 	if options.Status != "" && !options.Status.IsValid() {
 		return fmt.Errorf("invalid status %q", options.Status)
 	}
+	for _, status := range options.StatusNot {
+		if !status.IsValid() {
+			return fmt.Errorf("invalid excluded status %q", status)
+		}
+		if status == options.Status && options.Status != "" {
+			return fmt.Errorf("status %q cannot appear in both inclusion and exclusion filters", status)
+		}
+	}
 	if options.Storage != "" && !options.Storage.IsValid() {
 		return fmt.Errorf("invalid storage %q", options.Storage)
 	}
 	if options.Type != "" && options.Type != fileTypeHistoric && options.Type != fileTypeAsset {
 		return fmt.Errorf("invalid file type %q", options.Type)
+	}
+	if options.Sort != "" && options.Sort != "updated" && options.Sort != "created" && options.Sort != "title" {
+		return fmt.Errorf("invalid sort %q; use updated, created, or title", options.Sort)
 	}
 	if options.TopicID != "" && !options.TopicID.Valid() {
 		return fmt.Errorf("invalid topic ID %q", options.TopicID)
@@ -311,6 +351,14 @@ func validateOptions(options Options) error {
 func topicPredicates(options Options) ([]string, []any) {
 	where := []string{"1 = 1"}
 	args := make([]any, 0)
+	if options.Status != "" {
+		where = append(where, "COALESCE(t.computed_status, '') = ?")
+		args = append(args, options.Status.String())
+	}
+	for _, status := range options.StatusNot {
+		where = append(where, "COALESCE(t.computed_status, '') <> ?")
+		args = append(args, status.String())
+	}
 	if options.TopicID != "" {
 		where = append(where, "t.id = ?")
 		args = append(args, options.TopicID.String())
@@ -348,6 +396,10 @@ func fileJoinPredicate(options Options) (string, []any) {
 	if options.Status != "" {
 		predicates = append(predicates, "f.status = ?")
 		args = append(args, options.Status.String())
+	}
+	for _, status := range options.StatusNot {
+		predicates = append(predicates, "COALESCE(f.status, '') <> ?")
+		args = append(args, status.String())
 	}
 	if options.Folder != "" {
 		folder := filepath.ToSlash(strings.Trim(strings.TrimSpace(options.Folder), "/"))

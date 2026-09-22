@@ -1,8 +1,8 @@
 ---
 title: WO 01 File Freshness and Search Timestamp Ordering
-status: planned
-created: 2026-09-22
-updated: 2026-09-22
+status: complete
+created: "2026-09-22"
+updated: "2026-09-22"
 tags: [search, timestamps, freshness, sorting, rebuild, ai]
 related: []
 ---
@@ -79,9 +79,17 @@ updated_at DESC
 path ASC
 ```
 
-## CLI
+## Status filtering and recent browsing
 
-Tambahkan opsi sort yang jelas jika tidak merusak kontrak existing:
+`historic find` accepts comma-separated status inclusion/exclusion filters:
+
+```text
+--status <status[,status...]>
+--status-not <status[,status...]>
+```
+
+Unknown statuses and overlap between the two flags are rejected. An empty keyword (`historic find ""`) uses the same recent-topic behavior as the TUI.
+
 
 ```text
 --sort relevance
@@ -175,4 +183,4 @@ Hasil topic dapat menampilkan:
 
 ## Status
 
-Planned. Implementasi belum dimulai.
+Complete. Implemented and validated in the current workspace. `--status-not`, freshness fields, deterministic sorting, empty/recent browsing, and rebuild deletion reconciliation are implemented and tested.

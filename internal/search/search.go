@@ -22,10 +22,13 @@ import (
 type Options struct {
 	Keyword       string
 	Status        domain.Status
+	StatusIn      []domain.Status
+	StatusNot     []domain.Status
 	Tags          []string
 	Folder        string
 	Type          string
 	ID            domain.ID
+	Sort          string
 	OpenOnly      bool
 	ClosedOnly    bool
 	ActiveOnly    bool // compatibility for package callers; CLI rejects --active
@@ -50,6 +53,11 @@ type Result struct {
 	MatchedIn   []string     `json:"matched_in"`
 	Snippet     string       `json:"snippet"`
 	Topic       TopicContext `json:"topic"`
+	CreatedAt   string       `json:"created_at,omitempty"`
+	UpdatedAt   string       `json:"updated_at,omitempty"`
+	Mtime       string       `json:"mtime,omitempty"`
+	Hash        string       `json:"hash,omitempty"`
+	Size        int64        `json:"size,omitempty"`
 
 	// Legacy fields retained for TUI and package compatibility. They are not
 	// part of the stable AI JSON contract.
@@ -79,8 +87,8 @@ func RecentTopics(workspace config.Workspace, options Options) ([]Result, error)
 	}
 	defer database.Close()
 	where, args := topicPredicates(options)
-	rows, err := database.Query(`SELECT id, title, COALESCE(description, ''), COALESCE(computed_status, ''), storage, path, tags
-		FROM topics WHERE `+strings.Join(where, " AND ")+` ORDER BY path ASC`, args...)
+	rows, err := database.Query(`SELECT id, title, COALESCE(description, ''), COALESCE(computed_status, ''), storage, path, tags, created_at, COALESCE(updated_at, '')
+		FROM topics WHERE `+strings.Join(where, " AND ")+` ORDER BY `+recentOrder(options.Sort), args...)
 	if err != nil {
 		return nil, fmt.Errorf("query recent topics: %w", err)
 	}
@@ -89,10 +97,13 @@ func RecentTopics(workspace config.Workspace, options Options) ([]Result, error)
 	for rows.Next() {
 		var result Result
 		var tagsJSON string
-		if err := rows.Scan(&result.TopicID, &result.Title, &result.Description, &result.Status, &result.Storage, &result.Path, &tagsJSON); err != nil {
+		var createdAt, updatedAt string
+		if err := rows.Scan(&result.TopicID, &result.Title, &result.Description, &result.Status, &result.Storage, &result.Path, &tagsJSON, &createdAt, &updatedAt); err != nil {
 			return nil, fmt.Errorf("read recent topic: %w", err)
 		}
 		result.Type, result.ID, result.Tags = "topic", result.TopicID, decodeStrings(tagsJSON)
+		result.CreatedAt, result.UpdatedAt = createdAt, updatedAt
+		result.Topic = TopicContext{ID: result.TopicID, Title: result.Title, Description: result.Description, Status: result.Status, Storage: result.Storage, Path: result.Path, Tags: result.Tags}
 		result.Active = result.Storage == domain.StorageOpen.String()
 		results = append(results, result)
 	}
@@ -127,13 +138,18 @@ func Find(workspace config.Workspace, options Options) ([]Result, error) {
 		CASE WHEN historic_fts.entity_type = 'topic' THEN '_meta.yaml' ELSE f.filename END,
 		bm25(historic_fts, 1.0, 1.0, 10.0, 8.0, 10.0, 1.0) AS rank,
 		snippet(historic_fts, -1, '', '', ' … ', 24),
+		CASE WHEN historic_fts.entity_type = 'topic' THEN '' ELSE COALESCE(f.created_at, '') END,
+		CASE WHEN historic_fts.entity_type = 'topic' THEN COALESCE(t.updated_at, '') ELSE COALESCE(f.updated_at, '') END,
+		CASE WHEN historic_fts.entity_type = 'topic' THEN '' ELSE f.mtime END,
+		CASE WHEN historic_fts.entity_type = 'topic' THEN '' ELSE f.hash END,
+		CASE WHEN historic_fts.entity_type = 'topic' THEN 0 ELSE f.size END,
 		COALESCE(t.title, ''), COALESCE(t.description, ''), COALESCE(t.computed_status, ''),
 		COALESCE(t.storage, ''), COALESCE(t.path, ''), COALESCE(t.tags, '[]')
 		FROM historic_fts
 		LEFT JOIN files AS f ON historic_fts.entity_type = 'file' AND CAST(f.id AS TEXT) = historic_fts.entity_id
 		LEFT JOIN topics AS t ON t.id = CASE WHEN historic_fts.entity_type = 'topic' THEN historic_fts.entity_id ELSE f.topic_id END
 		WHERE ` + strings.Join(where, " AND ") + `
-		ORDER BY rank ASC, historic_fts.entity_type ASC, historic_fts.entity_id ASC`
+		ORDER BY ` + resultOrder(options.Sort)
 	rows, err := database.Query(statement, args...)
 	if err != nil {
 		return nil, fmt.Errorf("invalid FTS query: %w; try plain keywords and keep filters in their flags", err)
@@ -144,9 +160,11 @@ func Find(workspace config.Workspace, options Options) ([]Result, error) {
 	for rows.Next() {
 		var result Result
 		var tagsJSON, topicTagsJSON, snippetText, filename string
+		var createdAt, updatedAt, mtime, hash string
+		var size int64
 		var topicTitle, topicDescription, topicStatus, topicStorage, topicPath string
 		var rank float64
-		if err := rows.Scan(&result.Type, &result.ID, &result.TopicID, &result.Title, &result.Description, &result.Status, &result.Storage, &result.Path, &tagsJSON, &filename, &rank, &snippetText, &topicTitle, &topicDescription, &topicStatus, &topicStorage, &topicPath, &topicTagsJSON); err != nil {
+		if err := rows.Scan(&result.Type, &result.ID, &result.TopicID, &result.Title, &result.Description, &result.Status, &result.Storage, &result.Path, &tagsJSON, &filename, &rank, &snippetText, &createdAt, &updatedAt, &mtime, &hash, &size, &topicTitle, &topicDescription, &topicStatus, &topicStorage, &topicPath, &topicTagsJSON); err != nil {
 			return nil, fmt.Errorf("read search result: %w", err)
 		}
 		logicalPath := filename
@@ -160,6 +178,7 @@ func Find(workspace config.Workspace, options Options) ([]Result, error) {
 		seen[key] = struct{}{}
 		result.Tags = decodeStrings(tagsJSON)
 		result.Score = -rank
+		result.CreatedAt, result.UpdatedAt, result.Mtime, result.Hash, result.Size = createdAt, updatedAt, mtime, hash, size
 		content := ""
 		if result.Type == "historic_file" {
 			content = fallbackContent(database, result.ID)
@@ -204,15 +223,65 @@ func openIndex(workspace config.Workspace) (*sql.DB, error) {
 	return database, nil
 }
 
+func resultOrder(sortOption string) string {
+	switch sortOption {
+	case "updated":
+		return "COALESCE(CASE WHEN historic_fts.entity_type = 'topic' THEN t.updated_at ELSE f.updated_at END, CASE WHEN historic_fts.entity_type = 'topic' THEN t.created_at ELSE f.created_at END) DESC, CASE WHEN historic_fts.entity_type = 'topic' THEN t.created_at ELSE f.mtime END DESC, CASE WHEN historic_fts.entity_type = 'topic' THEN t.path ELSE f.path END ASC"
+	case "created":
+		return "CASE WHEN historic_fts.entity_type = 'topic' THEN t.created_at ELSE f.created_at END DESC, CASE WHEN historic_fts.entity_type = 'topic' THEN t.created_at ELSE f.mtime END DESC, CASE WHEN historic_fts.entity_type = 'topic' THEN t.path ELSE f.path END ASC"
+	case "title":
+		return "CASE WHEN historic_fts.entity_type = 'topic' THEN t.title ELSE f.title END ASC, CASE WHEN historic_fts.entity_type = 'topic' THEN t.path ELSE f.path END ASC"
+	default:
+		return "rank ASC, COALESCE(CASE WHEN historic_fts.entity_type = 'topic' THEN t.updated_at ELSE f.updated_at END, CASE WHEN historic_fts.entity_type = 'topic' THEN t.created_at ELSE f.created_at END) DESC, CASE WHEN historic_fts.entity_type = 'topic' THEN t.created_at ELSE f.mtime END DESC, CASE WHEN historic_fts.entity_type = 'topic' THEN t.path ELSE f.path END ASC"
+	}
+}
+
+func recentOrder(sortOption string) string {
+	switch sortOption {
+	case "title":
+		return "title ASC, path ASC"
+	case "created":
+		return "created_at DESC, path ASC"
+	case "updated":
+		return "COALESCE(updated_at, created_at) DESC, created_at DESC, path ASC"
+	default:
+		return "COALESCE(updated_at, created_at) DESC, created_at DESC, path ASC"
+	}
+}
+
 func validateOptions(options Options, requireKeyword bool) error {
 	if options.OpenOnly && options.ClosedOnly || options.ActiveOnly && options.ArchivedOnly {
 		return fmt.Errorf("open and closed filters cannot be combined")
 	}
 	if options.Status != "" && !options.Status.IsValid() {
-		return fmt.Errorf("invalid status %q; use create, pending, progress, review, blocked, complete, failed, cancelled, or archived", options.Status)
+		return fmt.Errorf("invalid status %q; use create, draft, pending, planned, progress, review, blocked, complete, failed, cancelled, or archived", options.Status)
+	}
+	included := append([]domain.Status{}, options.StatusIn...)
+	if options.Status != "" {
+		included = append(included, options.Status)
+	}
+	for _, includedStatus := range included {
+		if !includedStatus.IsValid() {
+			return fmt.Errorf("invalid status %q", includedStatus)
+		}
+	}
+	for _, includedStatus := range included {
+		for _, excluded := range options.StatusNot {
+			if excluded == includedStatus {
+				return fmt.Errorf("status %q cannot appear in both --status and --status-not", excluded)
+			}
+		}
+	}
+	for _, excluded := range options.StatusNot {
+		if !excluded.IsValid() {
+			return fmt.Errorf("invalid excluded status %q; use create, draft, pending, planned, progress, review, blocked, complete, failed, cancelled, or archived", excluded)
+		}
 	}
 	if options.Type != "" && !validType(options.Type) {
 		return fmt.Errorf("invalid type %q; use topic, historic_file, asset, or file", options.Type)
+	}
+	if options.Sort != "" && options.Sort != "relevance" && options.Sort != "updated" && options.Sort != "created" && options.Sort != "title" {
+		return fmt.Errorf("invalid sort %q; use relevance, updated, created, or title", options.Sort)
 	}
 	if options.ID != "" && !options.ID.Valid() {
 		return fmt.Errorf("invalid topic ID %q; use exactly five digits", options.ID)
@@ -252,6 +321,20 @@ func topicPredicates(options Options) ([]string, []any) {
 	if options.Status != "" {
 		where = append(where, "COALESCE(computed_status, '') = ?")
 		args = append(args, options.Status.String())
+	}
+	if len(options.StatusIn) > 0 {
+		placeholders := make([]string, len(options.StatusIn))
+		for i := range placeholders {
+			placeholders[i] = "?"
+		}
+		where = append(where, "COALESCE(computed_status, '') IN ("+strings.Join(placeholders, ",")+")")
+		for _, status := range options.StatusIn {
+			args = append(args, status.String())
+		}
+	}
+	for _, excluded := range options.StatusNot {
+		where = append(where, "COALESCE(computed_status, '') <> ?")
+		args = append(args, excluded.String())
 	}
 	if options.ID != "" {
 		where = append(where, "id = ?")
@@ -294,6 +377,23 @@ func resultPredicates(options Options) ([]string, []any) {
 	if options.Status != "" {
 		where = append(where, "((historic_fts.entity_type = 'topic' AND t.computed_status = ?) OR (historic_fts.entity_type = 'file' AND f.status = ?))")
 		args = append(args, options.Status.String(), options.Status.String())
+	}
+	if len(options.StatusIn) > 0 {
+		placeholders := make([]string, len(options.StatusIn))
+		for i := range placeholders {
+			placeholders[i] = "?"
+		}
+		where = append(where, "((historic_fts.entity_type = 'topic' AND t.computed_status IN ("+strings.Join(placeholders, ",")+")) OR (historic_fts.entity_type = 'file' AND f.status IN ("+strings.Join(placeholders, ",")+")))")
+		for _, status := range options.StatusIn {
+			args = append(args, status.String())
+		}
+		for _, status := range options.StatusIn {
+			args = append(args, status.String())
+		}
+	}
+	for _, excluded := range options.StatusNot {
+		where = append(where, "((historic_fts.entity_type = 'topic' AND COALESCE(t.computed_status, '') <> ?) OR (historic_fts.entity_type = 'file' AND COALESCE(f.status, '') <> ?))")
+		args = append(args, excluded.String(), excluded.String())
 	}
 	if options.Type != "" {
 		if options.Type == "topic" || options.Type == "meta" {
