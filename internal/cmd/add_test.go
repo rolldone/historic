@@ -37,7 +37,7 @@ func TestAddCommandCreatesEntry(t *testing.T) {
 		t.Fatal(err)
 	}
 	wantFile := ".historic/00001-topic/wos/01-remove-stale-cost-dashboard-breakdowns.md"
-	if !result.OK || result.Data.ID != "00001" || result.Data.File != wantFile || result.Data.Title != "01 remove stale cost dashboard breakdowns" {
+	if !result.OK || result.Data.ID == "00001" || result.Data.File != wantFile || result.Data.Title != "01 remove stale cost dashboard breakdowns" {
 		t.Fatalf("response = %#v", result)
 	}
 	if _, err := os.Stat(filepath.Join(root, result.Data.File)); err != nil {

@@ -12,6 +12,7 @@ import (
 
 	"historic/internal/config"
 	"historic/internal/domain"
+	"historic/internal/identifier"
 	"historic/internal/indexer"
 	"historic/internal/markdown"
 )
@@ -45,7 +46,7 @@ func syncMetaTopic(workspace config.Workspace, input string, rebuildIndex bool) 
 		}
 	}
 
-	managed, assets, err := scanTopicFiles(topic, id)
+	managed, assets, err := scanTopicFiles(topic, id, metadata.Files)
 	if err != nil {
 		return SyncChange{}, err
 	}
@@ -62,7 +63,7 @@ func syncMetaTopic(workspace config.Workspace, input string, rebuildIndex bool) 
 }
 
 func recoverTopicMetadata(topic string, id domain.ID) (markdown.TopicMetadata, error) {
-	managed, _, err := scanTopicFiles(topic, id)
+	managed, _, err := scanTopicFiles(topic, id, nil)
 	if err != nil {
 		return markdown.TopicMetadata{}, err
 	}
@@ -97,7 +98,11 @@ func recoverTopicMetadata(topic string, id domain.ID) (markdown.TopicMetadata, e
 	return metadata, nil
 }
 
-func scanTopicFiles(topic string, id domain.ID) ([]markdown.ManifestFile, []markdown.ManifestAsset, error) {
+func scanTopicFiles(topic string, id domain.ID, previous []markdown.ManifestFile) ([]markdown.ManifestFile, []markdown.ManifestAsset, error) {
+	previousByPath := make(map[string]domain.FileID, len(previous))
+	for _, file := range previous {
+		previousByPath[file.Path] = file.ID
+	}
 	managed := make([]markdown.ManifestFile, 0)
 	assets := make([]markdown.ManifestAsset, 0)
 	err := filepath.WalkDir(topic, func(path string, entry os.DirEntry, walkErr error) error {
@@ -118,7 +123,15 @@ func scanTopicFiles(topic string, id domain.ID) ([]markdown.ManifestFile, []mark
 		if strings.EqualFold(filepath.Ext(path), ".md") && filepath.Base(path) != "_meta.md" {
 			document, parseErr := markdown.ParseFile(path)
 			if parseErr == nil {
-				managed = append(managed, markdown.ManifestFile{Path: relative, Type: manifestFileType(relative), Status: document.Frontmatter.Status})
+				fileID := previousByPath[relative]
+				if fileID == "" {
+					var generateErr error
+					fileID, generateErr = identifier.Default.New()
+					if generateErr != nil {
+						return generateErr
+					}
+				}
+				managed = append(managed, markdown.ManifestFile{ID: fileID, Path: relative, Type: manifestFileType(relative), Status: document.Frontmatter.Status})
 				return nil
 			}
 		}

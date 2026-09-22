@@ -69,8 +69,8 @@ func ParseFile(path string) (Document, error) {
 
 // ValidateFrontmatter checks all required and optional frontmatter fields.
 func ValidateFrontmatter(metadata domain.Frontmatter) error {
-	if !metadata.ID.Valid() {
-		return fmt.Errorf("%w: field %q must be a five-digit ID", ErrInvalidFrontmatter, "id")
+	if metadata.ID != "" && !metadata.ID.Valid() {
+		return fmt.Errorf("%w: field %q must be a five-digit ID when provided", ErrInvalidFrontmatter, "id")
 	}
 	if strings.TrimSpace(metadata.Title) == "" {
 		return fmt.Errorf("%w: field %q is required", ErrInvalidFrontmatter, "title")

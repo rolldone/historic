@@ -35,6 +35,7 @@ type TopicMetadata struct {
 
 // ManifestFile describes a managed Markdown file discovered below a topic.
 type ManifestFile struct {
+	ID     domain.FileID `yaml:"id"`
 	Path   string        `yaml:"path"`
 	Type   string        `yaml:"type"`
 	Status domain.Status `yaml:"status"`
@@ -97,8 +98,16 @@ func ValidateTopicMetadata(metadata TopicMetadata) error {
 }
 
 func validateManifestFiles(files []ManifestFile) error {
-	seen := make(map[string]struct{}, len(files))
+	seenPaths := make(map[string]struct{}, len(files))
+	seenIDs := make(map[domain.FileID]struct{}, len(files))
 	for index, file := range files {
+		if !file.ID.Valid() {
+			return fmt.Errorf("field %q item %d has invalid file ID %q", "files", index, file.ID)
+		}
+		if _, exists := seenIDs[file.ID]; exists {
+			return fmt.Errorf("field %q contains duplicate file ID %q", "files", file.ID)
+		}
+		seenIDs[file.ID] = struct{}{}
 		if err := validateManifestPath(file.Path); err != nil {
 			return fmt.Errorf("field %q item %d: %v", "files", index, err)
 		}
@@ -108,10 +117,10 @@ func validateManifestFiles(files []ManifestFile) error {
 		if !file.Status.IsValid() {
 			return fmt.Errorf("field %q item %d has invalid status %q", "files", index, file.Status)
 		}
-		if _, exists := seen[file.Path]; exists {
+		if _, exists := seenPaths[file.Path]; exists {
 			return fmt.Errorf("field %q contains duplicate path %q", "files", file.Path)
 		}
-		seen[file.Path] = struct{}{}
+		seenPaths[file.Path] = struct{}{}
 	}
 	return nil
 }

@@ -14,6 +14,7 @@ import (
 
 	"historic/internal/config"
 	"historic/internal/domain"
+	"historic/internal/identifier"
 	"historic/internal/markdown"
 )
 
@@ -101,9 +102,21 @@ func (store TopicStore) AddEntry(topicID domain.ID, name string, force bool) (do
 	if err != nil {
 		return domain.Entry{}, fmt.Errorf("read topic metadata: %w", err)
 	}
-	_ = meta
 	created := dateToday()
-	metadata := domain.Frontmatter{ID: topicID, Title: entryTitle(relativeName), Description: "", Status: domain.StatusCreate, Created: created}
+	fileID := domain.FileID("")
+	for _, file := range meta.Files {
+		if file.Path == relativeName {
+			fileID = file.ID
+			break
+		}
+	}
+	if fileID == "" {
+		fileID, err = identifier.Default.New()
+		if err != nil {
+			return domain.Entry{}, fmt.Errorf("generate managed file ID: %w", err)
+		}
+	}
+	metadata := domain.Frontmatter{Title: entryTitle(relativeName), Description: "", Status: domain.StatusCreate, Created: created}
 	document, err := markdown.NewDocument(metadata, "# "+metadata.Title+"\n")
 	if err != nil {
 		return domain.Entry{}, fmt.Errorf("create entry metadata: %w", err)
@@ -111,7 +124,33 @@ func (store TopicStore) AddEntry(topicID domain.ID, name string, force bool) (do
 	if err := markdown.WriteFile(entryPath, document); err != nil {
 		return domain.Entry{}, fmt.Errorf("write entry: %w", err)
 	}
-	return domain.Entry{ID: topicID, Title: metadata.Title, Description: metadata.Description, Created: parseDate(created), Path: entryPath, Filename: relativeName, Content: document.Body}, nil
+	updatedMeta := append([]markdown.ManifestFile(nil), meta.Files...)
+	found := false
+	for index := range updatedMeta {
+		if updatedMeta[index].Path == relativeName {
+			fileType := "file"
+			if strings.HasPrefix(relativeName, "wos/") {
+				fileType = "task"
+			}
+			updatedMeta[index] = markdown.ManifestFile{ID: fileID, Path: relativeName, Type: fileType, Status: metadata.Status}
+			found = true
+			break
+		}
+	}
+	if !found {
+		fileType := "file"
+		if strings.HasPrefix(relativeName, "wos/") {
+			fileType = "task"
+		}
+		updatedMeta = append(updatedMeta, markdown.ManifestFile{ID: fileID, Path: relativeName, Type: fileType, Status: metadata.Status})
+	}
+	if _, err := markdown.WriteTopicMetadataManifest(filepath.Join(topicPath, markdown.MetaFilename), meta, updatedMeta, meta.Assets); err != nil {
+		if !force {
+			_ = os.Remove(entryPath)
+		}
+		return domain.Entry{}, fmt.Errorf("update topic metadata: %w", err)
+	}
+	return domain.Entry{ID: fileID, Title: metadata.Title, Description: metadata.Description, Created: parseDate(created), Path: entryPath, Filename: relativeName, Content: document.Body}, nil
 }
 
 func (store TopicStore) activeTopicPath(id domain.ID) (string, error) {

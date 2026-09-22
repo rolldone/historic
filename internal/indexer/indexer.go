@@ -17,6 +17,7 @@ import (
 
 	"historic/internal/config"
 	"historic/internal/domain"
+	"historic/internal/identifier"
 	"historic/internal/markdown"
 	"historic/internal/schema"
 
@@ -51,6 +52,7 @@ type Record struct {
 }
 
 type fileReadModel struct {
+	FileID      domain.FileID
 	TopicID     domain.ID
 	Type        string
 	Path        string
@@ -222,8 +224,8 @@ func replaceReadModel(transaction *sql.Tx, topics []topicReadModel, files []file
 		}
 	}
 	fileStatement, err := transaction.Prepare(`INSERT INTO files
-		(topic_id, type, path, filename, title, description, status, tags, related, content, asset_kind, created_at, updated_at, mtime, hash, size, word_count)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+		(id, topic_id, type, path, filename, title, description, status, tags, related, content, asset_kind, created_at, updated_at, mtime, hash, size, word_count)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return fmt.Errorf("prepare file read model insert: %w", err)
 	}
@@ -235,7 +237,11 @@ func replaceReadModel(transaction *sql.Tx, topics []topicReadModel, files []file
 		if file.Type == "historic_file" {
 			status = file.Status.String()
 		}
-		if _, err := fileStatement.Exec(file.TopicID.String(), file.Type, file.Path, file.Filename, file.Title, nullable(file.Description), status, string(tags), string(related), file.Content, nullable(file.AssetKind), nullable(file.CreatedAt), nullable(file.UpdatedAt), file.Mtime, file.Hash, file.Size, file.WordCount); err != nil {
+		fileID := file.FileID.String()
+		if fileID == "" {
+			fileID = "asset:" + file.TopicID.String() + ":" + file.Path
+		}
+		if _, err := fileStatement.Exec(fileID, file.TopicID.String(), file.Type, file.Path, file.Filename, file.Title, nullable(file.Description), status, string(tags), string(related), file.Content, nullable(file.AssetKind), nullable(file.CreatedAt), nullable(file.UpdatedAt), file.Mtime, file.Hash, file.Size, file.WordCount); err != nil {
 			return fmt.Errorf("insert file %s/%s: %w", file.TopicID, file.Path, err)
 		}
 	}
@@ -370,6 +376,10 @@ func scanTopic(workspace config.Workspace, id domain.ID, candidate topicCandidat
 	if meta.ID != id {
 		return topicReadModel{}, nil, nil, fmt.Errorf("%w: metadata ID %s does not match folder ID %s at %s", domain.ErrConflict, meta.ID, id, workspace.RelativePath(candidate.path))
 	}
+	manifestByPath := make(map[string]domain.FileID, len(meta.Files))
+	for _, file := range meta.Files {
+		manifestByPath[file.Path] = file.ID
+	}
 	topic := topicReadModel{
 		ID: id, Title: meta.Title, Description: meta.Description, Slug: candidate.slug,
 		Path: workspace.RelativePath(candidate.path), Storage: candidate.storage,
@@ -411,7 +421,14 @@ func scanTopic(workspace config.Workspace, id domain.ID, candidate topicCandidat
 		if strings.EqualFold(filepath.Ext(path), ".md") && filepath.Base(path) != "_meta.md" {
 			document, parseErr := markdown.ParseFile(path)
 			if parseErr == nil {
-				record, recordErr := scanFile(workspace, path)
+				fileID := manifestByPath[relative]
+				if fileID == "" {
+					fileID, err = identifier.Default.New()
+					if err != nil {
+						return err
+					}
+				}
+				record, recordErr := scanFile(workspace, path, id)
 				if recordErr != nil {
 					return recordErr
 				}
@@ -423,7 +440,7 @@ func scanTopic(workspace config.Workspace, id domain.ID, candidate topicCandidat
 				record.Filename = filepath.Base(path)
 				records = append(records, record)
 				statuses = append(statuses, document.Frontmatter.Status)
-				files = append(files, fileReadModelFromDocument(id, relative, path, stat, document, "historic_file"))
+				files = append(files, fileReadModelFromDocument(id, relative, path, stat, document, "historic_file", fileID))
 				return nil
 			}
 		}
@@ -437,8 +454,8 @@ func scanTopic(workspace config.Workspace, id domain.ID, candidate topicCandidat
 	return topic, records, files, nil
 }
 
-func fileReadModelFromDocument(id domain.ID, relative, path string, info os.FileInfo, document markdown.Document, fileType string) fileReadModel {
-	return fileReadModel{TopicID: id, Type: fileType, Path: relative, Filename: filepath.Base(path), Title: document.Frontmatter.Title, Description: document.Frontmatter.Description, Status: document.Frontmatter.Status, Tags: document.Frontmatter.Tags, Related: document.Frontmatter.Related, Content: document.Body, CreatedAt: document.Frontmatter.Created, UpdatedAt: document.Frontmatter.Updated, Mtime: info.ModTime().UTC().Format(time.RFC3339Nano), Hash: hashFile(path), Size: info.Size(), WordCount: wordCount(document.Body)}
+func fileReadModelFromDocument(id domain.ID, relative, path string, info os.FileInfo, document markdown.Document, fileType string, fileID domain.FileID) fileReadModel {
+	return fileReadModel{FileID: fileID, TopicID: id, Type: fileType, Path: relative, Filename: filepath.Base(path), Title: document.Frontmatter.Title, Description: document.Frontmatter.Description, Status: document.Frontmatter.Status, Tags: document.Frontmatter.Tags, Related: document.Frontmatter.Related, Content: document.Body, CreatedAt: document.Frontmatter.Created, UpdatedAt: document.Frontmatter.Updated, Mtime: info.ModTime().UTC().Format(time.RFC3339Nano), Hash: hashFile(path), Size: info.Size(), WordCount: wordCount(document.Body)}
 }
 
 func fileReadModelFromAsset(id domain.ID, relative, path string, info os.FileInfo) fileReadModel {
@@ -483,7 +500,7 @@ func allStatus(statuses []domain.Status, expected domain.Status) bool {
 	return true
 }
 
-func scanFile(workspace config.Workspace, path string) (Record, error) {
+func scanFile(workspace config.Workspace, path string, topicID domain.ID) (Record, error) {
 	document, err := markdown.ParseFile(path)
 	if err != nil {
 		return Record{}, fmt.Errorf("invalid Markdown %s: %w", workspace.RelativePath(path), err)
@@ -494,7 +511,7 @@ func scanFile(workspace config.Workspace, path string) (Record, error) {
 	}
 	relative := workspace.RelativePath(path)
 	parts := strings.Split(filepath.ToSlash(relative), "/")
-	folderID, folderSlug, subfolder := document.Frontmatter.ID, "", ""
+	folderID, folderSlug, subfolder := topicID, "", ""
 	for index, part := range parts {
 		if match := topicFolderPattern.FindStringSubmatch(part); len(match) == 3 {
 			folderSlug = match[2]

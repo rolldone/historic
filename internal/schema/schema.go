@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS topics (
     computed_status TEXT
 );
 CREATE TABLE IF NOT EXISTS files (
-    id INTEGER PRIMARY KEY,
+    id TEXT PRIMARY KEY,
     topic_id TEXT NOT NULL,
     type TEXT NOT NULL CHECK (type IN ('historic_file', 'asset')),
     path TEXT NOT NULL CHECK (

@@ -47,7 +47,7 @@ func newAddCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			result := addOutput{Command: "add", OK: true, Data: addData{ID: entry.ID.String(), File: workspace.RelativePath(entry.Path), Title: entry.Title}, Error: nil}
+			result := addOutput{Command: "add", OK: true, Data: addData{ID: entry.ID.String(), TopicID: id.String(), File: workspace.RelativePath(entry.Path), Title: entry.Title}, Error: nil}
 			if jsonOutput {
 				return json.NewEncoder(cmd.OutOrStdout()).Encode(result)
 			}
@@ -69,9 +69,10 @@ type addOutput struct {
 }
 
 type addData struct {
-	ID    string `json:"id"`
-	File  string `json:"file"`
-	Title string `json:"title"`
+	ID      string `json:"id"`
+	TopicID string `json:"topic_id"`
+	File    string `json:"file"`
+	Title   string `json:"title"`
 }
 
 func activeTopicID(workspace config.Workspace) (string, error) {

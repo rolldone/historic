@@ -33,9 +33,15 @@ func TestAddEntryCreatesMarkdownAndUpdatesMeta(t *testing.T) {
 	if meta.ID != topic.ID || meta.Title != topic.Title {
 		t.Fatalf("metadata = %#v, want topic identity", meta)
 	}
+	if len(meta.Files) != 1 || !meta.Files[0].ID.Valid() || meta.Files[0].Path != entry.Filename {
+		t.Fatalf("manifest = %#v, want generated file ID", meta.Files)
+	}
 	parsedEntry, err := markdown.ParseFile(filepath.Join(topic.Path, entry.Filename))
 	if err != nil {
 		t.Fatalf("parse entry: %v", err)
+	}
+	if parsedEntry.Frontmatter.ID.Valid() {
+		t.Fatal("managed child should not require a manually authored topic ID")
 	}
 	if parsedEntry.Frontmatter.Description != "" || entry.Description != "" {
 		t.Fatalf("description = %q, entry description = %q, want empty", parsedEntry.Frontmatter.Description, entry.Description)

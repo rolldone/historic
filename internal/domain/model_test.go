@@ -26,6 +26,18 @@ func TestParseIDRejectsInvalidValues(t *testing.T) {
 	}
 }
 
+func TestParseFileIDAcceptsOnlyCanonicalUUIDv7(t *testing.T) {
+	valid, err := ParseFileID("0192f3b5-1e20-7abc-8def-0123456789ab")
+	if err != nil || !valid.Valid() {
+		t.Fatalf("ParseFileID(valid) = %q, %v", valid, err)
+	}
+	for _, value := range []string{"0192f3b5-1e20-6abc-8def-0123456789ab", "0192f3b5-1e20-7abc-0def-0123456789ab", "0192F3B5-1e20-7abc-8def-0123456789ab", "not-a-uuid"} {
+		if _, err := ParseFileID(value); !errors.Is(err, ErrInvalidFileID) {
+			t.Errorf("ParseFileID(%q) error = %v, want ErrInvalidFileID", value, err)
+		}
+	}
+}
+
 func TestSlugTitle(t *testing.T) {
 	tests := map[string]string{
 		"Admin Dashboard":        "admin-dashboard",

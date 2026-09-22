@@ -25,6 +25,7 @@ const (
 var (
 	ErrDuplicateID   = errors.New("topic ID already exists")
 	ErrInvalidID     = errors.New("invalid topic ID")
+	ErrInvalidFileID = errors.New("invalid managed file ID")
 	ErrInvalidSlug   = errors.New("invalid topic slug")
 	ErrInvalidStatus = errors.New("invalid status")
 	ErrTopicMissing  = errors.New("topic not found")
@@ -76,6 +77,21 @@ var closeStatuses = map[Status]struct{}{
 type ID string
 
 var idPattern = regexp.MustCompile(`^[0-9]{5}$`)
+var fileIDPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
+
+// FileID is the canonical lowercase UUIDv7 identifier of a managed file.
+type FileID string
+
+func ParseFileID(value string) (FileID, error) {
+	id := FileID(value)
+	if !id.Valid() {
+		return "", fmt.Errorf("%w: %q must be a lowercase canonical UUIDv7", ErrInvalidFileID, value)
+	}
+	return id, nil
+}
+
+func (id FileID) String() string { return string(id) }
+func (id FileID) Valid() bool    { return fileIDPattern.MatchString(string(id)) }
 
 func ParseID(value string) (ID, error) {
 	if !idPattern.MatchString(value) {
@@ -108,7 +124,7 @@ type Topic struct {
 
 // Entry is a Markdown document belonging to a topic.
 type Entry struct {
-	ID          ID
+	ID          FileID
 	Title       string
 	Description string
 	Status      Status
@@ -130,7 +146,7 @@ type WorkOrder struct {
 
 // Frontmatter is the metadata serialized at the start of a Markdown file.
 type Frontmatter struct {
-	ID          ID       `yaml:"id"`
+	ID          ID       `yaml:"id,omitempty"`
 	Title       string   `yaml:"title"`
 	Description string   `yaml:"description"`
 	Status      Status   `yaml:"status"`

@@ -74,7 +74,7 @@ type TopicSummary struct {
 
 // FileResult is a file read-model record with its aggregate topic context.
 type FileResult struct {
-	ID          int64        `json:"id"`
+	ID          string       `json:"id"`
 	TopicID     string       `json:"topic_id"`
 	Type        string       `json:"type"`
 	Path        string       `json:"path"`
@@ -207,7 +207,7 @@ func (service Service) QueryFiles(options Options) ([]FileResult, error) {
 	topicWhere, topicArgs := topicPredicates(options)
 	joinPredicate, fileArgs := fileJoinPredicate(options)
 	args := append(append([]any{}, topicArgs...), fileArgs...)
-	rows, err := database.Query(`SELECT f.id, f.topic_id, f.type, f.path, f.filename, f.title, f.description,
+	rows, err := database.Query(`SELECT CAST(f.id AS TEXT), f.topic_id, f.type, f.path, f.filename, f.title, f.description,
 		f.status, f.tags, f.related, f.asset_kind, f.created_at, f.updated_at, f.mtime, f.hash,
 		f.size, f.word_count
 		FROM files AS f JOIN topics AS t ON t.id = f.topic_id
