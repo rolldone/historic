@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -19,7 +20,7 @@ import (
 )
 
 var (
-	topicFolderPattern = regexp.MustCompile(`^([0-9]{5})-(.+)$`)
+	topicFolderPattern = regexp.MustCompile(`^([0-9]{5}|[0-9]{13})-(.+)$`)
 	workOrderPattern   = regexp.MustCompile(`^([0-9]{2})-(.+)$`)
 )
 
@@ -43,9 +44,26 @@ func (store TopicStore) CreateTopic(title string, requestedID string) (domain.To
 	if err != nil {
 		return domain.Topic{}, err
 	}
-	id, err := store.nextID(requestedID)
-	if err != nil {
+	lock := identifier.NewFileLock(filepath.Join(store.Workspace.Histories, ".topic-id.lock"))
+	if err := lock.Acquire(context.Background()); err != nil {
 		return domain.Topic{}, err
+	}
+	defer lock.Release()
+	var id domain.ID
+	if requestedID != "" {
+		id, err = domain.ParseTopicIdentity(requestedID)
+		if err != nil {
+			return domain.Topic{}, err
+		}
+		if store.topicIDExists(id) {
+			return domain.Topic{}, fmt.Errorf("%w: %s", domain.ErrDuplicateID, id)
+		}
+	} else {
+		allocated, allocErr := identifier.AllocateTopicIDUnlocked(store.Workspace.Histories, nil)
+		if allocErr != nil {
+			return domain.Topic{}, allocErr
+		}
+		id = domain.ID(allocated)
 	}
 	folderName, err := domain.TopicFolderName(id, title)
 	if err != nil {
@@ -67,6 +85,10 @@ func (store TopicStore) CreateTopic(title string, requestedID string) (domain.To
 	if err := markdown.WriteTopicMetadata(metaPath, metadata); err != nil {
 		_ = os.Remove(topicPath)
 		return domain.Topic{}, fmt.Errorf("create topic metadata: %w", err)
+	}
+	if _, err := os.Stat(topicPath); err == nil {
+		lastPath := filepath.Join(store.Workspace.Histories, ".topic-id.last")
+		_ = os.WriteFile(lastPath, []byte(id.String()), 0o644)
 	}
 	return domain.Topic{ID: id, Title: title, Description: metadata.Description, Created: parseDate(created), Path: topicPath, Slug: slug}, nil
 }
@@ -308,7 +330,7 @@ func addFileToMeta(body, relativeName string) string {
 
 func (store TopicStore) nextID(requested string) (domain.ID, error) {
 	if requested != "" {
-		id, err := domain.ParseID(requested)
+		id, err := domain.ParseTopicIdentity(requested)
 		if err != nil {
 			return "", err
 		}

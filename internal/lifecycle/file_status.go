@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -13,6 +14,8 @@ import (
 	"historic/internal/indexer"
 	"historic/internal/markdown"
 )
+
+var topicPathFolderPattern = regexp.MustCompile(`^([0-9]{5}|[0-9]{13})-(.+)$`)
 
 // FileChange describes one successful file-level status change.
 type FileChange struct {
@@ -125,8 +128,9 @@ func topicIDFromPath(workspace config.Workspace, path string) domain.ID {
 	relative := filepath.ToSlash(workspace.RelativePath(path))
 	parts := strings.Split(relative, "/")
 	for _, part := range parts {
-		if len(part) > 6 && part[5] == '-' {
-			if id, err := domain.ParseID(part[:5]); err == nil {
+		match := topicPathFolderPattern.FindStringSubmatch(part)
+		if len(match) == 3 {
+			if id, err := domain.ParseTopicIdentity(match[1]); err == nil {
 				return id
 			}
 		}

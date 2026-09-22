@@ -21,7 +21,7 @@ func newImportCommand() *cobra.Command {
 			if err != nil {
 				return writeCommandError(cmd, "import", jsonOutput, err)
 			}
-			id, err := domain.ParseID(args[0])
+			id, err := domain.ParseTopicIdentity(args[0])
 			if err != nil {
 				return writeCommandError(cmd, "import", jsonOutput, err)
 			}

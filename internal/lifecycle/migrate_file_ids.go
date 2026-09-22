@@ -104,7 +104,7 @@ func migrationTopicPaths(workspace config.Workspace, options FileIDMigrationOpti
 			if len(match) != 3 || !entry.IsDir() {
 				continue
 			}
-			id, parseErr := domain.ParseID(match[1])
+			id, parseErr := domain.ParseTopicIdentity(match[1])
 			if parseErr != nil || options.TopicID != nil && id != *options.TopicID {
 				continue
 			}

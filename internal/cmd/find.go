@@ -36,7 +36,7 @@ func newFindCommand() *cobra.Command {
 			}
 			var parsedID domain.ID
 			if id != "" {
-				parsedID, err = domain.ParseID(id)
+				parsedID, err = domain.ParseTopicIdentity(id)
 				if err != nil {
 					return writeCommandError(cmd, "find", jsonOutput, err)
 				}

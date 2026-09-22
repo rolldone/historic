@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"regexp"
 
 	"historic/internal/config"
 	"historic/internal/domain"
@@ -39,7 +40,7 @@ func newAddCommand() *cobra.Command {
 					return err
 				}
 			}
-			id, err := domain.ParseID(topicID)
+			id, err := domain.ParseTopicIdentity(topicID)
 			if err != nil {
 				return err
 			}
@@ -82,11 +83,14 @@ func activeTopicID(workspace config.Workspace) (string, error) {
 	}
 	var ids []string
 	for _, entry := range entries {
-		if !entry.IsDir() || len(entry.Name()) < 6 || entry.Name()[5] != '-' {
+		if !entry.IsDir() {
 			continue
 		}
-		if _, err := domain.ParseID(entry.Name()[:5]); err == nil {
-			ids = append(ids, entry.Name()[:5])
+		match := regexp.MustCompile(`^([0-9]{5}|[0-9]{13})-(.+)$`).FindStringSubmatch(entry.Name())
+		if len(match) == 3 {
+			if _, err := domain.ParseTopicIdentity(match[1]); err == nil {
+				ids = append(ids, match[1])
+			}
 		}
 	}
 	if len(ids) != 1 {

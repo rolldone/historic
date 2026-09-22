@@ -24,7 +24,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-var topicFolderPattern = regexp.MustCompile(`^([0-9]{5})-(.+)$`)
+var topicFolderPattern = regexp.MustCompile(`^([0-9]{5}|[0-9]{13})-(.+)$`)
 
 // Record is the SQLite-backed representation of one Markdown file.
 type Record struct {
@@ -309,7 +309,7 @@ func scan(workspace config.Workspace) (scanResult, error) {
 			if len(match) != 3 {
 				continue
 			}
-			id, err := domain.ParseID(match[1])
+			id, err := domain.ParseTopicIdentity(match[1])
 			if err != nil {
 				continue
 			}

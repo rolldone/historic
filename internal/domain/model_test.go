@@ -26,6 +26,124 @@ func TestParseIDRejectsInvalidValues(t *testing.T) {
 	}
 }
 
+func TestParseTopicIDAcceptsValidValues(t *testing.T) {
+	valid := []string{
+		"1758537600123",
+		"1700000000000",
+		"9999999999999",
+	}
+	for _, value := range valid {
+		id, err := ParseTopicID(value)
+		if err != nil {
+			t.Errorf("ParseTopicID(%q) unexpected error: %v", value, err)
+		}
+		if id.String() != value {
+			t.Errorf("ParseTopicID(%q).String() = %q", value, id.String())
+		}
+		if !id.Valid() {
+			t.Errorf("ParseTopicID(%q).Valid() = false", value)
+		}
+	}
+}
+
+func TestParseTopicIDRejectsInvalidValues(t *testing.T) {
+	invalid := []string{
+		"",
+		"14",
+		"00001",
+		"175853760012",
+		"17585376001234",
+		"175853760012a",
+		"-1758537600123",
+		"0000000000000",
+		"01a0c8xx-xxxx-7xxx-xxxx-xxxxxxxxxxxx",
+		"search-read-model",
+	}
+	for _, value := range invalid {
+		_, err := ParseTopicID(value)
+		if err == nil {
+			t.Errorf("ParseTopicID(%q) should have returned an error", value)
+		}
+	}
+}
+
+func TestTopicIDValid(t *testing.T) {
+	tests := []struct {
+		id    TopicID
+		valid bool
+	}{
+		{"1758537600123", true},
+		{"9999999999999", true},
+		{"00001", false},
+		{"", false},
+		{"175853760012a", false},
+		{"0000000000000", false},
+	}
+	for _, tt := range tests {
+		if got := tt.id.Valid(); got != tt.valid {
+			t.Errorf("TopicID(%q).Valid() = %v, want %v", tt.id, got, tt.valid)
+		}
+	}
+}
+
+func TestTopicIDFromFolderExtractsModernID(t *testing.T) {
+	id, ok := TopicIDFromFolder("1758537600123-admin-dashboard")
+	if !ok || id != "1758537600123" {
+		t.Errorf("TopicIDFromFolder modern: got %q, %v", id, ok)
+	}
+	id, ok = TopicIDFromFolder("00001-admin-dashboard")
+	if ok {
+		t.Errorf("TopicIDFromFolder legacy should return false, got %q, %v", id, ok)
+	}
+	id, ok = TopicIDFromFolder("not-a-folder")
+	if ok {
+		t.Errorf("TopicIDFromFolder invalid should return false, got %q, %v", id, ok)
+	}
+}
+
+func TestParseTopicIdentityAcceptsBothFormats(t *testing.T) {
+	id, err := ParseTopicIdentity("00001")
+	if err != nil || id != "00001" {
+		t.Errorf("ParseTopicIdentity(00001) = %q, %v", id, err)
+	}
+	id, err = ParseTopicIdentity("1758537600123")
+	if err != nil || id != "1758537600123" {
+		t.Errorf("ParseTopicIdentity(1758537600123) = %q, %v", id, err)
+	}
+	_, err = ParseTopicIdentity("not-valid")
+	if err == nil {
+		t.Errorf("ParseTopicIdentity(not-valid) should have returned an error")
+	}
+}
+
+func TestIDValidAcceptsBothLegacyAndModern(t *testing.T) {
+	tests := []struct {
+		id    ID
+		valid bool
+	}{
+		{"00001", true},
+		{"1758537600123", true},
+		{"14", false},
+		{"", false},
+		{"00001a", false},
+	}
+	for _, tt := range tests {
+		if got := tt.id.Valid(); got != tt.valid {
+			t.Errorf("ID(%q).Valid() = %v, want %v", tt.id, got, tt.valid)
+		}
+	}
+}
+
+func TestTopicFolderNameAcceptsModernID(t *testing.T) {
+	got, err := TopicFolderName(ID("1758537600123"), "Admin Dashboard")
+	if err != nil {
+		t.Fatalf("TopicFolderName: %v", err)
+	}
+	if got != "1758537600123-admin-dashboard" {
+		t.Fatalf("folder = %q, want 1758537600123-admin-dashboard", got)
+	}
+}
+
 func TestParseFileIDAcceptsOnlyCanonicalUUIDv7(t *testing.T) {
 	valid, err := ParseFileID("0192f3b5-1e20-7abc-8def-0123456789ab")
 	if err != nil || !valid.Valid() {

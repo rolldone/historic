@@ -20,7 +20,7 @@ func newTestStore(t *testing.T) TopicStore {
 	return NewTopicStore(workspace)
 }
 
-func TestCreateTopicAutoIDUsesFirstGapAcrossActiveAndArchive(t *testing.T) {
+func TestCreateTopicAutoIDUsesModernTimestampAllocation(t *testing.T) {
 	store := newTestStore(t)
 	for _, folder := range []string{"00001-first", "00003-third"} {
 		if err := os.Mkdir(filepath.Join(store.Workspace.Histories, folder), 0o755); err != nil {
@@ -34,8 +34,12 @@ func TestCreateTopicAutoIDUsesFirstGapAcrossActiveAndArchive(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTopic: %v", err)
 	}
-	if topic.ID != "00004" {
-		t.Fatalf("auto ID = %s, want 00004", topic.ID)
+	id, parseErr := domain.ParseTopicIdentity(topic.ID.String())
+	if parseErr != nil || !id.Valid() {
+		t.Fatalf("auto ID %q is not a valid topic identity: %v", topic.ID, parseErr)
+	}
+	if len(topic.ID.String()) != 13 {
+		t.Fatalf("auto ID = %s, want 13-digit modern topic ID", topic.ID)
 	}
 	if _, err := os.Stat(filepath.Join(topic.Path, markdown.MetaFilename)); err != nil {
 		t.Fatalf("metadata: %v", err)

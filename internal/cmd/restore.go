@@ -22,7 +22,7 @@ func newRestoreCommand() *cobra.Command {
 			if err != nil {
 				return writeCommandError(cmd, "restore", jsonOutput, err)
 			}
-			id, err := domain.ParseID(args[0])
+			id, err := domain.ParseTopicIdentity(args[0])
 			if err != nil {
 				return writeCommandError(cmd, "restore", jsonOutput, err)
 			}

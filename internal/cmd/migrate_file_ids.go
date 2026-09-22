@@ -31,7 +31,7 @@ func newMigrateFileIDsCommand() *cobra.Command {
 			var parsedID domain.ID
 			var idPointer *domain.ID
 			if topicID != "" {
-				parsedID, err = domain.ParseID(topicID)
+				parsedID, err = domain.ParseTopicIdentity(topicID)
 				if err != nil {
 					return writeCommandError(cmd, "migrate-file-ids", jsonOutput, err)
 				}

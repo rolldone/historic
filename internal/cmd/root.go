@@ -36,6 +36,7 @@ func NewRootCommand() *cobra.Command {
 	root.AddCommand(newFindCommand())
 	root.AddCommand(newRebuildCommand())
 	root.AddCommand(newMigrateFileIDsCommand())
+	root.AddCommand(newMigrateTopicIDsCommand())
 	root.AddCommand(newDoctorCommand())
 	root.AddCommand(newUpgradeCommand())
 	root.AddCommand(newSearchCommand())

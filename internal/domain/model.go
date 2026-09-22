@@ -74,10 +74,50 @@ var closeStatuses = map[Status]struct{}{
 	StatusComplete: {}, StatusFailed: {}, StatusCancelled: {}, StatusArchived: {},
 }
 
-// ID represents a five-digit topic identifier and preserves its padded form.
-type ID string
+// LegacyTopicID names the pre-migration five-digit topic identity.
+type LegacyTopicID string
+
+// ID is retained as the compatibility name for legacy topic resolver APIs.
+type ID = LegacyTopicID
+
+// TopicID is the canonical Unix epoch millisecond topic identity.
+type TopicID string
+
+var topicIDPattern = regexp.MustCompile(`^[0-9]{13}$`)
+
+// ParseTopicID parses a positive, modern epoch-millisecond topic identity.
+func ParseTopicID(value string) (TopicID, error) {
+	if !topicIDPattern.MatchString(value) {
+		return "", fmt.Errorf("%w: %q must contain exactly 13 ASCII digits", ErrInvalidID, value)
+	}
+	n, err := strconv.ParseInt(value, 10, 64)
+	if err != nil || n < 1000000000000 {
+		return "", fmt.Errorf("%w: %q is not a modern positive epoch millisecond", ErrInvalidID, value)
+	}
+	return TopicID(value), nil
+}
+
+func (id TopicID) String() string { return string(id) }
+func (id TopicID) Valid() bool {
+	if !topicIDPattern.MatchString(string(id)) {
+		return false
+	}
+	n, err := strconv.ParseInt(string(id), 10, 64)
+	return err == nil && n >= 1000000000000
+}
+
+// TopicIDFromFolder extracts a modern identity from a canonical topic folder.
+func TopicIDFromFolder(name string) (TopicID, bool) {
+	match := topicFolderPattern.FindStringSubmatch(name)
+	if len(match) != 3 || len(match[1]) != 13 {
+		return "", false
+	}
+	id, err := ParseTopicID(match[1])
+	return id, err == nil
+}
 
 var idPattern = regexp.MustCompile(`^[0-9]{5}$`)
+var topicFolderPattern = regexp.MustCompile(`^([0-9]{5}|[0-9]{13})-(.+)$`)
 var fileIDPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
 
 // FileID is the canonical lowercase UUIDv7 identifier of a managed file.
@@ -108,7 +148,26 @@ func (id ID) Number() int {
 	return n
 }
 
-func (id ID) Valid() bool { return idPattern.MatchString(string(id)) }
+func (id ID) Valid() bool {
+	if idPattern.MatchString(string(id)) {
+		return true
+	}
+	modern, err := ParseTopicID(string(id))
+	return err == nil && modern.Valid()
+}
+
+// ParseTopicIdentity accepts legacy IDs and modern TopicIDs for resolver APIs.
+// ParseID remains intentionally legacy-only for migration compatibility.
+func ParseTopicIdentity(value string) (ID, error) {
+	if legacy, err := ParseID(value); err == nil {
+		return legacy, nil
+	}
+	modern, err := ParseTopicID(value)
+	if err != nil {
+		return "", err
+	}
+	return ID(modern), nil
+}
 
 // Topic is the metadata and identity of a Historic topic.
 type Topic struct {

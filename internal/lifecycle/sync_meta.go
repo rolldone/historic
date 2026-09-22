@@ -17,7 +17,7 @@ import (
 	"historic/internal/markdown"
 )
 
-var syncTopicFolderPattern = regexp.MustCompile(`^([0-9]{5})-(.+)$`)
+var syncTopicFolderPattern = regexp.MustCompile(`^([0-9]{5}|[0-9]{13})-(.+)$`)
 
 // SyncChange describes one successful metadata synchronization.
 type SyncChange struct {
@@ -191,7 +191,7 @@ func resolveSyncTopic(workspace config.Workspace, input string) (string, domain.
 	if value == "" {
 		return "", "", fmt.Errorf("%w: topic is empty", domain.ErrConflict)
 	}
-	if id, err := domain.ParseID(value); err == nil {
+	if id, err := domain.ParseTopicIdentity(value); err == nil {
 		matches := make([]string, 0, 2)
 		for _, root := range []string{workspace.Histories, workspace.Database} {
 			entries, readErr := os.ReadDir(root)
@@ -254,7 +254,7 @@ func resolveSyncTopic(workspace config.Workspace, input string) (string, domain.
 	if len(match) != 3 {
 		return "", "", fmt.Errorf("%w: invalid topic path %q", domain.ErrConflict, input)
 	}
-	id, err := domain.ParseID(match[1])
+	id, err := domain.ParseTopicIdentity(match[1])
 	if err != nil {
 		return "", "", err
 	}

@@ -60,7 +60,7 @@ func newShowCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			id, err := domain.ParseID(args[0])
+			id, err := domain.ParseTopicIdentity(args[0])
 			if err != nil {
 				return writeCommandError(cmd, "show", jsonOutput, err)
 			}

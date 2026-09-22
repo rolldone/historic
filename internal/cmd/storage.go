@@ -19,7 +19,7 @@ func newStorageCommand(name string, move func(lifecycle.Service, domain.ID) (lif
 			if err != nil {
 				return writeCommandError(cmd, name, jsonOutput, err)
 			}
-			id, err := domain.ParseID(args[0])
+			id, err := domain.ParseTopicIdentity(args[0])
 			if err != nil {
 				return writeCommandError(cmd, name, jsonOutput, err)
 			}

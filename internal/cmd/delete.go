@@ -63,7 +63,7 @@ func newTopicDestructiveCommand(name, short string, purge bool) *cobra.Command {
 			if purge && confirmation != args[0] {
 				return writeCommandError(cmd, name, jsonOutput, fmt.Errorf("%w: purge requires --confirm %s", domain.ErrConflict, args[0]))
 			}
-			id, err := domain.ParseID(args[0])
+			id, err := domain.ParseTopicIdentity(args[0])
 			if err != nil {
 				return writeCommandError(cmd, name, jsonOutput, err)
 			}

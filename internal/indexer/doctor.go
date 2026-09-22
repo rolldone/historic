@@ -6,9 +6,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 
 	"historic/internal/config"
 )
+
+var legacyTopicFolderPattern = regexp.MustCompile(`^([0-9]{5})-(.+)$`)
 
 type Diagnosis struct {
 	BinaryVersion       string
@@ -34,6 +37,12 @@ func Diagnose(workspace config.Workspace, binaryVersion string) Diagnosis {
 	if _, err := os.Stat(workspace.Histories); err != nil {
 		diagnosis.Status = "workspace invalid"
 		diagnosis.Recommendation = "run historic init in a valid workspace"
+		return diagnosis
+	}
+	if hasLegacyTopicFolders(workspace) {
+		diagnosis.Status = "upgrade required"
+		diagnosis.CompatibilityAction = string(config.ActionMigrateWorkspace)
+		diagnosis.Recommendation = "run historic upgrade"
 		return diagnosis
 	}
 	if _, err := os.Stat(workspace.Index); errors.Is(err, os.ErrNotExist) {
@@ -98,6 +107,21 @@ func Diagnose(workspace config.Workspace, binaryVersion string) Diagnosis {
 		}
 	}
 	return diagnosis
+}
+
+func hasLegacyTopicFolders(workspace config.Workspace) bool {
+	for _, root := range []string{workspace.Histories, workspace.Database} {
+		entries, err := os.ReadDir(root)
+		if err != nil {
+			continue
+		}
+		for _, entry := range entries {
+			if entry.IsDir() && legacyTopicFolderPattern.MatchString(entry.Name()) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func Upgrade(workspace config.Workspace) (int, string, error) {

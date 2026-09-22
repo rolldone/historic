@@ -9,7 +9,7 @@ import (
 	"historic/internal/config"
 )
 
-const SchemaVersion = 3
+const SchemaVersion = 4
 
 func schemaVersion(database *sql.DB) (int, error) {
 	var version int

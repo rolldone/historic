@@ -70,7 +70,7 @@ func (metadata TopicMetadata) Frontmatter() domain.Frontmatter {
 // ValidateTopicMetadata validates the canonical YAML fields.
 func ValidateTopicMetadata(metadata TopicMetadata) error {
 	if !metadata.ID.Valid() {
-		return fmt.Errorf("%w: field %q must be a five-digit ID", ErrInvalidFrontmatter, "id")
+		return fmt.Errorf("%w: field %q must be a valid topic ID", ErrInvalidFrontmatter, "id")
 	}
 	if strings.TrimSpace(metadata.Title) == "" {
 		return fmt.Errorf("%w: field %q is required", ErrInvalidFrontmatter, "title")
@@ -85,7 +85,7 @@ func ValidateTopicMetadata(metadata TopicMetadata) error {
 	}
 	for index, related := range metadata.Related {
 		if !validRelatedReference(string(related)) {
-			return fmt.Errorf("%w: field %q item %d must be a five-digit ID or relative path", ErrInvalidFrontmatter, "related", index)
+			return fmt.Errorf("%w: field %q item %d must be a topic ID or relative path", ErrInvalidFrontmatter, "related", index)
 		}
 	}
 	if err := validateManifestFiles(metadata.Files); err != nil {
@@ -147,7 +147,7 @@ func ParseTopicMetadataLenient(path string, input []byte) (TopicMetadata, error)
 // valid file IDs. File path, type, and status are still validated.
 func ValidateTopicMetadataLenient(metadata TopicMetadata) error {
 	if !metadata.ID.Valid() {
-		return fmt.Errorf("%w: field %q must be a five-digit ID", ErrInvalidFrontmatter, "id")
+		return fmt.Errorf("%w: field %q must be a valid topic ID", ErrInvalidFrontmatter, "id")
 	}
 	if strings.TrimSpace(metadata.Title) == "" {
 		return fmt.Errorf("%w: field %q is required", ErrInvalidFrontmatter, "title")
@@ -162,7 +162,7 @@ func ValidateTopicMetadataLenient(metadata TopicMetadata) error {
 	}
 	for index, related := range metadata.Related {
 		if !validRelatedReference(string(related)) {
-			return fmt.Errorf("%w: field %q item %d must be a five-digit ID or relative path", ErrInvalidFrontmatter, "related", index)
+			return fmt.Errorf("%w: field %q item %d must be a topic ID or relative path", ErrInvalidFrontmatter, "related", index)
 		}
 	}
 	if err := validateManifestFilesLenient(metadata.Files); err != nil {

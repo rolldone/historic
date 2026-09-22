@@ -23,7 +23,11 @@ func newDoctorCommand() *cobra.Command {
 		if jsonOutput {
 			return json.NewEncoder(cmd.OutOrStdout()).Encode(response)
 		}
-		_, err = fmt.Fprintf(cmd.OutOrStdout(), "Status: %s\nBinary: %s (code %d)\nStored app: %s (code %d)\nWorkspace format: %d\nIndex schema: %d (required %d)\nCompatibility action: %s\nRecommendation: %s\n", data.Status, data.AppVersionName, data.AppVersionCode, data.StoredVersionName, data.StoredVersionCode, data.WorkspaceFormatVersion, data.CurrentIndexSchemaVersion, data.RequiredIndexSchemaVersion, data.CompatibilityAction, data.Recommendation)
+		recommendation := diagnosis.Recommendation
+		if diagnosis.CompatibilityAction == string(config.ActionMigrateWorkspace) {
+			recommendation = recommendation + "; run historic upgrade"
+		}
+		_, err = fmt.Fprintf(cmd.OutOrStdout(), "Status: %s\nBinary: %s (code %d)\nStored app: %s (code %d)\nWorkspace format: %d\nIndex schema: %d (required %d)\nCompatibility action: %s\nRecommendation: %s\n", data.Status, data.AppVersionName, data.AppVersionCode, data.StoredVersionName, data.StoredVersionCode, data.WorkspaceFormatVersion, data.CurrentIndexSchemaVersion, data.RequiredIndexSchemaVersion, data.CompatibilityAction, recommendation)
 		return err
 	}}
 	command.Flags().BoolVar(&jsonOutput, "json", false, "output stable JSON")
