@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 
 	"historic/internal/config"
 	"historic/internal/domain"
@@ -39,7 +40,13 @@ func syncMetaTopic(workspace config.Workspace, input string, rebuildIndex bool) 
 	}
 	metadata, err := markdown.ReadTopicMetadata(topic)
 	if err != nil {
-		return SyncChange{}, fmt.Errorf("read topic metadata: %w", err)
+		if !errors.Is(err, os.ErrNotExist) {
+			return SyncChange{}, fmt.Errorf("read topic metadata: %w", err)
+		}
+		metadata, err = recoverTopicMetadata(topic, id)
+		if err != nil {
+			return SyncChange{}, fmt.Errorf("recover topic metadata: %w", err)
+		}
 	}
 
 	managed, assets, err := scanTopicFiles(topic, id)
@@ -56,6 +63,52 @@ func syncMetaTopic(workspace config.Workspace, input string, rebuildIndex bool) 
 		}
 	}
 	return SyncChange{ID: id, Path: workspace.RelativePath(topic), Files: len(managed), Assets: len(assets), Updated: updated}, nil
+}
+
+func recoverTopicMetadata(topic string, id domain.ID) (markdown.TopicMetadata, error) {
+	managed, _, err := scanTopicFiles(topic, id)
+	if err != nil {
+		return markdown.TopicMetadata{}, err
+	}
+	folder := filepath.Base(topic)
+	match := syncTopicFolderPattern.FindStringSubmatch(folder)
+	if len(match) != 3 {
+		return markdown.TopicMetadata{}, fmt.Errorf("invalid topic folder %q", folder)
+	}
+	title := strings.ReplaceAll(match[2], "-", " ")
+	if len(managed) > 0 {
+		for _, file := range managed {
+			path := filepath.Join(topic, filepath.FromSlash(file.Path))
+			document, parseErr := markdown.ParseFile(path)
+			if parseErr == nil && strings.TrimSpace(document.Frontmatter.Title) != "" {
+				title = document.Frontmatter.Title
+				break
+			}
+		}
+	}
+	if strings.TrimSpace(title) == "" {
+		title = id.String()
+	}
+	created := time.Now().UTC().Format("2006-01-02")
+	updated := ""
+	for _, file := range managed {
+		path := filepath.Join(topic, filepath.FromSlash(file.Path))
+		document, parseErr := markdown.ParseFile(path)
+		if parseErr != nil {
+			continue
+		}
+		if document.Frontmatter.Created < created {
+			created = document.Frontmatter.Created
+		}
+		if document.Frontmatter.Updated > updated {
+			updated = document.Frontmatter.Updated
+		}
+	}
+	metadata := markdown.TopicMetadata{ID: id, Title: title, Created: created, Updated: updated}
+	if err := markdown.WriteTopicMetadata(filepath.Join(topic, markdown.MetaFilename), metadata); err != nil {
+		return markdown.TopicMetadata{}, err
+	}
+	return metadata, nil
 }
 
 func scanTopicFiles(topic string, id domain.ID) ([]markdown.ManifestFile, []markdown.ManifestAsset, error) {

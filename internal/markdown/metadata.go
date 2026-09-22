@@ -185,6 +185,15 @@ func WriteTopicMetadata(path string, metadata TopicMetadata) error {
 	return nil
 }
 
+// RestoreTopicMetadata restores previously captured canonical metadata bytes
+// atomically after validating them. It is used by rebuild rollback.
+func RestoreTopicMetadata(path string, input []byte) error {
+	if _, err := ParseTopicMetadata(path, input); err != nil {
+		return err
+	}
+	return atomicWrite(path, input)
+}
+
 // WriteTopicMetadataManifest writes metadata only when the filesystem-derived
 // manifest differs from the current canonical metadata. The rendered result
 // is validated before and after the atomic replacement.

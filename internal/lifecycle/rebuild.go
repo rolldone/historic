@@ -8,6 +8,7 @@ import (
 
 	"historic/internal/config"
 	"historic/internal/indexer"
+	"historic/internal/markdown"
 )
 
 type RebuildChange struct {
@@ -24,18 +25,41 @@ func RebuildMetadata(workspace config.Workspace) (RebuildChange, error) {
 		return RebuildChange{}, err
 	}
 	result := RebuildChange{Topics: len(paths)}
-	count, err := indexer.RebuildWithPreparation(workspace, func() error {
+	count, err := indexer.RebuildWithRollbackPreparation(workspace, func() (func(), error) {
+		snapshots := make(map[string][]byte, len(paths))
+		for _, path := range paths {
+			metaPath := filepath.Join(path, markdown.MetaFilename)
+			content, readErr := os.ReadFile(metaPath)
+			if readErr == nil {
+				snapshots[metaPath] = content
+				continue
+			}
+			if !os.IsNotExist(readErr) {
+				return nil, readErr
+			}
+			snapshots[metaPath] = nil
+		}
+		rollback := func() {
+			for path, content := range snapshots {
+				if content == nil {
+					_ = os.Remove(path)
+					continue
+				}
+				_ = markdown.RestoreTopicMetadata(path, content)
+			}
+		}
 		for _, path := range paths {
 			change, syncErr := syncMetaTopic(workspace, workspace.RelativePath(path), false)
 			if syncErr != nil {
+				rollback()
 				result.Errors++
-				return fmt.Errorf("reconcile metadata failed for %d topic(s): %w", result.Errors, syncErr)
+				return nil, fmt.Errorf("reconcile metadata failed for %d topic(s): %w", result.Errors, syncErr)
 			}
 			if change.Updated {
 				result.Updated++
 			}
 		}
-		return nil
+		return rollback, nil
 	})
 	if err != nil {
 		return result, fmt.Errorf("rebuild unified index: %w", err)

@@ -28,6 +28,17 @@ func acquireUpgradeLock(workspace config.Workspace) (func(), error) {
 }
 
 func RebuildWithPreparation(workspace config.Workspace, prepare func() error) (int, error) {
+	return atomicRebuildWithPreparation(workspace, func() (func(), error) {
+		if err := prepare(); err != nil {
+			return nil, err
+		}
+		return nil, nil
+	})
+}
+
+// RebuildWithRollbackPreparation runs a preparation step and rolls back its
+// filesystem changes if validation or index replacement fails.
+func RebuildWithRollbackPreparation(workspace config.Workspace, prepare func() (func(), error)) (int, error) {
 	return atomicRebuildWithPreparation(workspace, prepare)
 }
 
@@ -35,20 +46,27 @@ func atomicRebuild(workspace config.Workspace) (int, error) {
 	return atomicRebuildWithPreparation(workspace, nil)
 }
 
-func atomicRebuildWithPreparation(workspace config.Workspace, prepare func() error) (int, error) {
+func atomicRebuildWithPreparation(workspace config.Workspace, prepare func() (func(), error)) (int, error) {
 	unlock, err := acquireUpgradeLock(workspace)
 	if err != nil {
 		return 0, err
 	}
 	defer unlock()
 
-	// Validate the source before preparation can modify generated metadata. This
-	// keeps both Markdown and the current index intact when the scan is invalid.
+	var rollback func()
 	if prepare != nil {
-		if err := validateRebuildSource(workspace); err != nil {
+		rollback, err = prepare()
+		if err != nil {
 			return 0, err
 		}
-		if err := prepare(); err != nil {
+		if rollback != nil {
+			defer func() {
+				if err != nil {
+					rollback()
+				}
+			}()
+		}
+		if err = validateRebuildSource(workspace); err != nil {
 			return 0, err
 		}
 	}

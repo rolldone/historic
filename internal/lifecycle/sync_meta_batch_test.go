@@ -69,7 +69,7 @@ func TestSyncMetaBatchContinuesAfterTopicError(t *testing.T) {
 			}
 			continue
 		}
-		if err := os.WriteFile(filepath.Join(topic, "_meta.md"), []byte("invalid"), 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(topic, markdown.MetaFilename), []byte("invalid"), 0o644); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -80,8 +80,8 @@ func TestSyncMetaBatchContinuesAfterTopicError(t *testing.T) {
 	if change.Topics[0].Error == "" || change.Topics[1].Error == "" {
 		t.Fatalf("continue-on-error results = %#v", change.Topics)
 	}
-	if _, err := os.Stat(filepath.Join(workspace.Histories, "00001-broken", "_meta.md")); err != nil {
-		t.Fatalf("legacy metadata asset was not preserved: %v", err)
+	if _, err := os.Stat(filepath.Join(workspace.Histories, "00001-broken", markdown.MetaFilename)); err != nil {
+		t.Fatalf("invalid canonical metadata was removed: %v", err)
 	}
 }
 
