@@ -377,7 +377,7 @@ func (m *model) cycleType() {
 }
 
 func (m *model) cycleStatus() {
-	statuses := []domain.Status{"", domain.StatusCreate, domain.StatusDraft, domain.StatusPending, domain.StatusProgress, domain.StatusReview, domain.StatusBlocked, domain.StatusComplete, domain.StatusFailed, domain.StatusCancelled, domain.StatusArchived}
+	statuses := []domain.Status{"", domain.StatusCreate, domain.StatusDraft, domain.StatusPending, domain.StatusPlanned, domain.StatusProgress, domain.StatusReview, domain.StatusBlocked, domain.StatusComplete, domain.StatusFailed, domain.StatusCancelled, domain.StatusArchived}
 	for index, status := range statuses {
 		if m.status == status {
 			m.status = statuses[(index+1)%len(statuses)]

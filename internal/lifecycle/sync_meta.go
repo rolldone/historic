@@ -121,7 +121,11 @@ func scanTopicFiles(topic string, id domain.ID, previous []markdown.ManifestFile
 		}
 		relative = filepath.ToSlash(relative)
 		if strings.EqualFold(filepath.Ext(path), ".md") && filepath.Base(path) != "_meta.md" {
-			document, parseErr := markdown.ParseFile(path)
+			input, readErr := os.ReadFile(path)
+			if readErr != nil {
+				return readErr
+			}
+			document, parseErr := markdown.Parse(path, input)
 			if parseErr == nil {
 				fileID := previousByPath[relative]
 				if fileID == "" {
@@ -134,6 +138,11 @@ func scanTopicFiles(topic string, id domain.ID, previous []markdown.ManifestFile
 				managed = append(managed, markdown.ManifestFile{ID: fileID, Path: relative, Type: manifestFileType(relative), Status: document.Frontmatter.Status})
 				return nil
 			}
+			if markdown.LooksLikeHistoricFile(input) {
+				return fmt.Errorf("%w: invalid Historic Markdown %s: %v", domain.ErrConflict, relative, parseErr)
+			}
+			assets = append(assets, markdown.ManifestAsset{Path: relative, Type: manifestAssetType(path)})
+			return nil
 		}
 		assets = append(assets, markdown.ManifestAsset{Path: relative, Type: manifestAssetType(path)})
 		return nil

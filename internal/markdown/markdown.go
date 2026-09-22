@@ -28,6 +28,17 @@ type Document struct {
 	Body        string
 }
 
+// LooksLikeHistoricFile reports whether the Markdown bytes contain frontmatter
+// with at least one canonical Historic field. It does not validate values.
+func LooksLikeHistoricFile(input []byte) bool {
+	frontmatter, _, err := splitFrontmatter(input)
+	if err != nil {
+		return false
+	}
+	text := string(frontmatter)
+	return strings.Contains(text, "title:") || strings.Contains(text, "status:") || strings.Contains(text, "created:")
+}
+
 // Parse decodes a Markdown document from UTF-8 bytes.
 func Parse(path string, input []byte) (Document, error) {
 	if !utf8Valid(input) {

@@ -419,7 +419,11 @@ func scanTopic(workspace config.Workspace, id domain.ID, candidate topicCandidat
 			return err
 		}
 		if strings.EqualFold(filepath.Ext(path), ".md") && filepath.Base(path) != "_meta.md" {
-			document, parseErr := markdown.ParseFile(path)
+			input, readErr := os.ReadFile(path)
+			if readErr != nil {
+				return readErr
+			}
+			document, parseErr := markdown.Parse(path, input)
 			if parseErr == nil {
 				fileID := manifestByPath[relative]
 				if fileID == "" {
@@ -443,6 +447,11 @@ func scanTopic(workspace config.Workspace, id domain.ID, candidate topicCandidat
 				files = append(files, fileReadModelFromDocument(id, relative, path, stat, document, "historic_file", fileID))
 				return nil
 			}
+			if markdown.LooksLikeHistoricFile(input) {
+				return fmt.Errorf("%w: invalid Historic Markdown %s: %v", domain.ErrConflict, workspace.RelativePath(path), parseErr)
+			}
+			files = append(files, fileReadModelFromAsset(id, relative, path, stat))
+			return nil
 		}
 		files = append(files, fileReadModelFromAsset(id, relative, path, stat))
 		return nil
