@@ -76,16 +76,6 @@ func recoverTopicMetadata(topic string, id domain.ID) (markdown.TopicMetadata, e
 		return markdown.TopicMetadata{}, fmt.Errorf("invalid topic folder %q", folder)
 	}
 	title := strings.ReplaceAll(match[2], "-", " ")
-	if len(managed) > 0 {
-		for _, file := range managed {
-			path := filepath.Join(topic, filepath.FromSlash(file.Path))
-			document, parseErr := markdown.ParseFile(path)
-			if parseErr == nil && strings.TrimSpace(document.Frontmatter.Title) != "" {
-				title = document.Frontmatter.Title
-				break
-			}
-		}
-	}
 	if strings.TrimSpace(title) == "" {
 		title = id.String()
 	}
