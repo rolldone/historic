@@ -1,0 +1,14 @@
+id: "00009"
+title: strict historic markdown classification
+created: "2026-09-22"
+updated: "2026-09-22"
+files:
+    - id: 01a0c891-cc53-707d-b9c9-30f177172a38
+      path: spec.md
+      type: spec
+      status: complete
+    - id: 01a0c891-cc53-7a69-9f5d-044a9a2ee0f1
+      path: wos/01-strict-historic-markdown-classification.md
+      type: task
+      status: complete
+assets: []
