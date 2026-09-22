@@ -47,6 +47,24 @@ func TestParseAllowsEmptyOptionalFields(t *testing.T) {
 	}
 }
 
+func TestParseAllowsRelatedRelativePaths(t *testing.T) {
+	input := "---\nid: 00002\ntitle: Work Order\nstatus: complete\ncreated: 2026-09-21\nrelated: [../spec.md, ./01-two-table-search-read-model.md, \"00005\"]\n---\nBody\n"
+	document, err := Parse("wos/02-work-order.md", []byte(input))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if len(document.Frontmatter.Related) != 3 || document.Frontmatter.Related[0] != "../spec.md" || document.Frontmatter.Related[1] != "./01-two-table-search-read-model.md" || document.Frontmatter.Related[2] != "00005" {
+		t.Fatalf("related = %#v", document.Frontmatter.Related)
+	}
+}
+
+func TestParseRejectsUnsafeRelatedPath(t *testing.T) {
+	input := "---\nid: 00002\ntitle: Work Order\nstatus: complete\ncreated: 2026-09-21\nrelated: [/tmp/spec.md]\n---\nBody\n"
+	if _, err := Parse("wos/02-work-order.md", []byte(input)); err == nil {
+		t.Fatal("absolute related path accepted")
+	}
+}
+
 func TestParseAllowsMissingAndNullDescription(t *testing.T) {
 	for name, description := range map[string]string{
 		"missing": "",

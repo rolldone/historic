@@ -87,11 +87,34 @@ func ValidateFrontmatter(metadata domain.Frontmatter) error {
 		}
 	}
 	for index, related := range metadata.Related {
-		if !related.Valid() {
-			return fmt.Errorf("%w: field %q item %d is not a five-digit ID", ErrInvalidFrontmatter, "related", index)
+		if !validRelatedReference(string(related)) {
+			return fmt.Errorf("%w: field %q item %d must be a five-digit ID or relative path", ErrInvalidFrontmatter, "related", index)
 		}
 	}
 	return nil
+}
+
+func validRelatedReference(value string) bool {
+	if strings.TrimSpace(value) == "" {
+		return false
+	}
+	if domain.ID(value).Valid() {
+		return true
+	}
+	if filepath.IsAbs(value) || strings.HasPrefix(value, "/") || strings.Contains(value, "\\") || (len(value) > 1 && value[1] == ':') {
+		return false
+	}
+	parts := strings.Split(value, "/")
+	hasTarget := false
+	for _, part := range parts {
+		if part == "" {
+			return false
+		}
+		if part != "." && part != ".." {
+			hasTarget = true
+		}
+	}
+	return hasTarget
 }
 
 // Write serializes a document to UTF-8 Markdown bytes.

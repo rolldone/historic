@@ -88,8 +88,8 @@ func ValidateTopicMetadata(metadata TopicMetadata) error {
 		}
 	}
 	for index, related := range metadata.Related {
-		if !related.Valid() {
-			return fmt.Errorf("%w: field %q item %d is not a five-digit ID", ErrInvalidFrontmatter, "related", index)
+		if !validRelatedReference(string(related)) {
+			return fmt.Errorf("%w: field %q item %d must be a five-digit ID or relative path", ErrInvalidFrontmatter, "related", index)
 		}
 	}
 	if err := validateManifestFiles(metadata.Files); err != nil {
