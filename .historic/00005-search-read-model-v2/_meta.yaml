@@ -1,0 +1,60 @@
+id: "00005"
+title: search read model v2
+created: "2026-09-21"
+updated: "2026-09-22"
+files:
+    - path: spec.md
+      type: spec
+      status: complete
+    - path: wos/01-two-table-search-read-model.md
+      type: task
+      status: complete
+    - path: wos/02-sqlite-topics-files-schema.md
+      type: task
+      status: complete
+    - path: wos/03-manual-description-frontmatter.md
+      type: task
+      status: complete
+    - path: wos/04-topic-identity-logical-paths.md
+      type: task
+      status: complete
+    - path: wos/05-copy-based-open.md
+      type: task
+      status: complete
+    - path: wos/06-differential-close-archive.md
+      type: task
+      status: complete
+    - path: wos/07-unified-rebuild-read-model.md
+      type: task
+      status: complete
+    - path: wos/08-aggregate-topic-file-queries.md
+      type: task
+      status: complete
+    - path: wos/09-fts-search-ai-output.md
+      type: task
+      status: complete
+    - path: wos/10-delete-purge-lifecycle.md
+      type: task
+      status: complete
+    - path: wos/11-yaml-metadata-legacy-migration.md
+      type: task
+      status: complete
+    - path: wos/12-topic-identity-archive-normalization.md
+      type: task
+      status: complete
+    - path: wos/13-copy-open-differential-close.md
+      type: task
+      status: complete
+    - path: wos/14-unified-rebuild-read-model.md
+      type: task
+      status: complete
+    - path: wos/15-aggregate-query-api.md
+      type: task
+      status: complete
+    - path: wos/16-fts-search-filters-ai-json.md
+      type: task
+      status: complete
+    - path: wos/17-delete-purge-lifecycle-safety.md
+      type: task
+      status: complete
+assets: []

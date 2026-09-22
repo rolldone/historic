@@ -1,0 +1,90 @@
+id: "00001"
+title: historic cli
+created: "2026-09-18"
+updated: "2026-09-19"
+files:
+    - path: spec-interactive-search-tui.md
+      type: spec
+      status: draft
+    - path: spec.md
+      type: spec
+      status: progress
+    - path: wos/01-project-bootstrap.md
+      type: task
+      status: complete
+    - path: wos/02-domain-model.md
+      type: task
+      status: complete
+    - path: wos/03-markdown-frontmatter.md
+      type: task
+      status: complete
+    - path: wos/04-init-command.md
+      type: task
+      status: progress
+    - path: wos/05-create-command.md
+      type: task
+      status: create
+    - path: wos/06-add-command.md
+      type: task
+      status: create
+    - path: wos/07-list-and-show.md
+      type: task
+      status: create
+    - path: wos/08-find-command.md
+      type: task
+      status: create
+    - path: wos/09-rebuild-and-index.md
+      type: task
+      status: create
+    - path: wos/10-mvp-quality-gate.md
+      type: task
+      status: complete
+    - path: wos/11-lifecycle-commands.md
+      type: task
+      status: create
+    - path: wos/12-archive-complete.md
+      type: task
+      status: create
+    - path: wos/13-import-archived-topic.md
+      type: task
+      status: complete
+    - path: wos/14-lifecycle-recovery.md
+      type: task
+      status: complete
+    - path: wos/15-internal-git-repository.md
+      type: task
+      status: complete
+    - path: wos/16-save-command.md
+      type: task
+      status: complete
+    - path: wos/17-log-and-diff.md
+      type: task
+      status: complete
+    - path: wos/18-restore-and-phase-3-gate.md
+      type: task
+      status: complete
+    - path: wos/19-fts5-index.md
+      type: task
+      status: complete
+    - path: wos/20-advanced-query-filters.md
+      type: task
+      status: complete
+    - path: wos/21-ranking-snippet-highlight.md
+      type: task
+      status: complete
+    - path: wos/22-search-quality-gate.md
+      type: task
+      status: complete
+    - path: wos/23-sync-meta.md
+      type: task
+      status: progress
+    - path: wos/24-interactive-search-tui.md
+      type: task
+      status: progress
+    - path: wos/25-batch-sync-meta.md
+      type: task
+      status: complete
+    - path: wos/26-reconcile-sync-meta.md
+      type: task
+      status: complete
+assets: []
