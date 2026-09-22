@@ -20,17 +20,22 @@ type Diagnosis struct {
 	MarkdownValid       bool
 	IndexExists         bool
 	Recommendation      string
+	AppVersionName      string
+	AppVersionCode      int
+	StoredVersionName   string
+	StoredVersionCode   int
+	CompatibilityAction string
 }
 
 func Diagnose(workspace config.Workspace, binaryVersion string) Diagnosis {
-	diagnosis := Diagnosis{BinaryVersion: binaryVersion, RequiredIndexSchema: SchemaVersion, MarkdownValid: true}
+	current := config.CurrentAppVersion()
+	diagnosis := Diagnosis{BinaryVersion: binaryVersion, RequiredIndexSchema: current.IndexSchema, MarkdownValid: true, AppVersionName: current.Name, AppVersionCode: current.Code, WorkspaceFormat: current.Workspace}
 	diagnosis.ExecutablePath, _ = os.Executable()
 	if _, err := os.Stat(workspace.Histories); err != nil {
 		diagnosis.Status = "workspace invalid"
 		diagnosis.Recommendation = "run historic init in a valid workspace"
 		return diagnosis
 	}
-	diagnosis.WorkspaceFormat = config.WorkspaceFormatVersion
 	if _, err := os.Stat(workspace.Index); errors.Is(err, os.ErrNotExist) {
 		diagnosis.Status = "rebuild required"
 		diagnosis.Recommendation = "run historic rebuild"
@@ -56,16 +61,41 @@ func Diagnose(workspace config.Workspace, binaryVersion string) Diagnosis {
 		return diagnosis
 	}
 	diagnosis.CurrentIndexSchema = version
-	switch {
-	case version < SchemaVersion:
-		diagnosis.Status = "upgrade required"
-		diagnosis.Recommendation = "run historic upgrade"
-	case version > SchemaVersion:
+	stored, metaErr := readIndexMetadata(database)
+	if metaErr == nil {
+		diagnosis.StoredVersionName = stored.AppVersionName
+		diagnosis.StoredVersionCode = stored.AppVersionCode
+	}
+	decision := config.CheckCompatibility(current, stored)
+	diagnosis.CompatibilityAction = string(decision.Action)
+	switch decision.Action {
+	case config.ActionReject:
 		diagnosis.Status = "binary too old"
-		diagnosis.Recommendation = "install a newer Historic binary"
-	default:
+		diagnosis.Recommendation = decision.Reason + "; install a newer Historic binary"
+	case config.ActionRebuild:
+		diagnosis.Status = "rebuild required"
+		diagnosis.Recommendation = "run historic rebuild"
+	case config.ActionMigrateWorkspace:
+		diagnosis.Status = "upgrade required"
+		diagnosis.Recommendation = decision.Reason
+	case config.ActionUpdateAppMeta:
+		diagnosis.Status = "compatible"
+		diagnosis.Recommendation = "metadata will be updated on next rebuild"
+	case config.ActionUseExisting:
 		diagnosis.Status = "compatible"
 		diagnosis.Recommendation = "no action required"
+	default:
+		switch {
+		case version < current.IndexSchema:
+			diagnosis.Status = "upgrade required"
+			diagnosis.Recommendation = "run historic upgrade"
+		case version > current.IndexSchema:
+			diagnosis.Status = "binary too old"
+			diagnosis.Recommendation = "install a newer Historic binary"
+		default:
+			diagnosis.Status = "compatible"
+			diagnosis.Recommendation = "no action required"
+		}
 	}
 	return diagnosis
 }

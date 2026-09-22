@@ -8,7 +8,10 @@ historic create "Topic Title" [--id 00014]
 historic add <name> [--id 00014]
 historic list [--closed] [--json]
 historic show <id> [--closed] [--json]
+historic version [--json]
 ```
+
+`historic version` prints `VersionName`, `VersionCode`, `WorkspaceFormatVersion`, and `IndexSchemaVersion`. JSON output includes all four values as a stable envelope.
 
 `historic add` canonicalizes the basename before writing it: whitespace, `_`, and repeated `-` separators become a single lowercase `-`, and `.md` is added exactly once. Directory prefixes are preserved. A `wos/` entry receives the next available `NN-` Work Order number; an existing `NN-` prefix is preserved. Absolute paths, traversal, hidden paths, and names without usable characters are rejected. User-facing JSON paths always use `/` separators.
 
@@ -90,7 +93,7 @@ historic upgrade [--json]
 historic rebuild [--json]
 ```
 
-`doctor` performs a read-only compatibility diagnosis. It reports binary version, executable path, workspace format version, current and required index schema versions, Markdown validity, status, and recovery recommendation.
+`doctor` performs a read-only compatibility diagnosis. It reports binary version, executable path, workspace format version, current and required index schema versions, stored application version/code, compatibility action, Markdown validity, status, and recovery recommendation.
 
 Use `upgrade` for an older index schema and `rebuild` for a missing or damaged index. Both commands scan Markdown without modifying it, build and validate a temporary SQLite database, protect the old index with a backup and rollback path, replace atomically, clean temporary files, and use a lock against concurrent replacement. Legacy workspaces do not require manual SQL changes.
 

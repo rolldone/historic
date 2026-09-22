@@ -29,7 +29,7 @@ func TestVersionCommand(t *testing.T) {
 	if err := root.Execute(); err != nil {
 		t.Fatalf("execute version: %v", err)
 	}
-	if got := strings.TrimSpace(out.String()); got != Version {
-		t.Fatalf("version output = %q, want %q", got, Version)
+	if got := strings.TrimSpace(out.String()); !strings.Contains(got, Version) || !strings.Contains(got, "workspace format") {
+		t.Fatalf("version output = %q, want version with workspace info", got)
 	}
 }

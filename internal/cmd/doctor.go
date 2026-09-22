@@ -18,12 +18,12 @@ func newDoctorCommand() *cobra.Command {
 			return writeCommandError(cmd, "doctor", jsonOutput, err)
 		}
 		diagnosis := indexer.Diagnose(workspace, Version)
-		data := doctorData{BinaryVersion: diagnosis.BinaryVersion, ExecutablePath: diagnosis.ExecutablePath, WorkspaceFormatVersion: diagnosis.WorkspaceFormat, CurrentIndexSchemaVersion: diagnosis.CurrentIndexSchema, RequiredIndexSchemaVersion: diagnosis.RequiredIndexSchema, Status: diagnosis.Status, MarkdownValid: diagnosis.MarkdownValid, IndexExists: diagnosis.IndexExists, Recommendation: diagnosis.Recommendation}
+		data := doctorData{BinaryVersion: diagnosis.BinaryVersion, ExecutablePath: diagnosis.ExecutablePath, WorkspaceFormatVersion: diagnosis.WorkspaceFormat, CurrentIndexSchemaVersion: diagnosis.CurrentIndexSchema, RequiredIndexSchemaVersion: diagnosis.RequiredIndexSchema, Status: diagnosis.Status, MarkdownValid: diagnosis.MarkdownValid, IndexExists: diagnosis.IndexExists, Recommendation: diagnosis.Recommendation, AppVersionName: diagnosis.AppVersionName, AppVersionCode: diagnosis.AppVersionCode, StoredVersionName: diagnosis.StoredVersionName, StoredVersionCode: diagnosis.StoredVersionCode, CompatibilityAction: diagnosis.CompatibilityAction}
 		response := doctorOutput{Command: "doctor", OK: diagnosis.Status == "compatible", Data: data}
 		if jsonOutput {
 			return json.NewEncoder(cmd.OutOrStdout()).Encode(response)
 		}
-		_, err = fmt.Fprintf(cmd.OutOrStdout(), "Status: %s\nBinary: %s\nIndex schema: %d (required %d)\nRecommendation: %s\n", data.Status, data.BinaryVersion, data.CurrentIndexSchemaVersion, data.RequiredIndexSchemaVersion, data.Recommendation)
+		_, err = fmt.Fprintf(cmd.OutOrStdout(), "Status: %s\nBinary: %s (code %d)\nStored app: %s (code %d)\nWorkspace format: %d\nIndex schema: %d (required %d)\nCompatibility action: %s\nRecommendation: %s\n", data.Status, data.AppVersionName, data.AppVersionCode, data.StoredVersionName, data.StoredVersionCode, data.WorkspaceFormatVersion, data.CurrentIndexSchemaVersion, data.RequiredIndexSchemaVersion, data.CompatibilityAction, data.Recommendation)
 		return err
 	}}
 	command.Flags().BoolVar(&jsonOutput, "json", false, "output stable JSON")
@@ -40,6 +40,11 @@ type doctorData struct {
 	MarkdownValid              bool   `json:"markdown_valid"`
 	IndexExists                bool   `json:"index_exists"`
 	Recommendation             string `json:"recommendation"`
+	AppVersionName             string `json:"app_version_name"`
+	AppVersionCode             int    `json:"app_version_code"`
+	StoredVersionName          string `json:"stored_version_name"`
+	StoredVersionCode          int    `json:"stored_version_code"`
+	CompatibilityAction        string `json:"compatibility_action"`
 }
 type doctorOutput struct {
 	Command string     `json:"command"`

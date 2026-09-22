@@ -1,16 +1,18 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 
+	"historic/internal/config"
 	"historic/internal/domain"
 	"historic/internal/lifecycle"
 
 	"github.com/spf13/cobra"
 )
 
-const Version = "0.2.0"
+const Version = config.VersionName
 
 // NewRootCommand creates the root command for the Historic CLI.
 func NewRootCommand() *cobra.Command {
@@ -52,15 +54,24 @@ func NewRootCommand() *cobra.Command {
 }
 
 func newVersionCommand() *cobra.Command {
-	return &cobra.Command{
+	var jsonOutput bool
+	command := &cobra.Command{
 		Use:   "version",
 		Short: "Print the Historic version",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			_, err := fmt.Fprintln(cmd.OutOrStdout(), Version)
+			if jsonOutput {
+				return json.NewEncoder(cmd.OutOrStdout()).Encode(map[string]any{
+					"version_name": config.VersionName, "version_code": config.VersionCode,
+					"workspace_format_version": config.WorkspaceFormatVersion, "index_schema_version": config.IndexSchemaVersion,
+				})
+			}
+			_, err := fmt.Fprintf(cmd.OutOrStdout(), "Historic %s (version code %d)\nworkspace format %d, index schema %d\n", config.VersionName, config.VersionCode, config.WorkspaceFormatVersion, config.IndexSchemaVersion)
 			return err
 		},
 	}
+	command.Flags().BoolVar(&jsonOutput, "json", false, "output stable JSON")
+	return command
 }
 
 // ConfigureOutput makes command output deterministic for callers and tests.
