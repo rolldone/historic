@@ -23,12 +23,15 @@ Initialize a workspace:
 historic init
 ```
 
-Create a topic. IDs are five digits and can be generated automatically or supplied explicitly:
+Create a topic. New topics receive a monotonic Unix epoch-millisecond TopicID and use `<topic-id>-<slug>` folders:
 
 ```sh
 historic create "Admin Dashboard"
-historic create "Admin Dashboard" --id 00014
+historic list
+historic show <topic-id>
 ```
+
+Legacy five-digit IDs remain readable during migration. The explicit `--id` option is retained for legacy/admin workflows; normal creation should use automatic allocation.
 
 Add Markdown entries and Work Orders:
 
@@ -42,7 +45,7 @@ Update one file's lifecycle status without archiving its topic:
 
 ```sh
 historic status 19-fts5-index.md complete --json
-historic status .historic/00001-historic-cli/wos/20-advanced-query-filters.md review
+historic status .historic/<topic-id>-<slug>/wos/20-advanced-query-filters.md review
 ```
 
 `historic status` changes only the target managed Markdown frontmatter, sets `updated`, rejects absolute/traversal paths, and rebuilds the SQLite/FTS index. It accepts `create`, `draft`, `pending`, `progress`, `review`, `blocked`, `complete`, `failed`, and `cancelled`. Topic status commands such as `historic complete <id>` are not used: topics have no work status; update the member file path instead.
@@ -66,12 +69,25 @@ historic search
 
 `historic search` is a Bubble Tea TUI over the same FTS5/search service used by `historic find`. It uses a default limit of 20, empty query shows recent topics, and supports `/` query focus, `f` filter focus, `↑/↓` navigation, `Enter` preview, `n/p` pagination, `r` refresh, `Esc`, and `q`/`Ctrl+C` exit. MVP filters use status, storage scope (`open`, `closed`, `all`), and type (`work-order` maps to `task`). Markdown previews are read-only; assets/binary files are represented by metadata. `historic search --json` is rejected; use `historic find --json` for automation.
 
-## Work status and storage state
+## Legacy workspace upgrade
+
+Upgrade legacy five-digit topic folders and manifests with one command:
+
+```sh
+historic upgrade --dry-run --json
+historic upgrade --json
+historic upgrade --backup-dir /path/outside/.historic
+```
+
+`upgrade` scans the workspace, migrates legacy FileID entries and TopicIDs, writes aliases, rebuilds SQLite/FTS, and uses an immutable backup and lock. Use `--no-file-ids` or `--no-topic-ids` only for admin/recovery; the JSON result reports a warning when either migration is skipped. Dry-run must not modify workspace bytes. Focused migrations remain available through `historic migrate-file-ids` and `historic migrate-topic-ids`.
+
+Modern TopicIDs are 13-digit Unix epoch milliseconds. Managed file IDs remain UUIDv7 and are independent from TopicIDs.
+
 
 Work status belongs to managed member files only. Topics have no work status. Storage remains independent:
 
-- Open topic: `.historic/<id>-<slug>/`
-- Closed topic: `.historic/.database/<id>-<slug>/`
+- Open topic: `.historic/<topic-id>-<slug>/`
+- Closed topic: `.historic/.database/<topic-id>-<slug>/`
 
 Use `historic status <member-path> <status>` for work status and `historic close/open <id>` for storage movement.
 
@@ -81,8 +97,8 @@ Read topics with explicit closed scope when needed:
 ```sh
 historic list
 historic list --closed
-historic show 00014
-historic show 00014 --closed
+historic show <topic-id>
+historic show <topic-id> --closed
 ```
 
 Search both storage states by default:
@@ -108,11 +124,13 @@ historic rebuild --json
 
 `historic rebuild` processes both open and closed topics in one workflow. It recursively scans each topic, regenerates `_meta.yaml.files` and `_meta.yaml.assets`, computes aggregate status only in SQLite, and atomically replaces the schema-aware SQLite/FTS5 index. If `_meta.yaml` is missing, it recovers minimal metadata using the folder ID and folder slug title. Markdown remains the source of truth.
 
+Legacy compatibility aliases are stored in `.historic/.topic-id-aliases.yaml` and must not be deleted without an explicit backup/purge procedure.
+
 Every JSON-capable command uses the stable envelope `{ "command", "ok", "data", "error" }`. Successful empty list/find results return `ok: true` with an empty `data` array. Errors return a non-zero exit code and a message on stderr; JSON mode also emits the error envelope on stdout.
 
 ## Schema compatibility and recovery
 
-Historic separates binary, workspace-format, and SQLite index-schema versions. Diagnose an existing workspace before recovery:
+Historic separates binary, workspace-format, and SQLite index-schema versions. New topic identity uses 13-digit Unix epoch milliseconds; legacy five-digit topics remain readable until upgrade. Diagnose an existing workspace before recovery:
 
 ```sh
 historic doctor --json
@@ -121,12 +139,13 @@ historic doctor --json
 `doctor` is read-only and reports the executable, binary version, workspace format, current/required index schema, Markdown validity, compatibility status, and an actionable recommendation.
 
 ```sh
+historic upgrade --dry-run --json
 historic upgrade --json
+historic upgrade --backup-dir /path/outside/.historic
 historic rebuild --json
 ```
 
-- Use `upgrade` when the index schema is older than the binary requirement.
-- Use `rebuild` when the index is missing or damaged.
+Use `upgrade` for legacy five-digit topic folders, legacy FileID manifests, or a workspace migration. It creates a backup outside `.historic`, migrates TopicID/FileID identities, writes aliases, rebuilds SQLite/FTS, and is idempotent. `--no-file-ids` and `--no-topic-ids` are admin/recovery flags; `--dry-run` must not write. Use `rebuild` when the index is missing or damaged.
 - Both operations scan Markdown as the source of truth and leave Markdown unchanged.
 - A temporary SQLite database is validated before atomic replacement.
 - The previous index is backed up and protected by rollback handling.

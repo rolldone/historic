@@ -23,7 +23,9 @@ Historic is a local-first work-memory CLI. Markdown is the source of truth. SQLi
 
 ## CLI conventions
 
-- Use five-digit topic IDs and `<id>-<slug>` topic folders.
+- New topic IDs are 13-digit Unix epoch-millisecond values, rendered as `<unix-millisecond>-<slug>`.
+- Legacy five-digit topic IDs remain readable during compatibility and migration.
+- Managed file IDs remain lowercase canonical UUIDv7 values; do not mix TopicID and FileID.
 - User-facing paths should be relative to the project root and use `.historic/`.
 - Markdown is the source of truth. Run `historic rebuild --json` after recovery or manual index-affecting filesystem changes.
 - JSON-capable commands preserve `{ "command", "ok", "data", "error" }`.
@@ -35,10 +37,10 @@ Historic is a local-first work-memory CLI. Markdown is the source of truth. SQLi
 historic init
 historic create "My Topic"
 historic list
-historic show 00001
+historic show <timestamp-topic-id>
 ```
 
-Use `historic add` to create notes or Work Orders. When multiple topics are active, provide an explicit `--id` for commands that need to select a topic.
+`historic create` allocates a monotonic Unix epoch-millisecond TopicID under an inter-process lock. During migration, legacy five-digit IDs can still be resolved. Use `historic add` to create notes or Work Orders. When multiple topics are active, provide an explicit `--id` for commands that need to select a topic.
 
 ## Search and TUI
 
@@ -78,32 +80,34 @@ historic open 00001
 historic import 00001
 ```
 
-- `open` means `.historic/<id>-<slug>/`.
-- `closed` means `.historic/.database/<id>-<slug>/`.
+- `open` means `.historic/<topic-id>-<slug>/`.
+- `closed` means `.historic/.database/<topic-id>-<slug>/`.
 - Close/open preserve all topic bytes and member frontmatter statuses.
 - `import` is a compatibility alias for opening a closed topic.
 
-## Schema compatibility and recovery
+## Schema compatibility, migration, and recovery
 
 ```sh
 historic doctor [--json]
-historic upgrade [--json]
+historic upgrade [--dry-run] [--json] [--backup-dir <path>] [--no-file-ids] [--no-topic-ids]
+historic migrate-topic-ids [--dry-run] [--json] [--id <legacy-id>]
+historic migrate-file-ids [--dry-run] [--json] [--id <topic-id>] [--open|--closed]
 historic rebuild [--json]
 historic version [--json]
-historic migrate-file-ids [--dry-run] [--json] [--id <topic-id>] [--open|--closed]
 ```
 
-`historic version` reports the human-readable app version, numeric release code, workspace format, and index schema. `historic doctor` reports stored/current versions and the compatibility action. `migrate-file-ids` assigns UUIDv7 IDs to legacy `_meta.yaml.files[]` entries without changing Markdown, topic IDs, paths, types, statuses, or assets. It supports dry-run, deterministic JSON mappings, atomic rollback, and idempotent reruns. `--force` is not supported.
+`historic upgrade` is the supported one-command legacy workspace orchestrator. It scans legacy five-digit topic folders and manifests, creates an immutable backup outside `.historic`, migrates FileID and TopicID data, writes aliases, rebuilds SQLite/FTS, and reports an idempotent result. Use `migrate-topic-ids` or `migrate-file-ids` for focused admin migrations.
 
-- `doctor` is read-only. It reports binary version, executable path, workspace format version, current and required index schema versions, Markdown validity, compatibility status, and an actionable recommendation.
-- Status values include `compatible`, `upgrade required`, `rebuild required`, `binary too old`, and `workspace invalid`.
+- `doctor` is read-only and never renames legacy folders. It reports binary/version compatibility and recommends `historic upgrade` when legacy topic folders are detected.
+- `--no-file-ids` and `--no-topic-ids` are admin/recovery flags; their warnings explain which migration was skipped.
+- `--dry-run` must not write topic folders, metadata, aliases, backups, or indexes. `--backup-dir` must be outside `.historic`.
+- Topic aliases are retained in `.historic/.topic-id-aliases.yaml` during compatibility migration.
 - `historic rebuild --json` processes open and closed topics, recursively scans every topic file, regenerates `_meta.yaml.files` and `_meta.yaml.assets`, computes aggregate status in SQLite, and atomically replaces the validated index.
 - If `_meta.yaml` is missing from a valid topic folder, rebuild creates minimal metadata atomically using the folder ID and folder slug title, then regenerates the manifest.
 - Recovered metadata is rolled back if scan/index replacement fails; the previous index remains protected.
 - If an existing `_meta.yaml` is invalid, rebuild does not silently overwrite it.
 - If the index is missing or damaged, run `historic rebuild` to recreate it from Markdown.
-- If the index schema is older, run `historic upgrade`. Upgrade validates the workspace, builds a temporary schema, scans Markdown as source of truth, validates the new index, backs up the old index, and atomically replaces it.
-- Upgrade and rebuild use temporary files, cleanup, rollback safeguards, and a lock to prevent concurrent index replacement.
+- Upgrade and rebuild use temporary files, cleanup, rollback safeguards, and locks to prevent concurrent index replacement.
 
 
 ## JSON output
