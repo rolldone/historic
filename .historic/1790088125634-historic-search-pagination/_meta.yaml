@@ -1,0 +1,13 @@
+id: "1790088125634"
+title: Historic Search Pagination
+created: "2026-09-22"
+files:
+    - id: 01a0c991-72d9-7556-918b-aa3671285dbe
+      path: spec.md
+      type: spec
+      status: draft
+    - id: 01a0c991-7314-7518-b24e-aad4442019e8
+      path: wos/01-search-pagination-and-more-indicator.md
+      type: task
+      status: pending
+assets: []

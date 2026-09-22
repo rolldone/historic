@@ -29,6 +29,8 @@ type Options struct {
 	Type          string
 	ID            domain.ID
 	Sort          string
+	Page          int
+	PageSize      int
 	OpenOnly      bool
 	ClosedOnly    bool
 	ActiveOnly    bool // compatibility for package callers; CLI rejects --active
@@ -37,6 +39,50 @@ type Options struct {
 	CreatedBefore string
 	UpdatedAfter  string
 	UpdatedBefore string
+}
+
+const (
+	DefaultPage     = 1
+	DefaultPageSize = 20
+	MaxPageSize     = 100
+)
+
+// Pagination describes the page returned by a search query.
+type Pagination struct {
+	Page     int  `json:"page"`
+	PageSize int  `json:"page_size"`
+	HasMore  bool `json:"has_more"`
+	NextPage *int `json:"next_page"`
+}
+
+// SearchPage contains search results and metadata for the requested page.
+type SearchPage struct {
+	Items      []Result   `json:"items"`
+	Pagination Pagination `json:"pagination"`
+}
+
+// NormalizePagination validates caller pagination options and applies defaults.
+func NormalizePagination(page, pageSize int) (Pagination, error) {
+	if page == 0 {
+		page = DefaultPage
+	}
+	if page < 1 {
+		return Pagination{}, fmt.Errorf("page must be at least 1")
+	}
+	if pageSize == 0 {
+		pageSize = DefaultPageSize
+	}
+	if pageSize < 1 {
+		return Pagination{}, fmt.Errorf("page-size must be at least 1")
+	}
+	if pageSize > MaxPageSize {
+		return Pagination{}, fmt.Errorf("page-size must not exceed %d", MaxPageSize)
+	}
+	maxInt := int(^uint(0) >> 1)
+	if page > 1 && page-1 > maxInt/pageSize {
+		return Pagination{}, fmt.Errorf("page and page-size produce an offset that overflows")
+	}
+	return Pagination{Page: page, PageSize: pageSize}, nil
 }
 
 // Result is an AI-friendly match from either the topic or file read model.
@@ -78,28 +124,43 @@ type TopicContext struct {
 }
 
 func RecentTopics(workspace config.Workspace, options Options) ([]Result, error) {
-	if err := validateOptions(options, false); err != nil {
+	page, err := RecentTopicsPage(workspace, options)
+	if err != nil {
 		return nil, err
+	}
+	return page.Items, nil
+}
+
+// RecentTopicsPage returns a paginated recent-topic result from the shared read model.
+func RecentTopicsPage(workspace config.Workspace, options Options) (SearchPage, error) {
+	pagination, err := NormalizePagination(options.Page, options.PageSize)
+	if err != nil {
+		return SearchPage{}, err
+	}
+	options.Page, options.PageSize = pagination.Page, pagination.PageSize
+	if err := validateOptions(options, false); err != nil {
+		return SearchPage{}, err
 	}
 	database, err := openIndex(workspace)
 	if err != nil {
-		return nil, err
+		return SearchPage{}, err
 	}
 	defer database.Close()
 	where, args := topicPredicates(options)
+	args = append(args, pagination.PageSize+1, (pagination.Page-1)*pagination.PageSize)
 	rows, err := database.Query(`SELECT id, title, COALESCE(description, ''), COALESCE(computed_status, ''), storage, path, tags, created_at, COALESCE(updated_at, '')
-		FROM topics WHERE `+strings.Join(where, " AND ")+` ORDER BY `+recentOrder(options.Sort), args...)
+		FROM topics WHERE `+strings.Join(where, " AND ")+` ORDER BY `+recentOrder(options.Sort)+` LIMIT ? OFFSET ?`, args...)
 	if err != nil {
-		return nil, fmt.Errorf("query recent topics: %w", err)
+		return SearchPage{}, fmt.Errorf("query recent topics: %w", err)
 	}
 	defer rows.Close()
-	results := make([]Result, 0)
+	results := make([]Result, 0, pagination.PageSize+1)
 	for rows.Next() {
 		var result Result
 		var tagsJSON string
 		var createdAt, updatedAt string
 		if err := rows.Scan(&result.TopicID, &result.Title, &result.Description, &result.Status, &result.Storage, &result.Path, &tagsJSON, &createdAt, &updatedAt); err != nil {
-			return nil, fmt.Errorf("read recent topic: %w", err)
+			return SearchPage{}, fmt.Errorf("read recent topic: %w", err)
 		}
 		result.Type, result.ID, result.Tags = "topic", result.TopicID, decodeStrings(tagsJSON)
 		result.CreatedAt, result.UpdatedAt = createdAt, updatedAt
@@ -107,21 +168,38 @@ func RecentTopics(workspace config.Workspace, options Options) ([]Result, error)
 		result.Active = result.Storage == domain.StorageOpen.String()
 		results = append(results, result)
 	}
-	return results, rows.Err()
+	if err := rows.Err(); err != nil {
+		return SearchPage{}, err
+	}
+	return makeSearchPage(results, pagination), nil
 }
 
 // Find searches topics and files using the shared read model and weighted FTS5.
 func Find(workspace config.Workspace, options Options) ([]Result, error) {
-	if err := validateOptions(options, true); err != nil {
+	page, err := FindPage(workspace, options)
+	if err != nil {
 		return nil, err
+	}
+	return page.Items, nil
+}
+
+// FindPage searches topics and files using the shared read model and weighted FTS5.
+func FindPage(workspace config.Workspace, options Options) (SearchPage, error) {
+	pagination, err := NormalizePagination(options.Page, options.PageSize)
+	if err != nil {
+		return SearchPage{}, err
+	}
+	options.Page, options.PageSize = pagination.Page, pagination.PageSize
+	if err := validateOptions(options, true); err != nil {
+		return SearchPage{}, err
 	}
 	query, err := prepareQuery(strings.TrimSpace(options.Keyword))
 	if err != nil {
-		return nil, err
+		return SearchPage{}, err
 	}
 	database, err := openIndex(workspace)
 	if err != nil {
-		return nil, err
+		return SearchPage{}, err
 	}
 	defer database.Close()
 	where := []string{"historic_fts MATCH ?"}
@@ -149,13 +227,14 @@ func Find(workspace config.Workspace, options Options) ([]Result, error) {
 		LEFT JOIN files AS f ON historic_fts.entity_type = 'file' AND CAST(f.id AS TEXT) = historic_fts.entity_id
 		LEFT JOIN topics AS t ON t.id = CASE WHEN historic_fts.entity_type = 'topic' THEN historic_fts.entity_id ELSE f.topic_id END
 		WHERE ` + strings.Join(where, " AND ") + `
-		ORDER BY ` + resultOrder(options.Sort)
+		ORDER BY ` + resultOrder(options.Sort) + ` LIMIT ? OFFSET ?`
+	args = append(args, pagination.PageSize+1, (pagination.Page-1)*pagination.PageSize)
 	rows, err := database.Query(statement, args...)
 	if err != nil {
-		return nil, fmt.Errorf("invalid FTS query: %w; try plain keywords and keep filters in their flags", err)
+		return SearchPage{}, fmt.Errorf("invalid FTS query: %w; try plain keywords and keep filters in their flags", err)
 	}
 	defer rows.Close()
-	results := make([]Result, 0)
+	results := make([]Result, 0, pagination.PageSize+1)
 	seen := make(map[string]struct{})
 	for rows.Next() {
 		var result Result
@@ -165,7 +244,7 @@ func Find(workspace config.Workspace, options Options) ([]Result, error) {
 		var topicTitle, topicDescription, topicStatus, topicStorage, topicPath string
 		var rank float64
 		if err := rows.Scan(&result.Type, &result.ID, &result.TopicID, &result.Title, &result.Description, &result.Status, &result.Storage, &result.Path, &tagsJSON, &filename, &rank, &snippetText, &createdAt, &updatedAt, &mtime, &hash, &size, &topicTitle, &topicDescription, &topicStatus, &topicStorage, &topicPath, &topicTagsJSON); err != nil {
-			return nil, fmt.Errorf("read search result: %w", err)
+			return SearchPage{}, fmt.Errorf("read search result: %w", err)
 		}
 		logicalPath := filename
 		if result.Type == "historic_file" || result.Type == "asset" {
@@ -201,9 +280,19 @@ func Find(workspace config.Workspace, options Options) ([]Result, error) {
 		results = append(results, result)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate search results: %w", err)
+		return SearchPage{}, fmt.Errorf("iterate search results: %w", err)
 	}
-	return results, nil
+	return makeSearchPage(results, pagination), nil
+}
+
+func makeSearchPage(results []Result, pagination Pagination) SearchPage {
+	if len(results) > pagination.PageSize {
+		results = results[:pagination.PageSize]
+		pagination.HasMore = true
+		nextPage := pagination.Page + 1
+		pagination.NextPage = &nextPage
+	}
+	return SearchPage{Items: results, Pagination: pagination}
 }
 
 func openIndex(workspace config.Workspace) (*sql.DB, error) {

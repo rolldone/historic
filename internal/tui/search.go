@@ -24,20 +24,21 @@ type Options struct {
 }
 
 type model struct {
-	workspace config.Workspace
-	input     textinput.Model
-	results   []search.Result
-	selected  int
-	page      int
-	limit     int
-	status    domain.Status
-	scope     string
-	typeName  string
-	focus     focusMode
-	errorText string
-	preview   string
-	width     int
-	height    int
+	workspace  config.Workspace
+	input      textinput.Model
+	results    []search.Result
+	selected   int
+	page       int
+	limit      int
+	pagination search.Pagination
+	status     domain.Status
+	scope      string
+	typeName   string
+	focus      focusMode
+	errorText  string
+	preview    string
+	width      int
+	height     int
 }
 
 type focusMode int
@@ -50,8 +51,8 @@ const (
 
 type refreshMsg struct{}
 type refreshResultMsg struct {
-	results []search.Result
-	err     error
+	page search.SearchPage
+	err  error
 }
 
 func Run(workspace config.Workspace, options Options) error {
@@ -82,7 +83,7 @@ func (m model) Init() tea.Cmd { return m.refresh() }
 
 func (m model) refresh() tea.Cmd {
 	keyword := strings.TrimSpace(m.input.Value())
-	options := search.Options{Keyword: keyword, OpenOnly: m.scope == "active", ClosedOnly: m.scope == "archived", Status: m.status}
+	options := search.Options{Keyword: keyword, Page: m.page + 1, PageSize: m.limit, OpenOnly: m.scope == "active", ClosedOnly: m.scope == "archived", Status: m.status}
 	if m.typeName == "work-order" {
 		options.Type = "task"
 	}
@@ -91,18 +92,18 @@ func (m model) refresh() tea.Cmd {
 	}
 	if keyword == "" {
 		return func() tea.Msg {
-			results, err := recentTopics(m.workspace, options)
-			return refreshResultMsg{results: results, err: err}
+			page, err := recentTopics(m.workspace, options)
+			return refreshResultMsg{page: page, err: err}
 		}
 	}
 	return func() tea.Msg {
-		results, err := search.Find(m.workspace, options)
-		return refreshResultMsg{results: results, err: err}
+		page, err := search.FindPage(m.workspace, options)
+		return refreshResultMsg{page: page, err: err}
 	}
 }
 
-func recentTopics(workspace config.Workspace, options search.Options) ([]search.Result, error) {
-	return search.RecentTopics(workspace, options)
+func recentTopics(workspace config.Workspace, options search.Options) (search.SearchPage, error) {
+	return search.RecentTopicsPage(workspace, options)
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -112,11 +113,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = message.Width, message.Height
 	case refreshResultMsg:
-		m.results, m.errorText = message.results, ""
+		m.results, m.errorText = message.page.Items, ""
 		if message.err != nil {
 			m.errorText = message.err.Error()
+		} else {
+			m.page = message.page.Pagination.Page - 1
+			m.pagination = message.page.Pagination
 		}
-		m.page = 0
 		m.selected = 0
 		m.updatePreview()
 	case refreshMsg:
@@ -169,17 +172,17 @@ func (m model) handleKey(message tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "r":
 		return m, m.refresh()
-	case "n":
-		if m.page+1 < m.pageCount() {
+	case "n", "right":
+		if m.pageData().Pagination.HasMore {
 			m.page++
 			m.selected = 0
-			m.updatePreview()
+			return m, m.refresh()
 		}
-	case "p":
+	case "p", "left":
 		if m.page > 0 {
 			m.page--
 			m.selected = 0
-			m.updatePreview()
+			return m, m.refresh()
 		}
 	case "up", "k":
 		if m.selected > 0 {
@@ -209,7 +212,18 @@ func (m *model) updatePreview() {
 	m.preview = fmt.Sprintf("%s\nstatus: %s\npath: %s\n\n%s", result.Title, result.Status, result.Path, result.Snippet)
 }
 
+func (m model) pageData() search.SearchPage {
+	pagination := m.pagination
+	if pagination.Page == 0 {
+		pagination = search.Pagination{Page: m.page + 1, PageSize: m.limit}
+	}
+	return search.SearchPage{Items: m.results, Pagination: pagination}
+}
+
 func (m model) currentPage() []search.Result {
+	if m.pagination.Page > 0 {
+		return m.results
+	}
 	start := m.page * m.limit
 	if start >= len(m.results) {
 		return nil
@@ -248,7 +262,12 @@ func (m model) View() string {
 	if contentHeight < 3 {
 		contentHeight = 3
 	}
-	header := accent.Render("Historic Search") + "\n" + truncate(fmt.Sprintf("Query: %s | status=%s scope=%s type=%s limit=%d | page %d/%d", m.input.View(), statusName(m.status), m.scope, m.typeNameOrAll(), m.limit, m.page+1, m.pageCount()), width)
+	pageData := m.pageData()
+	paginationText := "No more results"
+	if pageData.Pagination.HasMore {
+		paginationText = "More available"
+	}
+	header := accent.Render("Historic Search") + "\n" + truncate(fmt.Sprintf("Query: %s | status=%s scope=%s type=%s page-size=%d", m.input.View(), statusName(m.status), m.scope, m.typeNameOrAll(), m.limit), width)
 	if m.focus == focusFilter {
 		header += "\n" + muted.Render("Filter focus: s scope; v status; t type; Esc/f closes")
 	}
@@ -297,7 +316,11 @@ func (m model) View() string {
 	} else {
 		body = lipgloss.JoinHorizontal(lipgloss.Top, lipgloss.NewStyle().Width(leftWidth).Render(left), lipgloss.NewStyle().Width(rightWidth).Render(right))
 	}
-	footer := muted.Render(truncate("↑↓ navigate  Enter preview  / query  f filter(s scope/v status/t type)  n/p page  r refresh  q quit", width))
+	footerText := fmt.Sprintf("Page %d · showing %d results · %s | ↑↓ navigate  Enter preview  / query  f filter(s scope/v status/t type)  n/→ next  p/← previous  r refresh  q quit", m.page+1, len(m.currentPage()), paginationText)
+	if width < 72 {
+		footerText = fmt.Sprintf("↑↓ navigate · Page %d · %d results · %s", m.page+1, len(m.currentPage()), paginationText)
+	}
+	footer := muted.Render(truncate(footerText, width))
 	return truncateLines(header, width, headerLines) + "\n" + truncateLines(body, width, contentHeight) + "\n" + footer
 }
 

@@ -42,6 +42,8 @@ type Options struct {
 	UpdatedAfter  string
 	UpdatedBefore string
 	Sort          string
+	Page          int
+	PageSize      int
 
 	// MinFiles and MaxFiles are aggregate filters. A zero MaxFiles means no
 	// upper bound; MinFiles defaults to zero and therefore includes empty topics.
@@ -101,6 +103,41 @@ type Service struct {
 	workspace config.Workspace
 }
 
+type Pagination struct {
+	Page     int  `json:"page"`
+	PageSize int  `json:"page_size"`
+	HasMore  bool `json:"has_more"`
+	NextPage *int `json:"next_page"`
+}
+
+type Page[T any] struct {
+	Items      []T        `json:"items"`
+	Pagination Pagination `json:"pagination"`
+}
+
+func NormalizePagination(page, pageSize int) (Pagination, error) {
+	if page == 0 {
+		page = 1
+	}
+	if page < 1 {
+		return Pagination{}, fmt.Errorf("page must be at least 1")
+	}
+	if pageSize == 0 {
+		pageSize = 20
+	}
+	if pageSize < 1 {
+		return Pagination{}, fmt.Errorf("page-size must be at least 1")
+	}
+	if pageSize > 100 {
+		return Pagination{}, fmt.Errorf("page-size must not exceed 100")
+	}
+	maxInt := int(^uint(0) >> 1)
+	if page > 1 && page-1 > maxInt/pageSize {
+		return Pagination{}, fmt.Errorf("page and page-size produce an offset that overflows")
+	}
+	return Pagination{Page: page, PageSize: pageSize}, nil
+}
+
 // NewService creates a query service for a Historic workspace.
 func NewService(workspace config.Workspace) Service {
 	return Service{workspace: workspace}
@@ -108,12 +145,25 @@ func NewService(workspace config.Workspace) Service {
 
 // QueryTopics returns aggregate topic summaries in deterministic order.
 func (service Service) QueryTopics(options Options) ([]TopicSummary, error) {
-	if err := validateOptions(options); err != nil {
+	page, err := service.QueryTopicsPage(options)
+	if err != nil {
 		return nil, err
+	}
+	return page.Items, nil
+}
+
+// QueryTopicsPage returns paginated aggregate topic summaries.
+func (service Service) QueryTopicsPage(options Options) (Page[TopicSummary], error) {
+	pagination, err := NormalizePagination(options.Page, options.PageSize)
+	if err != nil {
+		return Page[TopicSummary]{}, err
+	}
+	if err := validateOptions(options); err != nil {
+		return Page[TopicSummary]{}, err
 	}
 	database, err := service.open()
 	if err != nil {
-		return nil, err
+		return Page[TopicSummary]{}, err
 	}
 	defer database.Close()
 
@@ -157,20 +207,21 @@ func (service Service) QueryTopics(options Options) ([]TopicSummary, error) {
 		END AS computed_status,
 		last_file_updated_at
 	FROM grouped
-	ORDER BY ` + aggregateOrder(options.Sort)
+	ORDER BY ` + aggregateOrder(options.Sort) + ` LIMIT ? OFFSET ?`
+	args = append(args, pagination.PageSize+1, (pagination.Page-1)*pagination.PageSize)
 
 	rows, err := database.Query(query, args...)
 	if err != nil {
-		return nil, fmt.Errorf("query topic aggregates: %w", err)
+		return Page[TopicSummary]{}, fmt.Errorf("query topic aggregates: %w", err)
 	}
 	defer rows.Close()
-	results := make([]TopicSummary, 0)
+	results := make([]TopicSummary, 0, pagination.PageSize+1)
 	for rows.Next() {
 		var result TopicSummary
 		var description, updatedAt, computedStatus, lastFileUpdatedAt sql.NullString
 		var tagsJSON, relatedJSON string
 		if err := rows.Scan(&result.ID, &result.NumPadded, &result.Title, &description, &result.Slug, &result.Path, &result.Storage, &result.CreatedAt, &updatedAt, &tagsJSON, &relatedJSON, &result.TotalFiles, &result.ActiveFiles, &result.ResolvedFiles, &result.CompleteFiles, &result.CancelledFiles, &computedStatus, &lastFileUpdatedAt); err != nil {
-			return nil, fmt.Errorf("read topic aggregate: %w", err)
+			return Page[TopicSummary]{}, fmt.Errorf("read topic aggregate: %w", err)
 		}
 		result.Description = description.String
 		result.UpdatedAt = updatedAt.String
@@ -181,20 +232,33 @@ func (service Service) QueryTopics(options Options) ([]TopicSummary, error) {
 		results = append(results, result)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate topic aggregates: %w", err)
+		return Page[TopicSummary]{}, fmt.Errorf("iterate topic aggregates: %w", err)
 	}
-	return results, nil
+	return makePage(results, pagination), nil
 }
 
 // QueryFiles returns files matching the same topic/file filters as
 // QueryTopics. Each result includes the computed topic aggregate as context.
 func (service Service) QueryFiles(options Options) ([]FileResult, error) {
-	if err := validateOptions(options); err != nil {
+	page, err := service.QueryFilesPage(options)
+	if err != nil {
 		return nil, err
+	}
+	return page.Items, nil
+}
+
+// QueryFilesPage returns paginated file results with topic context.
+func (service Service) QueryFilesPage(options Options) (Page[FileResult], error) {
+	pagination, err := NormalizePagination(options.Page, options.PageSize)
+	if err != nil {
+		return Page[FileResult]{}, err
+	}
+	if err := validateOptions(options); err != nil {
+		return Page[FileResult]{}, err
 	}
 	topics, err := service.QueryTopics(topicContextOptions(options))
 	if err != nil {
-		return nil, err
+		return Page[FileResult]{}, err
 	}
 	topicByID := make(map[string]TopicSummary, len(topics))
 	for _, topic := range topics {
@@ -202,7 +266,7 @@ func (service Service) QueryFiles(options Options) ([]FileResult, error) {
 	}
 	database, err := service.open()
 	if err != nil {
-		return nil, err
+		return Page[FileResult]{}, err
 	}
 	defer database.Close()
 
@@ -214,18 +278,18 @@ func (service Service) QueryFiles(options Options) ([]FileResult, error) {
 		f.size, f.word_count
 		FROM files AS f JOIN topics AS t ON t.id = f.topic_id
 		WHERE `+strings.Join(topicWhere, " AND ")+` AND `+joinPredicate+`
-		ORDER BY `+fileOrder(options.Sort), args...)
+		ORDER BY `+fileOrder(options.Sort)+` LIMIT ? OFFSET ?`, append(args, pagination.PageSize+1, (pagination.Page-1)*pagination.PageSize)...)
 	if err != nil {
-		return nil, fmt.Errorf("query files: %w", err)
+		return Page[FileResult]{}, fmt.Errorf("query files: %w", err)
 	}
 	defer rows.Close()
-	results := make([]FileResult, 0)
+	results := make([]FileResult, 0, pagination.PageSize+1)
 	for rows.Next() {
 		var result FileResult
 		var description, status, assetKind, createdAt, updatedAt sql.NullString
 		var tagsJSON, relatedJSON string
 		if err := rows.Scan(&result.ID, &result.TopicID, &result.Type, &result.Path, &result.Filename, &result.Title, &description, &status, &tagsJSON, &relatedJSON, &assetKind, &createdAt, &updatedAt, &result.Mtime, &result.Hash, &result.Size, &result.WordCount); err != nil {
-			return nil, fmt.Errorf("read file result: %w", err)
+			return Page[FileResult]{}, fmt.Errorf("read file result: %w", err)
 		}
 		result.Description = description.String
 		result.Status = status.String
@@ -238,9 +302,19 @@ func (service Service) QueryFiles(options Options) ([]FileResult, error) {
 		results = append(results, result)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate file results: %w", err)
+		return Page[FileResult]{}, fmt.Errorf("iterate file results: %w", err)
 	}
-	return results, nil
+	return makePage(results, pagination), nil
+}
+
+func makePage[T any](items []T, pagination Pagination) Page[T] {
+	if len(items) > pagination.PageSize {
+		items = items[:pagination.PageSize]
+		pagination.HasMore = true
+		next := pagination.Page + 1
+		pagination.NextPage = &next
+	}
+	return Page[T]{Items: items, Pagination: pagination}
 }
 
 func aggregateOrder(sortOption string) string {
@@ -282,6 +356,8 @@ func topicContextOptions(options Options) Options {
 	context.Sort = ""
 	context.MinFiles = 0
 	context.MaxFiles = 0
+	context.Page = 0
+	context.PageSize = 0
 	return context
 }
 
@@ -310,6 +386,9 @@ func (service Service) open() (*sql.DB, error) {
 }
 
 func validateOptions(options Options) error {
+	if _, err := NormalizePagination(options.Page, options.PageSize); err != nil {
+		return err
+	}
 	if options.Status != "" && !options.Status.IsValid() {
 		return fmt.Errorf("invalid status %q", options.Status)
 	}

@@ -113,7 +113,7 @@ historic find "oauth" --closed --json
 
 `--active` and `--archived` are no longer supported. Human search output marks results as `[OPEN]` or `[CLOSED]`; JSON results include `status`, `storage`, and the actual `path`.
 
-FTS results are ranked by relevance with ascending path as a deterministic tie-breaker. Human output includes a contextual snippet with yellow ANSI emphasis (`ESC[1;33m...ESC[0m`) around matched terms; JSON output contains plain data without terminal highlight codes. Empty results are successful JSON responses with `ok: true`. Query terms are treated as literal terms, so punctuation and FTS operators do not execute shell commands or alter the source Markdown.
+FTS results are ranked by relevance with ascending path as a deterministic tie-breaker. Use `--page` (default `1`) and `--page-size` (default `20`, maximum `100`) for deterministic `LIMIT/OFFSET` pagination. Human output includes a contextual snippet with yellow ANSI emphasis (`ESC[1;33m...ESC[0m`) around matched terms; JSON output contains plain data without terminal highlight codes and returns `data.items` plus `data.pagination`. Empty results are successful JSON responses with `ok: true`. Query terms are treated as literal terms, so punctuation and FTS operators do not execute shell commands or alter the source Markdown. Pagination reads freshness fields from SQLite and does not hash/stat the filesystem; changes between requests are eventual consistency.
 
 If a rebuild encounters invalid Markdown, it fails before changing the existing index. Fix the file and run `historic rebuild` again.
 
@@ -128,7 +128,7 @@ historic rebuild --json
 
 Legacy compatibility aliases are stored in `.historic/.topic-id-aliases.yaml` and must not be deleted without an explicit backup/purge procedure.
 
-Every JSON-capable command uses the stable envelope `{ "command", "ok", "data", "error" }`. Successful empty list/find results return `ok: true` with an empty `data` array. Errors return a non-zero exit code and a message on stderr; JSON mode also emits the error envelope on stdout.
+Every JSON-capable command uses the stable envelope `{ "command", "ok", "data", "error" }`. `historic find --json` returns `{ "items": [], "pagination": { "page": 1, "page_size": 20, "has_more": false, "next_page": null } }` inside `data`; successful empty list results retain their existing empty-array shape. Errors return a non-zero exit code and a message on stderr; JSON mode also emits the error envelope on stdout.
 
 ## Schema compatibility and recovery
 

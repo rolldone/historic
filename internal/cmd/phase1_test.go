@@ -94,7 +94,7 @@ func TestPhase1EmptyResultsAreSuccessful(t *testing.T) {
 		t.Fatalf("list empty output=%q err=%v", output, err)
 	}
 	output, err = executeCommand(t, "find", "absent", "--json")
-	if err != nil || !jsonHasOK(output) || !strings.Contains(output, `"data":[]`) {
+	if err != nil || !jsonHasOK(output) || !strings.Contains(output, `"items":[]`) || !strings.Contains(output, `"pagination"`) {
 		t.Fatalf("find empty output=%q err=%v", output, err)
 	}
 }

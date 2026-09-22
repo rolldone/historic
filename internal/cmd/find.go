@@ -14,6 +14,7 @@ import (
 func newFindCommand() *cobra.Command {
 	var status, statusNot, tag, folder, searchType, id, sortOption string
 	var createdAfter, createdBefore, updatedAfter, updatedBefore string
+	var page, pageSize int
 	var openOnly, closedOnly, jsonOutput bool
 	command := &cobra.Command{
 		Use:   "find <keyword>",
@@ -26,6 +27,12 @@ func newFindCommand() *cobra.Command {
 			}
 			if cmd.Flags().Changed("active") || cmd.Flags().Changed("archived") {
 				return writeCommandError(cmd, "find", jsonOutput, fmt.Errorf("--active and --archived are no longer supported; use --open or --closed"))
+			}
+			if page < 1 {
+				return writeCommandError(cmd, "find", jsonOutput, fmt.Errorf("page must be at least 1"))
+			}
+			if pageSize < 1 || pageSize > search.MaxPageSize {
+				return writeCommandError(cmd, "find", jsonOutput, fmt.Errorf("page-size must be between 1 and %d", search.MaxPageSize))
 			}
 			parsedStatusIn, err := parseStatusList(status, "--status")
 			if err != nil {
@@ -46,23 +53,22 @@ func newFindCommand() *cobra.Command {
 					return writeCommandError(cmd, "find", jsonOutput, err)
 				}
 			}
-			var results []search.Result
+			options := search.Options{Status: parsedStatus, StatusIn: parsedStatusIn, StatusNot: parsedStatusNot, Tags: splitTags(tag), Folder: folder, Type: searchType, ID: parsedID, Sort: sortOption, Page: page, PageSize: pageSize, OpenOnly: openOnly, ClosedOnly: closedOnly, CreatedAfter: createdAfter, CreatedBefore: createdBefore, UpdatedAfter: updatedAfter, UpdatedBefore: updatedBefore}
+			var resultPage search.SearchPage
 			if strings.TrimSpace(args[0]) == "" {
-				results, err = search.RecentTopics(workspace, search.Options{Status: parsedStatus, StatusIn: parsedStatusIn, StatusNot: parsedStatusNot, Tags: splitTags(tag), Folder: folder, Type: searchType, ID: parsedID, Sort: sortOption, OpenOnly: openOnly, ClosedOnly: closedOnly, CreatedAfter: createdAfter, CreatedBefore: createdBefore, UpdatedAfter: updatedAfter, UpdatedBefore: updatedBefore})
+				resultPage, err = search.RecentTopicsPage(workspace, options)
 			} else {
-				results, err = search.Find(workspace, search.Options{
-					Keyword: args[0], Status: parsedStatus, StatusIn: parsedStatusIn, StatusNot: parsedStatusNot, Tags: splitTags(tag), Folder: folder, Type: searchType, ID: parsedID, Sort: sortOption,
-					OpenOnly: openOnly, ClosedOnly: closedOnly, CreatedAfter: createdAfter, CreatedBefore: createdBefore,
-					UpdatedAfter: updatedAfter, UpdatedBefore: updatedBefore,
-				})
+				options.Keyword = args[0]
+				resultPage, err = search.FindPage(workspace, options)
 			}
 			if err != nil {
 				return writeCommandError(cmd, "find", jsonOutput, err)
 			}
-			response := findOutput{Command: "find", OK: true, Data: results, Error: nil}
+			response := findOutput{Command: "find", OK: true, Data: resultPage, Error: nil}
 			if jsonOutput {
 				return json.NewEncoder(cmd.OutOrStdout()).Encode(response)
 			}
+			results := resultPage.Items
 			if len(results) == 0 {
 				_, err = fmt.Fprintln(cmd.OutOrStdout(), "No matches found.")
 				return err
@@ -76,6 +82,14 @@ func newFindCommand() *cobra.Command {
 				if _, err = fmt.Fprint(cmd.OutOrStdout(), line); err != nil {
 					return err
 				}
+			}
+			pagination := resultPage.Pagination
+			if pagination.HasMore {
+				if _, err = fmt.Fprintf(cmd.OutOrStdout(), "Page %d · showing %d results · more results available\nUse --page %d --page-size %d\n", pagination.Page, len(results), pagination.Page+1, pagination.PageSize); err != nil {
+					return err
+				}
+			} else if _, err = fmt.Fprintf(cmd.OutOrStdout(), "Page %d · showing %d results · no more results\n", pagination.Page, len(results)); err != nil {
+				return err
 			}
 			return nil
 		},
@@ -92,6 +106,8 @@ func newFindCommand() *cobra.Command {
 	command.Flags().StringVar(&createdBefore, "created-before", "", "filter created date through YYYY-MM-DD")
 	command.Flags().StringVar(&updatedAfter, "updated-after", "", "filter updated date from YYYY-MM-DD")
 	command.Flags().StringVar(&updatedBefore, "updated-before", "", "filter updated date through YYYY-MM-DD")
+	command.Flags().IntVar(&page, "page", search.DefaultPage, "result page number")
+	command.Flags().IntVar(&pageSize, "page-size", search.DefaultPageSize, "results per page (maximum 100)")
 	command.Flags().BoolVar(&openOnly, "open", false, "search open topics only")
 	command.Flags().BoolVar(&closedOnly, "closed", false, "search closed topics only")
 	command.Flags().BoolVar(&jsonOutput, "json", false, "output stable JSON")
@@ -136,8 +152,8 @@ func splitTags(value string) []string {
 }
 
 type findOutput struct {
-	Command string          `json:"command"`
-	OK      bool            `json:"ok"`
-	Data    []search.Result `json:"data"`
-	Error   any             `json:"error"`
+	Command string            `json:"command"`
+	OK      bool              `json:"ok"`
+	Data    search.SearchPage `json:"data"`
+	Error   any               `json:"error"`
 }

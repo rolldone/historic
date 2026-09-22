@@ -85,9 +85,12 @@ historic find "keyword" --sort relevance
 historic find "keyword" --sort updated
 historic find "keyword" --sort created
 historic find "keyword" --sort title
+historic find "keyword" --page 1 --page-size 20
+historic find "keyword" --status-not complete --page-size 10
+historic find "" --page 1 --page-size 20
 ```
 
-`find` searches open and closed storage by default and uses the shared SQLite FTS5 index. `--status` is a comma-separated inclusion filter; `--status-not` is a comma-separated exclusion filter. Statuses are validated and overlap between the two flags is rejected. Empty keyword (`historic find ""`) browses recent topics consistently with the TUI. Use `--open` for open topics only or `--closed` for closed topics only; combining them is rejected. `--sort` accepts `relevance`, `updated`, `created`, or `title`; keyword defaults to relevance with freshness/path tie-breakers, and empty queries default to updated/created/path order. Results expose work `status`, `storage`, actual `path`, and for files `created_at`, `updated_at`, `mtime`, `hash`, and `size`. Legacy `--active` and `--archived` flags are not supported. If the index is missing or invalid, run `historic rebuild`.
+`--page` defaults to `1`; `--page-size` defaults to `20` and accepts values from `1` through `100`. Results are filtered and deterministically sorted before `LIMIT/OFFSET` pagination. A page beyond the available results succeeds with an empty `items` array. `find` searches open and closed storage by default and uses the shared SQLite FTS5 index. `--status` is a comma-separated inclusion filter; `--status-not` is a comma-separated exclusion filter. Statuses are validated and overlap between the two flags is rejected. Empty keyword (`historic find ""`) browses recent topics consistently with the TUI. Use `--open` for open topics only or `--closed` for closed topics only; combining them is rejected. `--sort` accepts `relevance`, `updated`, `created`, or `title`; keyword defaults to relevance with freshness/path tie-breakers, and empty queries default to updated/created/path order. Results expose work `status`, `storage`, actual `path`, and for files `created_at`, `updated_at`, `mtime`, `hash`, and `size`. In JSON mode, `data` is an object with `items` and `pagination` (`page`, `page_size`, `has_more`, and nullable `next_page`). Human output ends with either `Page N · showing M results · more results available` plus the next-page command, or `Page N · showing M results · no more results`; empty output remains `No matches found.`. Legacy `--active` and `--archived` flags are not supported. If the index is missing or invalid, run `historic rebuild`. Pagination uses the SQLite read model only and does not hash/stat files during search. Changes between page requests can cause offset drift; this MVP behavior is eventual consistency.
 
 ## Interactive search TUI
 
@@ -102,7 +105,7 @@ historic search
 - `/` focuses query; `f` focuses filters.
 - `↑`/`↓` or `j`/`k` navigates results.
 - `Enter` updates the preview.
-- `n`/`p` changes page; `r` refreshes.
+- `n`/`right arrow` changes to the next page when available; `p`/`left arrow` changes to the previous page; `r` refreshes the active page.
 - `Esc`, `q`, or `Ctrl+C` exits.
 - Filters include status, scope, and type.
 - `historic search --json` is rejected. Use `historic find --json` for automation.

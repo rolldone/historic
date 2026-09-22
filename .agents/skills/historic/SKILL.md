@@ -44,7 +44,7 @@ historic show <timestamp-topic-id>
 
 ## Search and TUI
 
-- `historic find "query" [--json]` is the one-shot interface for AI, scripts, and automation; `historic find ""` browses recent topics.
+- `historic find "query" [--json]` is the one-shot interface for AI, scripts, and automation; `historic find ""` browses recent topics. `--page` defaults to 1 and `--page-size` defaults to 20 with a maximum of 100; JSON uses `data.items` and `data.pagination` (`page`, `page_size`, `has_more`, nullable `next_page`).
 - `--status` accepts comma-separated inclusion statuses and `--status-not` accepts comma-separated exclusions. Overlapping statuses and unknown statuses are rejected.
 - `--sort` accepts `relevance`, `updated`, `created`, or `title`; results use deterministic path tie-breakers.
 - File results expose SQLite-backed `created_at`, `updated_at`, `mtime`, `hash`, and `size` fields.
@@ -56,7 +56,7 @@ historic show <timestamp-topic-id>
 - The TUI uses the shared search service and existing FTS5 index; it has no separate index and must not access SQLite directly from the presentation layer.
 - The TUI uses Bubble Tea, Bubbles, and Lip Gloss.
 - `historic search --json` is rejected; use `historic find --json`.
-- Query execution occurs on Enter. Empty query shows recent topics; `r` refreshes.
+- Query execution occurs on Enter. Empty query shows recent topics; `r` refreshes the active page. `n`/right arrow advances when `has_more`; `p`/left arrow goes back. Pagination uses the SQLite read model and does not hash/stat the filesystem. Offset drift between requests is eventual consistency in the MVP.
 - MVP supports status, scope (`open`, `closed`, `all`), and type (`all`, `topic`, `work-order`) filters, pagination, keyboard navigation, and read-only previews.
 - Layout must respect terminal viewport height, keep the active result visible, and never render results beneath the footer. Long titles/paths and small terminals require safe truncation or compact layout.
 

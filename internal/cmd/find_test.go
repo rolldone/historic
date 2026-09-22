@@ -40,15 +40,25 @@ func TestFindCommandJSONAndFilters(t *testing.T) {
 	var response struct {
 		Command string `json:"command"`
 		OK      bool   `json:"ok"`
-		Data    []struct {
-			Path string `json:"path"`
+		Data    struct {
+			Items []struct {
+				Path string `json:"path"`
+			} `json:"items"`
+			Pagination struct {
+				Page     int  `json:"page"`
+				PageSize int  `json:"page_size"`
+				HasMore  bool `json:"has_more"`
+			} `json:"pagination"`
 		} `json:"data"`
 	}
-	if err := json.Unmarshal(output.Bytes(), &response); err != nil || !response.OK || response.Command != "find" || len(response.Data) != 1 {
+	if err := json.Unmarshal(output.Bytes(), &response); err != nil || !response.OK || response.Command != "find" || len(response.Data.Items) != 1 {
 		t.Fatalf("response = %q, %v", output.String(), err)
 	}
-	if response.Data[0].Path != ".historic/00001-topic/note.md" {
-		t.Fatalf("path = %q", response.Data[0].Path)
+	if response.Data.Pagination.Page != 1 || response.Data.Pagination.PageSize != 20 || response.Data.Pagination.HasMore {
+		t.Fatalf("pagination = %+v", response.Data.Pagination)
+	}
+	if response.Data.Items[0].Path != ".historic/00001-topic/note.md" {
+		t.Fatalf("path = %q", response.Data.Items[0].Path)
 	}
 	if strings.Contains(output.String(), "\x1b[") {
 		t.Fatalf("JSON output contains terminal formatting: %q", output.String())
@@ -153,25 +163,27 @@ func TestFindCommandFTSJSONSmokeCanonicalMetadataAndStorage(t *testing.T) {
 	var response struct {
 		Command string `json:"command"`
 		OK      bool   `json:"ok"`
-		Data    []struct {
-			Type      string   `json:"type"`
-			TopicID   string   `json:"topic_id"`
-			Storage   string   `json:"storage"`
-			MatchedIn []string `json:"matched_in"`
-			Snippet   string   `json:"snippet"`
-			Topic     struct {
-				ID      string `json:"id"`
-				Storage string `json:"storage"`
-			} `json:"topic"`
+		Data    struct {
+			Items []struct {
+				Type      string   `json:"type"`
+				TopicID   string   `json:"topic_id"`
+				Storage   string   `json:"storage"`
+				MatchedIn []string `json:"matched_in"`
+				Snippet   string   `json:"snippet"`
+				Topic     struct {
+					ID      string `json:"id"`
+					Storage string `json:"storage"`
+				} `json:"topic"`
+			} `json:"items"`
 		} `json:"data"`
 	}
 	if err := json.Unmarshal([]byte(output), &response); err != nil {
 		t.Fatalf("JSON output = %q: %v", output, err)
 	}
-	if !response.OK || response.Command != "find" || len(response.Data) != 1 {
+	if !response.OK || response.Command != "find" || len(response.Data.Items) != 1 {
 		t.Fatalf("unexpected JSON response = %q", output)
 	}
-	result := response.Data[0]
+	result := response.Data.Items[0]
 	if result.Type != "historic_file" || result.TopicID != "00001" || result.Storage != "closed" || result.Topic.ID != "00001" || result.Topic.Storage != "closed" || result.Snippet == "" || !containsString(result.MatchedIn, "content") {
 		t.Fatalf("incomplete closed result = %+v", result)
 	}
