@@ -11,11 +11,15 @@ import (
 func TestCreateCommandCreatesTopicAndJSON(t *testing.T) {
 	root := t.TempDir()
 	t.Chdir(root)
-	if err := os.MkdirAll(filepath.Join(root, ".historic"), 0o755); err != nil {
-		t.Fatal(err)
-	}
 	command := NewRootCommand()
 	var output bytes.Buffer
+	ConfigureOutput(command, &output, &output)
+	command.SetArgs([]string{"init"})
+	if err := command.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	output.Reset()
+	command = NewRootCommand()
 	ConfigureOutput(command, &output, &output)
 	command.SetArgs([]string{"create", "Admin Dashboard", "--id", "00014", "--json"})
 	if err := command.Execute(); err != nil {
@@ -44,6 +48,13 @@ func TestCreateCommandRejectsDuplicateWithoutPartialDirectory(t *testing.T) {
 	t.Chdir(root)
 	command := NewRootCommand()
 	var output bytes.Buffer
+	ConfigureOutput(command, &output, &output)
+	command.SetArgs([]string{"init"})
+	if err := command.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	command = NewRootCommand()
+	output.Reset()
 	ConfigureOutput(command, &output, &output)
 	command.SetArgs([]string{"create", "First", "--id", "00001"})
 	if err := command.Execute(); err != nil {

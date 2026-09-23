@@ -22,31 +22,23 @@ func newAddCommand() *cobra.Command {
 		Short: "Add a Markdown entry to an active topic",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			current, err := os.Getwd()
+			workspace, err := commandWorkspace()
 			if err != nil {
-				return fmt.Errorf("get current directory: %w", err)
-			}
-			root, err := config.DiscoverRoot(current)
-			if err != nil {
-				return err
-			}
-			workspace, err := config.Initialize(root)
-			if err != nil {
-				return err
+				return writeCommandError(cmd, "add", jsonOutput, err)
 			}
 			if topicID == "" {
 				topicID, err = activeTopicID(workspace)
 				if err != nil {
-					return err
+					return writeCommandError(cmd, "add", jsonOutput, err)
 				}
 			}
 			id, err := domain.ParseTopicIdentity(topicID)
 			if err != nil {
-				return err
+				return writeCommandError(cmd, "add", jsonOutput, err)
 			}
 			entry, err := repository.NewTopicStore(workspace).AddEntry(id, args[0], force)
 			if err != nil {
-				return err
+				return writeCommandError(cmd, "add", jsonOutput, err)
 			}
 			result := addOutput{Command: "add", OK: true, Data: addData{ID: entry.ID.String(), TopicID: id.String(), File: workspace.RelativePath(entry.Path), Title: entry.Title}, Error: nil}
 			if jsonOutput {

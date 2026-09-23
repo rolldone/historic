@@ -3,9 +3,7 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 
-	"historic/internal/config"
 	"historic/internal/repository"
 
 	"github.com/spf13/cobra"
@@ -32,24 +30,17 @@ func newCreateCommand() *cobra.Command {
 		Short: "Create a new topic",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			current, err := os.Getwd()
+			workspace, err := commandWorkspace()
 			if err != nil {
-				return fmt.Errorf("get current directory: %w", err)
-			}
-			root, err := config.DiscoverRoot(current)
-			if err != nil {
-				return err
-			}
-			workspace, err := config.Initialize(root)
-			if err != nil {
-				return err
+				return writeCommandError(cmd, "create", jsonOutput, err)
 			}
 			topic, err := repository.NewTopicStore(workspace).CreateTopic(args[0], requestedID)
 			if err != nil {
 				if jsonOutput {
-					if outputErr := writeCreateJSON(cmd, createOutput{Command: "create", OK: false, Error: err.Error()}); outputErr != nil {
+					if outputErr := writeCreateJSON(cmd, createOutput{Command: "create", OK: false, Error: readinessErrorValue(err)}); outputErr != nil {
 						return outputErr
 					}
+					return SilentError{Err: err}
 				}
 				return err
 			}

@@ -13,7 +13,7 @@ import (
 func newDoctorCommand() *cobra.Command {
 	var jsonOutput bool
 	command := &cobra.Command{Use: "doctor", Short: "Diagnose Historic workspace compatibility", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
-		workspace, err := commandWorkspace()
+		workspace, err := commandWorkspaceForRecovery()
 		if err != nil {
 			return writeCommandError(cmd, "doctor", jsonOutput, err)
 		}

@@ -20,7 +20,7 @@ func newSearchCommand() *cobra.Command {
 			}
 			workspace, err := commandWorkspace()
 			if err != nil {
-				return err
+				return writeCommandError(cmd, "search", jsonOutput, err)
 			}
 			return tui.Run(workspace, tui.Options{Input: cmd.InOrStdin(), Output: cmd.OutOrStdout()})
 		},

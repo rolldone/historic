@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"historic/internal/config"
 	"historic/internal/lifecycle"
 
 	"github.com/spf13/cobra"
@@ -16,8 +17,11 @@ func newRebuildCommand() *cobra.Command {
 		Short: "Rebuild the SQLite index from Markdown",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			workspace, err := commandWorkspace()
+			workspace, err := commandWorkspaceForRecovery()
 			if err != nil {
+				return writeCommandError(cmd, "rebuild", jsonOutput, err)
+			}
+			if err := config.ValidateRebuildWorkspace(workspace); err != nil {
 				return writeCommandError(cmd, "rebuild", jsonOutput, err)
 			}
 			change, err := lifecycle.RebuildMetadata(workspace)

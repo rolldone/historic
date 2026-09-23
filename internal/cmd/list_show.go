@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -22,7 +23,7 @@ func newListCommand() *cobra.Command {
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			workspace, err := commandWorkspace()
 			if err != nil {
-				return err
+				return writeCommandError(cmd, "list", jsonOutput, err)
 			}
 			views, err := repository.NewTopicStore(workspace).ListTopics(closedOnly)
 			if err != nil {
@@ -58,7 +59,7 @@ func newShowCommand() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			workspace, err := commandWorkspace()
 			if err != nil {
-				return err
+				return writeCommandError(cmd, "show", jsonOutput, err)
 			}
 			id, err := domain.ParseTopicIdentity(args[0])
 			if err != nil {
@@ -108,11 +109,36 @@ func commandWorkspace() (config.Workspace, error) {
 	if err != nil {
 		return config.Workspace{}, fmt.Errorf("get current directory: %w", err)
 	}
-	root, err := config.DiscoverRoot(current)
+	root, err := config.DiscoverRootForReadiness(current)
 	if err != nil {
 		return config.Workspace{}, err
 	}
-	return config.Initialize(root)
+	workspace := config.NewWorkspace(root)
+	_, err = config.ValidateWorkspace(workspace)
+	return workspace, err
+}
+
+func commandWorkspaceForRecovery() (config.Workspace, error) {
+	current, err := os.Getwd()
+	if err != nil {
+		return config.Workspace{}, fmt.Errorf("get current directory: %w", err)
+	}
+	root, err := config.DiscoverRootForReadiness(current)
+	if err != nil {
+		return config.Workspace{}, err
+	}
+	return config.NewWorkspace(root), nil
+}
+
+func readinessErrorValue(err error) any {
+	var readiness *config.ReadinessError
+	if errors.As(err, &readiness) {
+		return struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		}{Code: string(readiness.Code), Message: readiness.Message}
+	}
+	return strings.TrimSpace(err.Error())
 }
 
 func writeCommandError(cmd *cobra.Command, name string, jsonOutput bool, err error) error {
@@ -123,8 +149,8 @@ func writeCommandError(cmd *cobra.Command, name string, jsonOutput bool, err err
 		Command string `json:"command"`
 		OK      bool   `json:"ok"`
 		Data    any    `json:"data"`
-		Error   string `json:"error"`
-	}{Command: name, OK: false, Data: nil, Error: strings.TrimSpace(err.Error())}
+		Error   any    `json:"error"`
+	}{Command: name, OK: false, Data: nil, Error: readinessErrorValue(err)}
 	if encodeErr := json.NewEncoder(cmd.OutOrStdout()).Encode(response); encodeErr != nil {
 		return encodeErr
 	}

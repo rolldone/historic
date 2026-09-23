@@ -15,6 +15,13 @@ func TestFindCommandJSONAndFilters(t *testing.T) {
 	command := NewRootCommand()
 	var output bytes.Buffer
 	ConfigureOutput(command, &output, &output)
+	command.SetArgs([]string{"init"})
+	if err := command.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	command = NewRootCommand()
+	output.Reset()
+	ConfigureOutput(command, &output, &output)
 	command.SetArgs([]string{"create", "Topic", "--id", "00001"})
 	if err := command.Execute(); err != nil {
 		t.Fatal(err)
