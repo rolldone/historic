@@ -1,0 +1,25 @@
+id: "1790146186014"
+title: Historic Workspace Validation Middleware
+created: "2026-09-23"
+files:
+    - id: 01a0cd0c-ae37-7c81-b1eb-102c9403f15f
+      path: spec.md
+      type: spec
+      status: complete
+    - id: 01a0cd0c-c7ab-7a9c-a281-6761ad2f1661
+      path: wos/01-workspace-validation-contract.md
+      type: task
+      status: complete
+    - id: 01a0cd0c-e1c6-7c55-9c18-d95caf99ab48
+      path: wos/02-reject-only-middleware.md
+      type: task
+      status: complete
+    - id: 01a0cd0c-fd60-700f-91a0-7ae51d1313c0
+      path: wos/03-command-integration-and-errors.md
+      type: task
+      status: complete
+    - id: 01a0cd0d-1539-7e07-b389-18e3a20173d9
+      path: wos/04-validation-test-matrix.md
+      type: task
+      status: complete
+assets: []

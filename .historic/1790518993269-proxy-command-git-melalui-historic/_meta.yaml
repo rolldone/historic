@@ -1,0 +1,13 @@
+id: "1790518993269"
+title: Proxy command Git melalui Historic
+created: "2026-09-27"
+files:
+    - id: 01a0e340-e8df-7634-bfbe-8d5a447ef06d
+      path: spec-git-command-proxy.md
+      type: spec
+      status: complete
+    - id: 01a0e340-e907-772b-abd9-c90159df1b9d
+      path: wo-git-command-proxy.md
+      type: file
+      status: complete
+assets: []
