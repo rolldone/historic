@@ -79,10 +79,15 @@ Move a topic between storage states:
 
 ```sh
 historic close 00001
+historic close all [--json]
 historic open 00001
 historic import 00001
 ```
 
+- `historic close <id>` closes one topic; `historic close all` closes the open topics discovered at the start of that command.
+- Bulk close processes topics deterministically by TopicID then path and reuses the single-topic close lifecycle. Each topic reports an individual result; a failure does not stop later topics, but any partial failure returns a non-zero exit code.
+- `historic close all --json` returns one standard JSON envelope. `data` contains `succeeded`, `failed`, `total`, `closed`, and `failed_count`; `ok` is false when one or more topics fail. An empty target list succeeds with zero counts.
+- Only valid first-level open topic folders are targets. Closed topics, metadata/index files, staging entries, and nested folders are not included.
 - `open` means `.historic/<topic-id>-<slug>/`.
 - `closed` means `.historic/.database/<topic-id>-<slug>/`.
 - Close/open preserve all topic bytes and member frontmatter statuses.
