@@ -49,7 +49,7 @@ func NewRootCommand() *cobra.Command {
 	root.AddCommand(newDeleteCommand())
 	root.AddCommand(newDeleteTopicCommand())
 	root.AddCommand(newPurgeCommand())
-	root.AddCommand(newStorageCommand("close", func(service lifecycle.Service, id domain.ID) (lifecycle.Change, error) { return service.Close(id) }))
+	root.AddCommand(newCloseCommand())
 	root.AddCommand(newStorageCommand("open", func(service lifecycle.Service, id domain.ID) (lifecycle.Change, error) { return service.Open(id) }))
 	return root
 }

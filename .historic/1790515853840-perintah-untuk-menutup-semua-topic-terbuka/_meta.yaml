@@ -1,0 +1,13 @@
+id: "1790515853840"
+title: Perintah untuk menutup semua topic terbuka
+created: "2026-09-27"
+files:
+    - id: 01a0e313-31ce-7a93-9ec7-eff43590268c
+      path: spec-close-all.md
+      type: file
+      status: complete
+    - id: 01a0e314-c702-7d80-b4ff-55e47a934bf0
+      path: wo-close-all.md
+      type: file
+      status: complete
+assets: []

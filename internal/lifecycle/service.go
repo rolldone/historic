@@ -20,6 +20,29 @@ type Change struct {
 	Archived        bool
 }
 
+// CloseAllResult reports the outcome of each topic in a bulk close operation.
+type CloseAllResult struct {
+	Succeeded   []CloseAllSuccess `json:"succeeded"`
+	Failed      []CloseAllFailure `json:"failed"`
+	Total       int               `json:"total"`
+	Closed      int               `json:"closed"`
+	FailedCount int               `json:"failed_count"`
+}
+
+// CloseAllSuccess identifies a topic moved to closed storage.
+type CloseAllSuccess struct {
+	ID    string `json:"id"`
+	Title string `json:"title"`
+	Path  string `json:"path"`
+}
+
+// CloseAllFailure describes one topic that could not be moved to closed storage.
+type CloseAllFailure struct {
+	ID    string `json:"id"`
+	Path  string `json:"path"`
+	Error string `json:"error"`
+}
+
 // Service updates topic metadata and rebuilds the source-derived index.
 type Service struct {
 	Workspace       config.Workspace

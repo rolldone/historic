@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"historic/internal/config"
@@ -32,6 +33,140 @@ func (service Service) Close(id domain.ID) (Change, error) {
 	return closeTopic(service.Workspace, id)
 }
 
+// CloseAll closes the open topics discovered in one initial filesystem snapshot.
+// Each target is passed through Close so single-topic validation and rollback
+// guarantees remain unchanged.
+func (service Service) CloseAll() (CloseAllResult, error) {
+	result := CloseAllResult{
+		Succeeded: make([]CloseAllSuccess, 0),
+		Failed:    make([]CloseAllFailure, 0),
+	}
+	targets, discoveryFailures, err := openTopicTargets(service.Workspace)
+	if err != nil {
+		return result, err
+	}
+	result.Failed = append(result.Failed, discoveryFailures...)
+	result.Total = len(targets) + len(discoveryFailures)
+
+	for _, target := range targets {
+		currentPath, storage, locationErr := TopicLocation(service.Workspace, target.id)
+		if locationErr != nil {
+			result.Failed = append(result.Failed, CloseAllFailure{
+				ID: target.id.String(), Path: service.Workspace.RelativePath(target.path), Error: locationErr.Error(),
+			})
+			continue
+		}
+		if storage != domain.StorageOpen || filepath.Clean(currentPath) != filepath.Clean(target.path) {
+			conflict := fmt.Errorf("%w: topic location changed after close-all discovery", domain.ErrConflict)
+			result.Failed = append(result.Failed, CloseAllFailure{
+				ID: target.id.String(), Path: service.Workspace.RelativePath(target.path), Error: conflict.Error(),
+			})
+			continue
+		}
+		change, closeErr := service.Close(target.id)
+		if closeErr != nil {
+			result.Failed = append(result.Failed, CloseAllFailure{
+				ID: target.id.String(), Path: service.Workspace.RelativePath(target.path), Error: closeErr.Error(),
+			})
+			continue
+		}
+		result.Succeeded = append(result.Succeeded, CloseAllSuccess{
+			ID: change.ID.String(), Title: change.Title, Path: change.Path,
+		})
+	}
+	result.Closed = len(result.Succeeded)
+	result.FailedCount = len(result.Failed)
+	if result.FailedCount > 0 {
+		return result, fmt.Errorf("%d topic gagal ditutup", result.FailedCount)
+	}
+	return result, nil
+}
+
+type closeTarget struct {
+	id   domain.ID
+	path string
+}
+
+func openTopicTargets(workspace config.Workspace) ([]closeTarget, []CloseAllFailure, error) {
+	entries, err := os.ReadDir(workspace.Histories)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return []closeTarget{}, []CloseAllFailure{}, nil
+		}
+		return nil, nil, fmt.Errorf("scan open topics: %w", err)
+	}
+
+	targets := make([]closeTarget, 0)
+	failures := make([]CloseAllFailure, 0)
+	byID := make(map[domain.ID][]string)
+	for _, entry := range entries {
+		if strings.HasPrefix(entry.Name(), ".") || strings.HasPrefix(entry.Name(), ".staging-") {
+			continue
+		}
+		path := filepath.Join(workspace.Histories, entry.Name())
+		info, statErr := os.Lstat(path)
+		if statErr != nil {
+			failures = append(failures, CloseAllFailure{Path: workspace.RelativePath(path), Error: statErr.Error()})
+			continue
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			if match := syncTopicFolderPattern.FindStringSubmatch(entry.Name()); len(match) == 3 {
+				failures = append(failures, CloseAllFailure{ID: match[1], Path: workspace.RelativePath(path), Error: fmt.Sprintf("%v: topic symlink", domain.ErrConflict)})
+			}
+			continue
+		}
+		if !info.IsDir() {
+			continue
+		}
+		match := syncTopicFolderPattern.FindStringSubmatch(entry.Name())
+		if len(match) != 3 {
+			continue
+		}
+		id, parseErr := domain.ParseTopicIdentity(match[1])
+		if parseErr != nil {
+			failures = append(failures, CloseAllFailure{
+				ID: match[1], Path: workspace.RelativePath(path),
+				Error: fmt.Sprintf("invalid topic folder identity: %v", parseErr),
+			})
+			continue
+		}
+		if strings.TrimSpace(match[2]) == "" {
+			failures = append(failures, CloseAllFailure{
+				ID: id.String(), Path: workspace.RelativePath(path), Error: "invalid topic folder: empty slug",
+			})
+			continue
+		}
+		byID[id] = append(byID[id], path)
+	}
+	for id, paths := range byID {
+		if len(paths) > 1 {
+			sort.Strings(paths)
+			for _, path := range paths {
+				failures = append(failures, CloseAllFailure{
+					ID: id.String(), Path: workspace.RelativePath(path),
+					Error: fmt.Sprintf("%v: duplicate open topic ID %s", domain.ErrConflict, id),
+				})
+			}
+			continue
+		}
+		targets = append(targets, closeTarget{id: id, path: paths[0]})
+	}
+
+	sort.Slice(targets, func(i, j int) bool {
+		if targets[i].id != targets[j].id {
+			return targets[i].id < targets[j].id
+		}
+		return targets[i].path < targets[j].path
+	})
+	sort.Slice(failures, func(i, j int) bool {
+		if failures[i].ID != failures[j].ID {
+			return failures[i].ID < failures[j].ID
+		}
+		return failures[i].Path < failures[j].Path
+	})
+	return targets, failures, nil
+}
+
 func closeTopic(workspace config.Workspace, id domain.ID) (Change, error) {
 	if !id.Valid() {
 		return Change{}, fmt.Errorf("%w: %q", domain.ErrInvalidID, id)
@@ -40,10 +175,24 @@ func closeTopic(workspace config.Workspace, id domain.ID) (Change, error) {
 	if err != nil {
 		return Change{}, err
 	}
-	location := topicLocation{path: path, storage: storage}
-	if location.storage != domain.StorageOpen {
+	if storage != domain.StorageOpen {
 		return Change{}, fmt.Errorf("%w: topic %s is already closed", domain.ErrConflict, id)
 	}
+	return closeTopicAt(workspace, id, path)
+}
+
+func closeTopicAt(workspace config.Workspace, id domain.ID, expectedPath string) (Change, error) {
+	if !id.Valid() {
+		return Change{}, fmt.Errorf("%w: %q", domain.ErrInvalidID, id)
+	}
+	path, storage, err := TopicLocation(workspace, id)
+	if err != nil {
+		return Change{}, err
+	}
+	if storage != domain.StorageOpen || filepath.Clean(path) != filepath.Clean(expectedPath) {
+		return Change{}, fmt.Errorf("%w: topic %s location changed before close", domain.ErrConflict, id)
+	}
+	location := topicLocation{path: path, storage: storage}
 	if err := validateTopicPath(workspace, location.path); err != nil {
 		return Change{}, err
 	}

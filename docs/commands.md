@@ -59,11 +59,12 @@ Work status belongs only to managed member Markdown files. Topics have no work-s
 ```sh
 historic status <member-path> <status> [--json]
 historic close <id> [--json]
+historic close all [--json]
 historic open <id> [--json]
 historic import <id> [--json]
 ```
 
-`close`, `open`, and `import` change storage only and preserve member frontmatter statuses and topic contents.
+`close`, `open`, and `import` change storage only and preserve member frontmatter statuses and topic contents. `close all` snapshots the open-topic list once, processes it in deterministic ID/path order using the same lifecycle as a single close, and reports per-topic results and totals. A partial failure continues processing and exits non-zero; `--json` returns one envelope with `succeeded`, `failed`, `total`, `closed`, and `failed_count`.
 
 ## File status
 
