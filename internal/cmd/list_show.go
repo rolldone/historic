@@ -45,7 +45,7 @@ func newListCommand() *cobra.Command {
 			return nil
 		},
 	}
-	command.Flags().BoolVar(&closedOnly, "closed", false, "include closed topics")
+	command.Flags().BoolVar(&closedOnly, "closed", false, "list only closed topics")
 	command.Flags().BoolVar(&jsonOutput, "json", false, "output stable JSON")
 	return command
 }

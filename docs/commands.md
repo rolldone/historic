@@ -11,6 +11,7 @@ historic show <topic-id> [--closed] [--json]
 historic version [--json]
 ```
 
+`historic list` shows open topics by default; `historic list --closed` shows only topics stored under `.historic/.database/`. Open and closed topics are separate listing scopes, so a closed-only listing never includes open topics. `historic show <topic-id> --closed` selects one closed topic explicitly.
 
 `historic version` prints `VersionName`, `VersionCode`, `WorkspaceFormatVersion`, and `IndexSchemaVersion`. JSON output includes all four values as a stable envelope.
 

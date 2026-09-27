@@ -34,8 +34,8 @@ type FileView struct {
 	Status      string `json:"status"`
 }
 
-// ListTopics returns deterministic topic views, filtered to open by default.
-func (store TopicStore) ListTopics(includeClosed bool) ([]TopicView, error) {
+// ListTopics returns deterministic topic views, filtered to open by default or closed when requested.
+func (store TopicStore) ListTopics(closedOnly bool) ([]TopicView, error) {
 	paths, err := store.ListTopicDirectories()
 	if err != nil {
 		return nil, fmt.Errorf("list topics: %w", err)
@@ -47,7 +47,7 @@ func (store TopicStore) ListTopics(includeClosed bool) ([]TopicView, error) {
 		if err != nil {
 			return nil, err
 		}
-		if !includeClosed && view.Storage == "closed" {
+		if closedOnly != (view.Storage == "closed") {
 			continue
 		}
 		views = append(views, view)

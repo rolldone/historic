@@ -26,12 +26,19 @@ func TestListTopicsDeduplicatesOpenAndClosedSlugCopies(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	views, err := store.ListTopics(true)
+	views, err := store.ListTopics(false)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(views) != 1 || views[0].ID != "00020" || views[0].Storage != "open" || views[0].Path != ".historic/00020-current-slug" {
-		t.Fatalf("deduplicated views = %#v", views)
+		t.Fatalf("open views = %#v", views)
+	}
+	closed, err := store.ListTopics(true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(closed) != 0 {
+		t.Fatalf("closed views = %#v, want no closed copy when an open copy is authoritative", closed)
 	}
 }
 
@@ -68,12 +75,12 @@ func TestListTopicsDefaultsToActiveAndSortsByID(t *testing.T) {
 	if len(views) != 2 || views[0].ID != "00001" || views[1].ID != "00002" {
 		t.Fatalf("views = %#v", views)
 	}
-	all, err := store.ListTopics(true)
+	closed, err := store.ListTopics(true)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(all) != 3 || all[2].Active {
-		t.Fatalf("archived views = %#v", all)
+	if len(closed) != 1 || closed[0].ID != "00003" || closed[0].Storage != "closed" || closed[0].Active {
+		t.Fatalf("closed views = %#v", closed)
 	}
 }
 

@@ -99,6 +99,7 @@ historic open 00001
 historic import 00001
 ```
 
+- `historic list` shows open topics by default; `historic list --closed` filters to closed topics only. The `--closed` flag does not mean “include closed.”
 - `historic close <id>` closes one topic; `historic close all` closes the open topics discovered at the start of that command.
 - Bulk close processes topics deterministically by TopicID then path and reuses the single-topic close lifecycle. Each topic reports an individual result; a failure does not stop later topics, but any partial failure returns a non-zero exit code.
 - `historic close all --json` returns one standard JSON envelope. `data` contains `succeeded`, `failed`, `total`, `closed`, and `failed_count`; `ok` is false when one or more topics fail. An empty target list succeeds with zero counts.
