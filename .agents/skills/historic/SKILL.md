@@ -17,7 +17,7 @@ Historic is a local-first work-memory CLI. Markdown is the source of truth. SQLi
 - `.histories/` is unsupported and has no compatibility layer. Migrate manually with `mv .histories .historic`.
 - If `.historic/` and `.histories/` both exist, reject the operation. Never merge or rename automatically.
 - The expected structure includes `.historic/.database/`, `.historic/.database/.git/`, and `.historic/.index.sqlite`.
-- Never push the internal Git repository and never add a remote to it.
+- Do not push the internal Git repository or add a remote unless the user explicitly requests that action.
 - Do not modify `PRD.md` unless explicitly requested.
 - Do not modify source-code files as part of routine lifecycle operations.
 
@@ -41,6 +41,21 @@ historic show <timestamp-topic-id>
 ```
 
 `historic create` allocates a monotonic Unix epoch-millisecond TopicID under an inter-process lock. During migration, legacy five-digit IDs can still be resolved. Use `historic add` to create notes or Work Orders. When multiple topics are active, provide an explicit `--id` for commands that need to select a topic.
+
+## Internal Git passthrough
+
+Use `historic git <git-args...>` to run Git with `.historic/.database` as the working directory:
+
+```sh
+historic git status
+historic git log -1 --oneline
+historic git diff --stat
+```
+
+- Arguments are passed directly to the Git executable without shell interpretation; stdin, stdout, stderr, and Git's exit status are forwarded.
+- The proxy does not run Git actions automatically. It forwards only the subcommand the user explicitly supplies, including `push`, `pull`, `commit`, and `init`; never append or infer such actions.
+- Do not add a remote, change Git configuration, or push unless explicitly requested by the user.
+- With no Git arguments, the command prints usage. This proxy is distinct from Historic's `historic log`, `historic diff`, `historic save`, and `historic restore` commands.
 
 ## Search and TUI
 

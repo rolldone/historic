@@ -143,7 +143,7 @@ historic git log -1 --oneline
 historic git diff --stat
 ```
 
-All Git subcommands and flags are passed through as requested, including `push`, `pull`, `commit`, and `init`; Historic does not run these operations automatically. The proxy does not initialize the repository or alter Git configuration. With no Git arguments it prints usage. `historic log`, `historic diff`, and `historic save` remain separate Historic commands.
+All Git subcommands and flags are passed through as requested, including `push`, `pull`, `commit`, and `init`; Historic does not run these operations automatically. An explicit `historic git init` is passed to Git normally. The proxy does not otherwise initialize the repository or alter Git configuration. With no Git arguments it prints usage. `historic log`, `historic diff`, and `historic save` remain separate Historic commands.
 
 Snapshots are local-only and include both open and closed topic storage under `.historic`. Closing and opening topics are filesystem operations with recovery safeguards; they do not automatically change work status.
 
