@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -53,6 +54,13 @@ func TestListAndShowCommandsJSON(t *testing.T) {
 	}
 	if err := json.Unmarshal(output.Bytes(), &show); err != nil || !show.OK || show.Command != "show" {
 		t.Fatalf("show response = %q, %v", output.String(), err)
+	}
+	if _, err := executeCommand(t, "close", "00001"); err != nil {
+		t.Fatal(err)
+	}
+	closedOutput, err := executeCommand(t, "show", "00001")
+	if err != nil || !strings.Contains(closedOutput, "[closed]") {
+		t.Fatalf("show closed fallback output=%q err=%v", closedOutput, err)
 	}
 }
 

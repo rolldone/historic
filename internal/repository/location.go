@@ -41,8 +41,11 @@ func findTopicLocation(workspace config.Workspace, id domain.ID) (topicLocation,
 	if len(locations) == 0 {
 		return topicLocation{}, fmt.Errorf("%w: %s", domain.ErrTopicMissing, id)
 	}
-	if len(locations) > 1 {
-		return topicLocation{}, fmt.Errorf("%w: topic %s exists in open and closed storage", domain.ErrConflict, id)
+	// The open copy is authoritative when present; otherwise fall back to closed.
+	for _, location := range locations {
+		if location.storage == domain.StorageOpen {
+			return location, nil
+		}
 	}
 	return locations[0], nil
 }

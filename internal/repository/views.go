@@ -56,7 +56,7 @@ func (store TopicStore) ListTopics(closedOnly bool) ([]TopicView, error) {
 	return views, nil
 }
 
-// ShowTopic returns one topic view, including its metadata and Markdown files.
+// ShowTopic returns one topic view, preferring the open copy and falling back to closed.
 func (store TopicStore) ShowTopic(id domain.ID, includeClosed bool) (TopicView, error) {
 	if !id.Valid() {
 		return TopicView{}, fmt.Errorf("%w: %q", domain.ErrInvalidID, id)
@@ -65,15 +65,19 @@ func (store TopicStore) ShowTopic(id domain.ID, includeClosed bool) (TopicView, 
 	if err != nil {
 		return TopicView{}, fmt.Errorf("find topic: %w", err)
 	}
+	var closedPath string
 	for _, path := range paths {
 		if !strings.HasPrefix(filepath.Base(path), id.String()+"-") {
 			continue
 		}
 		active := filepath.Dir(path) == store.Workspace.Histories
-		if !includeClosed && !active {
-			return TopicView{}, fmt.Errorf("%w: topic %s is closed", domain.ErrTopicMissing, id)
+		if active {
+			return store.readTopicView(path, true, true)
 		}
-		return store.readTopicView(path, active, true)
+		closedPath = path
+	}
+	if closedPath != "" {
+		return store.readTopicView(closedPath, false, true)
 	}
 	return TopicView{}, fmt.Errorf("%w: %s", domain.ErrTopicMissing, id)
 }

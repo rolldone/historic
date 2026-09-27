@@ -40,6 +40,25 @@ func TestListTopicsDeduplicatesOpenAndClosedSlugCopies(t *testing.T) {
 	if len(closed) != 0 {
 		t.Fatalf("closed views = %#v, want no closed copy when an open copy is authoritative", closed)
 	}
+	fallback, err := store.ShowTopic(domain.ID("00020"), false)
+	if err != nil || fallback.Storage != "open" {
+		t.Fatalf("show prefers open location: view=%#v err=%v", fallback, err)
+	}
+}
+
+func TestShowTopicFallsBackToClosedCopy(t *testing.T) {
+	store := newTestStore(t)
+	closedTopic := filepath.Join(store.Workspace.Database, "00022-closed-topic")
+	if err := os.MkdirAll(closedTopic, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := markdown.WriteTopicMetadata(filepath.Join(closedTopic, markdown.MetaFilename), markdown.TopicMetadata{ID: "00022", Title: "Closed Topic", Created: "2026-09-21"}); err != nil {
+		t.Fatal(err)
+	}
+	view, err := store.ShowTopic(domain.ID("00022"), false)
+	if err != nil || view.Storage != "closed" || view.Path != ".historic/.database/00022-closed-topic" {
+		t.Fatalf("closed fallback view=%#v err=%v", view, err)
+	}
 }
 
 func TestListTopicsRejectsSymlinkedTopicRoot(t *testing.T) {

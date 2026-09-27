@@ -71,6 +71,42 @@ func TestFindWO09SearchesTopicsAndFilesWithReadModelFilters(t *testing.T) {
 	if !seenStorage[domain.StorageOpen.String()] || !seenStorage[domain.StorageClosed.String()] {
 		t.Fatalf("default storage coverage = %v", seenStorage)
 	}
+	duplicateClosedTopic := filepath.Join(workspace.Database, "00001-stale-copy")
+	if err := os.MkdirAll(duplicateClosedTopic, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := markdown.WriteTopicMetadata(filepath.Join(duplicateClosedTopic, markdown.MetaFilename), markdown.TopicMetadata{
+		ID: "00001", Title: "Closed Stale Needle", Created: "2026-09-04",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := indexer.Rebuild(workspace); err != nil {
+		t.Fatal(err)
+	}
+	results, err = Find(workspace, Options{Keyword: "needle"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, result := range results {
+		if result.TopicID == "00001" && result.Storage != domain.StorageOpen.String() {
+			t.Fatalf("default find returned non-authoritative copy: %+v", result)
+		}
+	}
+
+	closedOnly, err := Find(workspace, Options{Keyword: "needle", ClosedOnly: true})
+
+	if err != nil {
+		t.Fatal(err)
+	}
+	foundClosed := false
+	for _, result := range closedOnly {
+		if result.TopicID == "00002" && result.Storage == domain.StorageClosed.String() {
+			foundClosed = true
+		}
+	}
+	if !foundClosed {
+		t.Fatalf("explicit closed find omitted closed-only topic: %+v", closedOnly)
+	}
 	filtered, err := Find(workspace, Options{Keyword: "needle", Tags: []string{"needle"}, OpenOnly: true})
 	if err != nil || len(filtered) != 1 || filtered[0].Path != ".historic/00001-open-topic/note.md" {
 		t.Fatalf("tag/open filter = %#v, %v", filtered, err)

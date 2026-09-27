@@ -147,6 +147,9 @@ func RecentTopicsPage(workspace config.Workspace, options Options) (SearchPage, 
 	}
 	defer database.Close()
 	where, args := topicPredicates(options)
+	if !options.OpenOnly && !options.ClosedOnly && !options.ActiveOnly && !options.ArchivedOnly {
+		where = append(where, "(storage = 'open' OR NOT EXISTS (SELECT 1 FROM topics AS open_topic WHERE open_topic.id = topics.id AND open_topic.storage = 'open'))")
+	}
 	args = append(args, pagination.PageSize+1, (pagination.Page-1)*pagination.PageSize)
 	rows, err := database.Query(`SELECT id, title, COALESCE(description, ''), COALESCE(computed_status, ''), storage, path, tags, created_at, COALESCE(updated_at, '')
 		FROM topics WHERE `+strings.Join(where, " AND ")+` ORDER BY `+recentOrder(options.Sort)+` LIMIT ? OFFSET ?`, args...)
@@ -207,6 +210,11 @@ func FindPage(workspace config.Workspace, options Options) (SearchPage, error) {
 	predicates, predicateArgs := resultPredicates(options)
 	where = append(where, predicates...)
 	args = append(args, predicateArgs...)
+	if !options.OpenOnly && !options.ClosedOnly && !options.ActiveOnly && !options.ArchivedOnly {
+		// Prefer the open copy for logical duplicates. Closed is the fallback
+		// only when no open topic with the same ID exists in the indexed model.
+		where = append(where, "(t.storage = 'open' OR NOT EXISTS (SELECT 1 FROM topics AS open_topic WHERE open_topic.id = t.id AND open_topic.storage = 'open'))")
+	}
 	statement := `SELECT CASE WHEN historic_fts.entity_type = 'topic' THEN 'topic' ELSE COALESCE(f.type, 'asset') END, historic_fts.entity_id, COALESCE(t.id, f.topic_id),
 		COALESCE(CASE WHEN historic_fts.entity_type = 'topic' THEN t.title ELSE f.title END, ''),
 		COALESCE(CASE WHEN historic_fts.entity_type = 'topic' THEN t.description ELSE f.description END, ''),
