@@ -91,6 +91,8 @@ Work status belongs to managed member files only. Topics have no work status. St
 
 Use `historic status <member-path> <status>` for work status and `historic close/open <id>` for storage movement.
 
+To run a Git command against the internal repository, use `historic git <git-args...>`. For example, `historic git status` runs with `.historic/.database` as its working directory and forwards Git streams directly. Every subcommand is passed only when explicitly requested; Historic never automatically runs `push`, `pull`, `commit`, or `init`.
+
 
 Read topics with explicit closed scope when needed:
 

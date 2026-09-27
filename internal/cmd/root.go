@@ -46,6 +46,7 @@ func NewRootCommand() *cobra.Command {
 	root.AddCommand(newLogCommand())
 	root.AddCommand(newDiffCommand())
 	root.AddCommand(newRestoreCommand())
+	root.AddCommand(newGitCommand())
 	root.AddCommand(newDeleteCommand())
 	root.AddCommand(newDeleteTopicCommand())
 	root.AddCommand(newPurgeCommand())
