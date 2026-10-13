@@ -37,16 +37,16 @@ func TestEnsureReadModelCreatesCalibratedTopicsAndFilesSchema(t *testing.T) {
 	if _, err := database.Exec(`INSERT INTO topics (id, num_padded, title, slug, path, storage, created_at) VALUES ('00001', '00001', 'Topic', 'topic', '.historic/00001-topic', 'open', '2026-09-21')`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := database.Exec(`INSERT INTO files (topic_id, type, path, filename, title, status, mtime, hash) VALUES ('00001', 'asset', 'docs/readme.txt', 'readme.txt', 'Readme', NULL, '2026-09-21T00:00:00Z', 'hash')`); err != nil {
+	if _, err := database.Exec(`INSERT INTO files (id, storage, topic_id, type, path, filename, title, status, mtime, hash) VALUES ('f1', 'open', '00001', 'asset', 'docs/readme.txt', 'readme.txt', 'Readme', NULL, '2026-09-21T00:00:00Z', 'hash')`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := database.Exec(`INSERT INTO files (topic_id, type, path, filename, title, status, mtime, hash) VALUES ('00001', 'historic_file', 'wos/01-task.md', '01-task.md', 'Task', 'progress', '2026-09-21T00:00:00Z', 'hash2')`); err != nil {
+	if _, err := database.Exec(`INSERT INTO files (id, storage, topic_id, type, path, filename, title, status, mtime, hash) VALUES ('f2', 'open', '00001', 'historic_file', 'wos/01-task.md', '01-task.md', 'Task', 'progress', '2026-09-21T00:00:00Z', 'hash2')`); err != nil {
 		t.Fatal(err)
 	}
 
 	checks := []string{
-		`INSERT INTO files (topic_id, type, path, filename, title, status, mtime, hash) VALUES ('00001', 'asset', '.historic/escape.txt', 'escape.txt', 'Escape', NULL, 'now', 'x')`,
-		`INSERT INTO files (topic_id, type, path, filename, title, status, mtime, hash) VALUES ('00001', 'asset', 'asset.txt', 'asset.txt', 'Asset', 'progress', 'now', 'y')`,
+		`INSERT INTO files (id, storage, topic_id, type, path, filename, title, status, mtime, hash) VALUES ('f3', 'open', '00001', 'asset', '.historic/escape.txt', 'escape.txt', 'Escape', NULL, 'now', 'x')`,
+		`INSERT INTO files (id, storage, topic_id, type, path, filename, title, status, mtime, hash) VALUES ('f4', 'open', '00001', 'asset', 'asset.txt', 'asset.txt', 'Asset', 'progress', 'now', 'y')`,
 	}
 	for _, statement := range checks {
 		if _, err := database.Exec(statement); err == nil {

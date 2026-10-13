@@ -33,13 +33,6 @@ func TestLogAndDiffCommands(t *testing.T) {
 	command = NewRootCommand()
 	output.Reset()
 	ConfigureOutput(command, &output, &output)
-	command.SetArgs([]string{"save", "-m", "topic snapshot"})
-	if err := command.Execute(); err != nil {
-		t.Fatal(err)
-	}
-	command = NewRootCommand()
-	output.Reset()
-	ConfigureOutput(command, &output, &output)
 	command.SetArgs([]string{"diff", "00001", "--json"})
 	if err := command.Execute(); err != nil {
 		t.Fatal(err)
@@ -66,7 +59,7 @@ func TestLogAndDiffCommands(t *testing.T) {
 			Message string `json:"message"`
 		} `json:"data"`
 	}
-	if err := json.Unmarshal(output.Bytes(), &log); err != nil || !log.OK || len(log.Data) == 0 || log.Data[0].Message != "topic snapshot" {
+	if err := json.Unmarshal(output.Bytes(), &log); err != nil || !log.OK || len(log.Data) != 0 {
 		t.Fatalf("log = %q, %v", output.String(), err)
 	}
 }

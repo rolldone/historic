@@ -51,16 +51,55 @@ func TestListAndShowCommandsJSON(t *testing.T) {
 	var show struct {
 		Command string `json:"command"`
 		OK      bool   `json:"ok"`
+		Data    []struct {
+			Storage string `json:"storage"`
+		} `json:"data"`
 	}
-	if err := json.Unmarshal(output.Bytes(), &show); err != nil || !show.OK || show.Command != "show" {
+	if err := json.Unmarshal(output.Bytes(), &show); err != nil || !show.OK || show.Command != "show" || len(show.Data) != 1 || show.Data[0].Storage != "open" {
 		t.Fatalf("show response = %q, %v", output.String(), err)
 	}
 	if _, err := executeCommand(t, "close", "00001"); err != nil {
 		t.Fatal(err)
 	}
 	closedOutput, err := executeCommand(t, "show", "00001")
-	if err != nil || !strings.Contains(closedOutput, "[closed]") {
+	if err != nil || !strings.Contains(closedOutput, "[CLOSED]") {
 		t.Fatalf("show closed fallback output=%q err=%v", closedOutput, err)
+	}
+	jsonOutput, err := executeCommand(t, "show", "00001", "--json")
+	var closedShow struct {
+		Data []struct {
+			Storage string `json:"storage"`
+		} `json:"data"`
+	}
+	if err != nil || json.Unmarshal([]byte(jsonOutput), &closedShow) != nil || len(closedShow.Data) != 1 || closedShow.Data[0].Storage != "closed" {
+		t.Fatalf("closed show JSON=%q err=%v", jsonOutput, err)
+	}
+}
+
+func TestShowDisplaysBothMirroredVersions(t *testing.T) {
+	root := t.TempDir()
+	t.Chdir(root)
+	if _, err := executeCommand(t, "init"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := executeCommand(t, "create", "Topic", "--id", "00001"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := executeCommand(t, "save", "--all"); err != nil {
+		t.Fatal(err)
+	}
+	output, err := executeCommand(t, "show", "00001")
+	if err != nil || !strings.Contains(output, "[OPEN]") || !strings.Contains(output, "[CLOSED]") {
+		t.Fatalf("show output=%q err=%v", output, err)
+	}
+	jsonOutput, err := executeCommand(t, "show", "00001", "--json")
+	var response struct {
+		Data []struct {
+			Storage string `json:"storage"`
+		} `json:"data"`
+	}
+	if err != nil || json.Unmarshal([]byte(jsonOutput), &response) != nil || len(response.Data) != 2 || response.Data[0].Storage != "open" || response.Data[1].Storage != "closed" {
+		t.Fatalf("show JSON=%q err=%v", jsonOutput, err)
 	}
 }
 

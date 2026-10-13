@@ -11,7 +11,7 @@ historic show <topic-id> [--closed] [--json]
 historic version [--json]
 ```
 
-`historic list` shows open topics by default; `historic list --closed` shows only topics stored under `.historic/.database/`. Open and closed topics are separate listing scopes, so a closed-only listing never includes open topics. `historic show <topic-id>` prefers an open topic and falls back to its closed copy when no open copy exists; `--closed` remains accepted for compatibility.
+`historic list` shows open topics by default; `historic list --closed` shows topics stored in `.historic/.database/`, including mirror snapshots created by `historic save`. Open and closed topics are independent listing scopes, so a closed-only listing also includes topics that still have an open copy. `historic show <topic-id>` lists every storage version of the topic (open first) with `updated_at` and `mtime` markers; `--closed` limits the output to closed versions.
 
 `historic version` prints `VersionName`, `VersionCode`, `WorkspaceFormatVersion`, and `IndexSchemaVersion`. JSON output includes all four values as a stable envelope.
 
@@ -59,13 +59,15 @@ Work status belongs only to managed member Markdown files. Topics have no work-s
 
 ```sh
 historic status <member-path> <status> [--json]
-historic close <id> [--json]
-historic close all [--json]
-historic open <id> [--json]
+historic save [id] [--all] [--json]
+historic close [id] [--all] [--json]
+historic open [id] [--json]
 historic import <id> [--json]
 ```
 
-`close`, `open`, and `import` change storage only and preserve member frontmatter statuses and topic contents. `close all` snapshots the open-topic list once, processes it in deterministic ID/path order using the same lifecycle as a single close, and reports per-topic results and totals. A partial failure continues processing and exits non-zero; `--json` returns one envelope with `succeeded`, `failed`, `total`, `closed`, and `failed_count`.
+`save` and `close` without an ID open an interactive picker for open topics, sorted by newest `updated_at` (falling back to `_meta.yaml` mtime); type to filter, use Up/Down and Enter to select, or Esc/q to cancel. `save <id>` mirrors one topic while retaining its open workdir; `save --all` explicitly mirrors all open topics. `close <id>` mirrors then closes one topic; `close --all` explicitly closes all open topics and reports partial failures. `open` without an ID opens the same picker scoped to closed topics; `open <id>` remains available. JSON mode without an ID returns an error instead of starting an interactive picker. `--all` cannot be combined with an ID and is supported only by save and close.
+
+`close`, `open`, and `import` change storage only and preserve member frontmatter statuses and topic contents. A partial failure in `close --all` continues processing and exits non-zero; `--json` returns one envelope with per-topic results and totals. Save never changes storage and never creates a Git commit; use `historic git commit -m "message"` to commit explicitly.
 
 ## File status
 
@@ -92,7 +94,7 @@ historic find "keyword" --status-not complete --page-size 10
 historic find "" --page 1 --page-size 20
 ```
 
-`--page` defaults to `1`; `--page-size` defaults to `20` and accepts values from `1` through `100`. Results are filtered and deterministically sorted before `LIMIT/OFFSET` pagination. A page beyond the available results succeeds with an empty `items` array. `find` searches open and closed storage by default, preferring the open copy when an ID exists in both and falling back to closed when no open copy exists; explicit `--open` and `--closed` scopes still select their requested storage. The search uses the shared SQLite FTS5 index. `--status` is a comma-separated inclusion filter; `--status-not` is a comma-separated exclusion filter. Statuses are validated and overlap between the two flags is rejected. Empty keyword (`historic find ""`) browses recent topics consistently with the TUI. Use `--open` for open topics only or `--closed` for closed topics only; combining them is rejected. `--sort` accepts `relevance`, `updated`, `created`, or `title`; keyword defaults to relevance with freshness/path tie-breakers, and empty queries default to updated/created/path order. Results expose work `status`, `storage`, actual `path`, and for files `created_at`, `updated_at`, `mtime`, `hash`, and `size`. In JSON mode, `data` is an object with `items` and `pagination` (`page`, `page_size`, `has_more`, and nullable `next_page`). Human output ends with either `Page N · showing M results · more results available` plus the next-page command, or `Page N · showing M results · no more results`; empty output remains `No matches found.`. Legacy `--active` and `--archived` flags are not supported. If the index is missing or invalid, run `historic rebuild`. Pagination uses the SQLite read model only and does not hash/stat files during search. Changes between page requests can cause offset drift; this MVP behavior is eventual consistency.
+`--page` defaults to `1`; `--page-size` defaults to `20` and accepts values from `1` through `100`. Results are filtered and deterministically sorted before `LIMIT/OFFSET` pagination. A page beyond the available results succeeds with an empty `items` array. `find` searches open and closed storage by default and includes both versions when an ID has a mirror. Explicit `--open` and `--closed` scopes select their requested storage. The search uses the shared SQLite FTS5 index. `--status` is a comma-separated inclusion filter; `--status-not` is a comma-separated exclusion filter. Statuses are validated and overlap between the two flags is rejected. Empty keyword (`historic find ""`) browses recent topics consistently with the TUI. Use `--open` for open topics only or `--closed` for closed topics only; combining them is rejected. `--sort` accepts `relevance`, `updated`, `created`, or `title`; keyword defaults to relevance with freshness/path tie-breakers, and empty queries default to updated/created/path order. Results expose work `status`, `storage`, actual `path`, and for files `created_at`, `updated_at`, `mtime`, `hash`, and `size`. In JSON mode, `data` is an object with `items` and `pagination` (`page`, `page_size`, `has_more`, and nullable `next_page`). Human output ends with either `Page N · showing M results · more results available` plus the next-page command, or `Page N · showing M results · no more results`; empty output remains `No matches found.`. Legacy `--active` and `--archived` flags are not supported. If the index is missing or invalid, run `historic rebuild`. Pagination uses the SQLite read model only and does not hash/stat files during search. Changes between page requests can cause offset drift; this MVP behavior is eventual consistency.
 
 ## Interactive search TUI
 
@@ -130,7 +132,7 @@ Possible diagnosis statuses are `compatible`, `upgrade required`, `rebuild requi
 ## Lifecycle and versioning
 
 ```sh
-historic save -m "message" [--json]
+historic save [id] [--json]
 historic log <id> [--json]
 historic diff <id> [--json]
 historic restore <id> --snapshot <commit> [--force] [--json]
@@ -146,7 +148,7 @@ historic git diff --stat
 
 All Git subcommands and flags are passed through as requested, including `push`, `pull`, `commit`, and `init`; Historic does not run these operations automatically. An explicit `historic git init` is passed to Git normally. The proxy does not otherwise initialize the repository or alter Git configuration. With no Git arguments it prints usage. `historic log`, `historic diff`, and `historic save` remain separate Historic commands.
 
-Snapshots are local-only and include both open and closed topic storage under `.historic`. Closing and opening topics are filesystem operations with recovery safeguards; they do not automatically change work status.
+Snapshots are local-only and include both open and closed topic storage under `.historic`. `save` refreshes the closed snapshot while leaving the open topic intact; `close` mirrors then removes the open workdir. Both are filesystem operations and do not create commits or automatically change work status. The open copy is authoritative for writes. Search/show can display both versions; compare `updated_at` (frontmatter) and file `mtime` to identify which snapshot is newer.
 
 ## Rebuild and output
 

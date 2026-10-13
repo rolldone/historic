@@ -76,7 +76,7 @@ func newModel(workspace config.Workspace) model {
 	input.Placeholder = "type a query, or leave empty for recent topics"
 	input.CharLimit = 200
 	input.Width = 48
-	return model{workspace: workspace, input: input, limit: DefaultLimit, scope: "active", focus: focusResults}
+	return model{workspace: workspace, input: input, limit: DefaultLimit, scope: "all", focus: focusResults}
 }
 
 func (m model) Init() tea.Cmd { return m.refresh() }
@@ -209,7 +209,11 @@ func (m *model) updatePreview() {
 		return
 	}
 	result := page[m.selected]
-	m.preview = fmt.Sprintf("%s\nstatus: %s\npath: %s\n\n%s", result.Title, result.Status, result.Path, result.Snippet)
+	updated := result.UpdatedAt
+	if updated == "" {
+		updated = result.Mtime
+	}
+	m.preview = fmt.Sprintf("%s\nstatus: %s\nstorage: %s\nupdated_at: %s\nmtime: %s\npath: %s\n\n%s", result.Title, result.Status, result.Storage, updated, result.Mtime, result.Path, result.Snippet)
 }
 
 func (m model) pageData() search.SearchPage {
@@ -304,7 +308,12 @@ func (m model) View() string {
 		if index == m.selected {
 			marker = "> "
 		}
-		left += truncate(fmt.Sprintf("%s%s %s", marker, result.ID, result.Title), leftWidth) + "\n"
+		storage := strings.ToUpper(result.Storage)
+		updated := result.UpdatedAt
+		if updated == "" {
+			updated = result.Mtime
+		}
+		left += truncate(fmt.Sprintf("%s[%s] %s %s · %s", marker, storage, result.ID, result.Title, updated), leftWidth) + "\n"
 	}
 	if len(rows) == 0 {
 		left += muted.Render("No matches") + "\n"
@@ -373,12 +382,12 @@ func (m *model) CycleScope() {
 
 func (m *model) cycleScope() {
 	switch m.scope {
+	case "all":
+		m.scope = "active"
 	case "active":
 		m.scope = "archived"
-	case "archived":
-		m.scope = "all"
 	default:
-		m.scope = "active"
+		m.scope = "all"
 	}
 }
 

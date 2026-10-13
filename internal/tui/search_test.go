@@ -10,7 +10,7 @@ import (
 
 func TestModelDefaultsAndPagination(t *testing.T) {
 	model := newModel(config.Workspace{})
-	if model.limit != DefaultLimit || model.scope != "active" || model.page != 0 {
+	if model.limit != DefaultLimit || model.scope != "all" || model.page != 0 {
 		t.Fatalf("defaults = %#v", model)
 	}
 	model.results = make([]search.Result, DefaultLimit+1)
@@ -33,7 +33,10 @@ func TestTerminalValidationRejectsNonTerminal(t *testing.T) {
 	if isTerminal(strings.NewReader("input")) {
 		t.Fatal("reader reported terminal")
 	}
+	if got := CycleScopeForTest("all"); got != "active" {
+		t.Fatalf("scope cycle from all = %q", got)
+	}
 	if got := CycleScopeForTest("active"); got != "archived" {
-		t.Fatalf("scope cycle = %q", got)
+		t.Fatalf("scope cycle from active = %q", got)
 	}
 }

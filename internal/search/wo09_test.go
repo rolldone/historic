@@ -87,10 +87,14 @@ func TestFindWO09SearchesTopicsAndFilesWithReadModelFilters(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	copies := map[string]bool{}
 	for _, result := range results {
-		if result.TopicID == "00001" && result.Storage != domain.StorageOpen.String() {
-			t.Fatalf("default find returned non-authoritative copy: %+v", result)
+		if result.TopicID == "00001" {
+			copies[result.Storage] = true
 		}
+	}
+	if !copies[domain.StorageOpen.String()] || !copies[domain.StorageClosed.String()] {
+		t.Fatalf("default find versions of topic 00001 = %v, want both open and closed", copies)
 	}
 
 	closedOnly, err := Find(workspace, Options{Keyword: "needle", ClosedOnly: true})

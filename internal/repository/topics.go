@@ -8,7 +8,6 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -383,59 +382,6 @@ func (store TopicStore) topicIDExists(id domain.ID) bool {
 		}
 	}
 	return false
-}
-
-// ListTopicDirectories returns canonical topic folders from active and archive roots.
-func (store TopicStore) ListTopicDirectories() ([]string, error) {
-	type location struct {
-		path    string
-		storage string
-	}
-	byID := make(map[string]location)
-	for _, directory := range []struct {
-		path    string
-		storage string
-	}{{store.Workspace.Histories, "open"}, {store.Workspace.Database, "closed"}} {
-		entries, err := os.ReadDir(directory.path)
-		if errors.Is(err, os.ErrNotExist) {
-			continue
-		}
-		if err != nil {
-			return nil, err
-		}
-		for _, entry := range entries {
-			match := topicFolderPattern.FindStringSubmatch(entry.Name())
-			if len(match) != 3 {
-				continue
-			}
-			path := filepath.Join(directory.path, entry.Name())
-			info, err := os.Lstat(path)
-			if err != nil {
-				return nil, err
-			}
-			if info.Mode()&os.ModeSymlink != 0 {
-				return nil, fmt.Errorf("%w: topic symlink %s", domain.ErrConflict, store.Workspace.RelativePath(path))
-			}
-			if !info.IsDir() {
-				continue
-			}
-			if previous, exists := byID[match[1]]; exists {
-				if previous.storage == directory.storage {
-					return nil, fmt.Errorf("%w: duplicate %s topic ID %s", domain.ErrConflict, directory.storage, match[1])
-				}
-				if previous.storage == "open" {
-					continue
-				}
-			}
-			byID[match[1]] = location{path: path, storage: directory.storage}
-		}
-	}
-	result := make([]string, 0, len(byID))
-	for _, topic := range byID {
-		result = append(result, topic.path)
-	}
-	sort.Strings(result)
-	return result, nil
 }
 
 func dateToday() string { return timeNow().Format("2006-01-02") }

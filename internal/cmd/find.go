@@ -78,7 +78,7 @@ func newFindCommand() *cobra.Command {
 				if strings.TrimSpace(args[0]) == "" {
 					snippet = result.Title
 				}
-				line := fmt.Sprintf("%s  %-10s  [%s]  %s  %s\n", result.TopicID, result.Status, strings.ToUpper(result.Storage), result.Path, search.HighlightHuman(snippet, args[0]))
+				line := fmt.Sprintf("%s  %-10s  [%s]  updated_at=%s mtime=%s  %s  %s\n", result.TopicID, result.Status, strings.ToUpper(result.Storage), result.UpdatedAt, result.Mtime, result.Path, search.HighlightHuman(snippet, args[0]))
 				if _, err = fmt.Fprint(cmd.OutOrStdout(), line); err != nil {
 					return err
 				}

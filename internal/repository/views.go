@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"historic/internal/domain"
 	"historic/internal/markdown"
@@ -19,6 +20,7 @@ type TopicView struct {
 	Description string     `json:"description"`
 	Created     string     `json:"created"`
 	Updated     string     `json:"updated,omitempty"`
+	Mtime       string     `json:"mtime,omitempty"`
 	Path        string     `json:"path"`
 	Storage     string     `json:"storage"`
 	Files       []FileView `json:"files"`
@@ -34,52 +36,115 @@ type FileView struct {
 	Status      string `json:"status"`
 }
 
-// ListTopics returns deterministic topic views, filtered to open by default or closed when requested.
+// ListTopics returns deterministic topic views for one storage scope. Both the
+// open workdir and its closed mirror are listed independently, matching find.
 func (store TopicStore) ListTopics(closedOnly bool) ([]TopicView, error) {
-	paths, err := store.ListTopicDirectories()
-	if err != nil {
-		return nil, fmt.Errorf("list topics: %w", err)
-	}
-	views := make([]TopicView, 0, len(paths))
-	for _, path := range paths {
-		active := filepath.Dir(path) == store.Workspace.Histories
-		view, err := store.readTopicView(path, active, false)
-		if err != nil {
-			return nil, err
-		}
-		if closedOnly != (view.Storage == "closed") {
+	views := make([]TopicView, 0)
+	for _, root := range []struct {
+		path   string
+		active bool
+	}{{store.Workspace.Histories, true}, {store.Workspace.Database, false}} {
+		if closedOnly == root.active {
 			continue
 		}
-		views = append(views, view)
+		entries, err := os.ReadDir(root.path)
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return nil, fmt.Errorf("list topics: %w", err)
+		}
+		seen := make(map[string]struct{}, len(entries))
+		for _, entry := range entries {
+			match := topicFolderPattern.FindStringSubmatch(entry.Name())
+			if len(match) != 3 {
+				continue
+			}
+			path := filepath.Join(root.path, entry.Name())
+			info, err := os.Lstat(path)
+			if err != nil {
+				return nil, err
+			}
+			if info.Mode()&os.ModeSymlink != 0 {
+				return nil, fmt.Errorf("%w: topic symlink %s", domain.ErrConflict, store.Workspace.RelativePath(path))
+			}
+			if !info.IsDir() {
+				continue
+			}
+			if _, exists := seen[match[1]]; exists {
+				return nil, fmt.Errorf("%w: duplicate %s topic ID %s", domain.ErrConflict, map[bool]string{true: "open", false: "closed"}[root.active], match[1])
+			}
+			seen[match[1]] = struct{}{}
+			view, err := store.readTopicView(path, root.active, false)
+			if err != nil {
+				return nil, err
+			}
+			views = append(views, view)
+		}
 	}
-	sort.Slice(views, func(i, j int) bool { return views[i].ID < views[j].ID })
+	sort.Slice(views, func(i, j int) bool {
+		if views[i].ID != views[j].ID {
+			return views[i].ID < views[j].ID
+		}
+		return views[i].Storage == "open" && views[j].Storage != "open"
+	})
 	return views, nil
 }
 
-// ShowTopic returns one topic view, preferring the open copy and falling back to closed.
-func (store TopicStore) ShowTopic(id domain.ID, includeClosed bool) (TopicView, error) {
+// ShowTopics returns all versions of a topic, open first; includeClosed filters to closed copies only.
+func (store TopicStore) ShowTopics(id domain.ID, includeClosed bool) ([]TopicView, error) {
 	if !id.Valid() {
-		return TopicView{}, fmt.Errorf("%w: %q", domain.ErrInvalidID, id)
+		return nil, fmt.Errorf("%w: %q", domain.ErrInvalidID, id)
 	}
-	paths, err := store.ListTopicDirectories()
-	if err != nil {
-		return TopicView{}, fmt.Errorf("find topic: %w", err)
-	}
-	var closedPath string
-	for _, path := range paths {
-		if !strings.HasPrefix(filepath.Base(path), id.String()+"-") {
+	views := make([]TopicView, 0, 2)
+	prefix := id.String() + "-"
+	for _, root := range []string{store.Workspace.Histories, store.Workspace.Database} {
+		entries, readErr := os.ReadDir(root)
+		if errors.Is(readErr, os.ErrNotExist) {
 			continue
 		}
-		active := filepath.Dir(path) == store.Workspace.Histories
-		if active {
-			return store.readTopicView(path, true, true)
+		if readErr != nil {
+			return nil, fmt.Errorf("find topic: %w", readErr)
 		}
-		closedPath = path
+		for _, entry := range entries {
+			if !strings.HasPrefix(entry.Name(), prefix) || strings.HasPrefix(entry.Name(), ".staging-") {
+				continue
+			}
+			path := filepath.Join(root, entry.Name())
+			info, statErr := os.Lstat(path)
+			if statErr != nil {
+				return nil, statErr
+			}
+			if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
+				continue
+			}
+			active := root == store.Workspace.Histories
+			if includeClosed && active {
+				continue
+			}
+			view, viewErr := store.readTopicView(path, active, true)
+			if viewErr != nil {
+				return nil, viewErr
+			}
+			views = append(views, view)
+		}
 	}
-	if closedPath != "" {
-		return store.readTopicView(closedPath, false, true)
+	sort.SliceStable(views, func(i, j int) bool {
+		return views[i].Storage == "open" && views[j].Storage != "open"
+	})
+	if len(views) == 0 {
+		return nil, fmt.Errorf("%w: %s", domain.ErrTopicMissing, id)
 	}
-	return TopicView{}, fmt.Errorf("%w: %s", domain.ErrTopicMissing, id)
+	return views, nil
+}
+
+// ShowTopic preserves the single-view API for existing callers.
+func (store TopicStore) ShowTopic(id domain.ID, includeClosed bool) (TopicView, error) {
+	views, err := store.ShowTopics(id, includeClosed)
+	if err != nil {
+		return TopicView{}, err
+	}
+	return views[0], nil
 }
 
 func (store TopicStore) readTopicView(path string, active, includeBody bool) (TopicView, error) {
@@ -87,9 +152,14 @@ func (store TopicStore) readTopicView(path string, active, includeBody bool) (To
 	if err != nil {
 		return TopicView{}, fmt.Errorf("read metadata %s: %w", store.Workspace.RelativePath(filepath.Join(path, markdown.MetaFilename)), err)
 	}
+	metaPath := filepath.Join(path, markdown.MetaFilename)
+	info, err := os.Stat(metaPath)
+	if err != nil {
+		return TopicView{}, fmt.Errorf("stat topic metadata: %w", err)
+	}
 	view := TopicView{
 		ID: meta.ID.String(), Title: meta.Title, Description: meta.Description,
-		Created: meta.Created, Updated: meta.Updated,
+		Created: meta.Created, Updated: meta.Updated, Mtime: info.ModTime().UTC().Format(time.RFC3339Nano),
 		Path: store.Workspace.RelativePath(path), Body: "", Active: active,
 		Storage: map[bool]string{true: "open", false: "closed"}[active],
 		Files:   []FileView{},

@@ -80,6 +80,7 @@ type TopicSummary struct {
 type FileResult struct {
 	ID          string       `json:"id"`
 	TopicID     string       `json:"topic_id"`
+	Storage     string       `json:"storage"`
 	Type        string       `json:"type"`
 	Path        string       `json:"path"`
 	Filename    string       `json:"filename"`
@@ -186,7 +187,7 @@ func (service Service) QueryTopicsPage(options Options) (Page[TopicSummary], err
 			COUNT(CASE WHEN f.type = 'historic_file' AND f.status = 'cancelled' THEN 1 END) AS cancelled_files,
 			MAX(CASE WHEN f.type = 'historic_file' THEN COALESCE(f.updated_at, f.created_at, f.mtime) END) AS last_file_updated_at
 		FROM topics AS t
-		LEFT JOIN files AS f ON f.topic_id = t.id AND ` + joinPredicate + `
+		LEFT JOIN files AS f ON f.topic_id = t.id AND f.storage = t.storage AND ` + joinPredicate + `
 		WHERE ` + strings.Join(topicWhere, " AND ") + `
 		GROUP BY t.id, t.num_padded, t.title, t.description, t.slug, t.path, t.storage,
 			t.created_at, t.updated_at, t.tags, t.related
@@ -260,9 +261,9 @@ func (service Service) QueryFilesPage(options Options) (Page[FileResult], error)
 	if err != nil {
 		return Page[FileResult]{}, err
 	}
-	topicByID := make(map[string]TopicSummary, len(topics))
+	topicByPath := make(map[string]TopicSummary, len(topics))
 	for _, topic := range topics {
-		topicByID[topic.ID] = topic
+		topicByPath[topic.Path] = topic
 	}
 	database, err := service.open()
 	if err != nil {
@@ -275,8 +276,8 @@ func (service Service) QueryFilesPage(options Options) (Page[FileResult], error)
 	args := append(append([]any{}, topicArgs...), fileArgs...)
 	rows, err := database.Query(`SELECT CAST(f.id AS TEXT), f.topic_id, f.type, f.path, f.filename, f.title, f.description,
 		f.status, f.tags, f.related, f.asset_kind, f.created_at, f.updated_at, f.mtime, f.hash,
-		f.size, f.word_count
-		FROM files AS f JOIN topics AS t ON t.id = f.topic_id
+		f.size, f.word_count, f.storage, t.path
+		FROM files AS f JOIN topics AS t ON t.id = f.topic_id AND t.storage = f.storage
 		WHERE `+strings.Join(topicWhere, " AND ")+` AND `+joinPredicate+`
 		ORDER BY `+fileOrder(options.Sort)+` LIMIT ? OFFSET ?`, append(args, pagination.PageSize+1, (pagination.Page-1)*pagination.PageSize)...)
 	if err != nil {
@@ -287,8 +288,8 @@ func (service Service) QueryFilesPage(options Options) (Page[FileResult], error)
 	for rows.Next() {
 		var result FileResult
 		var description, status, assetKind, createdAt, updatedAt sql.NullString
-		var tagsJSON, relatedJSON string
-		if err := rows.Scan(&result.ID, &result.TopicID, &result.Type, &result.Path, &result.Filename, &result.Title, &description, &status, &tagsJSON, &relatedJSON, &assetKind, &createdAt, &updatedAt, &result.Mtime, &result.Hash, &result.Size, &result.WordCount); err != nil {
+		var tagsJSON, relatedJSON, fileStorage, topicPath string
+		if err := rows.Scan(&result.ID, &result.TopicID, &result.Type, &result.Path, &result.Filename, &result.Title, &description, &status, &tagsJSON, &relatedJSON, &assetKind, &createdAt, &updatedAt, &result.Mtime, &result.Hash, &result.Size, &result.WordCount, &fileStorage, &topicPath); err != nil {
 			return Page[FileResult]{}, fmt.Errorf("read file result: %w", err)
 		}
 		result.Description = description.String
@@ -298,7 +299,8 @@ func (service Service) QueryFilesPage(options Options) (Page[FileResult], error)
 		result.UpdatedAt = updatedAt.String
 		result.Tags = decodeStrings(tagsJSON)
 		result.Related = decodeStrings(relatedJSON)
-		result.Topic = topicByID[result.TopicID]
+		result.Storage = fileStorage
+		result.Topic = topicByPath[topicPath]
 		results = append(results, result)
 	}
 	if err := rows.Err(); err != nil {
@@ -318,28 +320,30 @@ func makePage[T any](items []T, pagination Pagination) Page[T] {
 }
 
 func aggregateOrder(sortOption string) string {
+	storageRank := "CASE WHEN storage = 'open' THEN 0 ELSE 1 END ASC, "
 	switch sortOption {
 	case "title":
-		return "title ASC, path ASC, id ASC"
+		return "title ASC, " + storageRank + "path ASC, id ASC"
 	case "created":
-		return "created_at DESC, path ASC, id ASC"
+		return "created_at DESC, " + storageRank + "path ASC, id ASC"
 	case "updated":
-		return "last_file_updated_at DESC, updated_at DESC, path ASC, id ASC"
+		return "last_file_updated_at DESC, updated_at DESC, " + storageRank + "path ASC, id ASC"
 	default:
-		return "num_padded ASC, path ASC, id ASC"
+		return "num_padded ASC, " + storageRank + "path ASC, id ASC"
 	}
 }
 
 func fileOrder(sortOption string) string {
+	storageRank := "CASE WHEN f.storage = 'open' THEN 0 ELSE 1 END ASC, "
 	switch sortOption {
 	case "title":
-		return "f.title ASC, f.path ASC, f.id ASC"
+		return "f.title ASC, " + storageRank + "f.path ASC, f.id ASC"
 	case "created":
-		return "f.created_at DESC, f.path ASC, f.id ASC"
+		return "f.created_at DESC, " + storageRank + "f.path ASC, f.id ASC"
 	case "updated":
-		return "COALESCE(f.updated_at, f.created_at, f.mtime) DESC, f.path ASC, f.id ASC"
+		return "COALESCE(f.updated_at, f.created_at, f.mtime) DESC, " + storageRank + "f.path ASC, f.id ASC"
 	default:
-		return "t.num_padded ASC, f.path ASC, f.id ASC"
+		return "t.num_padded ASC, " + storageRank + "f.path ASC, f.id ASC"
 	}
 }
 

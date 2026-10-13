@@ -15,21 +15,23 @@ type Execer interface {
 func EnsureReadModel(database Execer) error {
 	const schema = `
 CREATE TABLE IF NOT EXISTS topics (
-    id TEXT PRIMARY KEY,
-    num_padded TEXT NOT NULL UNIQUE,
+    id TEXT NOT NULL,
+    storage TEXT NOT NULL CHECK (storage IN ('open', 'closed')),
+    num_padded TEXT NOT NULL,
     title TEXT NOT NULL,
     description TEXT,
     slug TEXT NOT NULL,
-    path TEXT NOT NULL,
-    storage TEXT NOT NULL CHECK (storage IN ('open', 'closed')),
+    path TEXT NOT NULL UNIQUE,
     created_at TEXT NOT NULL,
     updated_at TEXT,
     tags TEXT NOT NULL DEFAULT '[]',
     related TEXT NOT NULL DEFAULT '[]',
-    computed_status TEXT
+    computed_status TEXT,
+    PRIMARY KEY (id, storage)
 );
 CREATE TABLE IF NOT EXISTS files (
-    id TEXT PRIMARY KEY,
+    id TEXT NOT NULL,
+    storage TEXT NOT NULL CHECK (storage IN ('open', 'closed')),
     topic_id TEXT NOT NULL,
     type TEXT NOT NULL CHECK (type IN ('historic_file', 'asset')),
     path TEXT NOT NULL CHECK (
@@ -52,8 +54,9 @@ CREATE TABLE IF NOT EXISTS files (
     hash TEXT NOT NULL,
     size INTEGER NOT NULL DEFAULT 0,
     word_count INTEGER NOT NULL DEFAULT 0,
-    FOREIGN KEY (topic_id) REFERENCES topics(id) ON DELETE CASCADE,
-    UNIQUE (topic_id, path),
+    PRIMARY KEY (id, storage),
+    FOREIGN KEY (topic_id, storage) REFERENCES topics(id, storage) ON DELETE CASCADE,
+    UNIQUE (topic_id, storage, path),
     CHECK (type = 'historic_file' OR status IS NULL)
 );
 CREATE INDEX IF NOT EXISTS idx_topics_num_padded ON topics(num_padded);
@@ -61,6 +64,7 @@ CREATE INDEX IF NOT EXISTS idx_topics_storage ON topics(storage);
 CREATE INDEX IF NOT EXISTS idx_topics_slug ON topics(slug);
 CREATE INDEX IF NOT EXISTS idx_files_topic_id ON files(topic_id);
 CREATE INDEX IF NOT EXISTS idx_files_type ON files(type);
+CREATE INDEX IF NOT EXISTS idx_files_storage ON files(storage);
 CREATE INDEX IF NOT EXISTS idx_files_status ON files(status);
 CREATE INDEX IF NOT EXISTS idx_files_path ON files(path);
 CREATE INDEX IF NOT EXISTS idx_files_hash ON files(hash);

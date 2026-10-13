@@ -10,7 +10,7 @@ import (
 	"historic/internal/markdown"
 )
 
-func TestListTopicsDeduplicatesOpenAndClosedSlugCopies(t *testing.T) {
+func TestListTopicsListsOpenAndClosedVersionsIndependently(t *testing.T) {
 	store := newTestStore(t)
 	for _, folder := range []string{"00020-old-slug", "00020-current-slug"} {
 		root := store.Workspace.Database
@@ -37,8 +37,8 @@ func TestListTopicsDeduplicatesOpenAndClosedSlugCopies(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(closed) != 0 {
-		t.Fatalf("closed views = %#v, want no closed copy when an open copy is authoritative", closed)
+	if len(closed) != 1 || closed[0].Storage != "closed" || closed[0].Path != ".historic/.database/00020-old-slug" {
+		t.Fatalf("closed views = %#v, want the closed mirror version", closed)
 	}
 	fallback, err := store.ShowTopic(domain.ID("00020"), false)
 	if err != nil || fallback.Storage != "open" {
@@ -67,7 +67,7 @@ func TestListTopicsRejectsSymlinkedTopicRoot(t *testing.T) {
 	if err := os.Symlink(target, filepath.Join(store.Workspace.Histories, "00021-linked-topic")); err != nil {
 		t.Skipf("symlinks unavailable: %v", err)
 	}
-	if _, err := store.ListTopics(true); !errors.Is(err, domain.ErrConflict) {
+	if _, err := store.ListTopics(false); !errors.Is(err, domain.ErrConflict) {
 		t.Fatalf("symlink topic error = %v, want conflict", err)
 	}
 }

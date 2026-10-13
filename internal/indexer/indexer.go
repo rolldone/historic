@@ -54,6 +54,7 @@ type Record struct {
 type fileReadModel struct {
 	FileID      domain.FileID
 	TopicID     domain.ID
+	Storage     domain.StorageState
 	Type        string
 	Path        string
 	Filename    string
@@ -153,7 +154,7 @@ func rebuildInto(workspace config.Workspace) (int, error) {
 		return 0, fmt.Errorf("replace FTS5 table: %w", err)
 	}
 	if _, err := transaction.Exec(`CREATE VIRTUAL TABLE historic_fts USING fts5(
-		entity_type UNINDEXED, entity_id UNINDEXED,
+		entity_type UNINDEXED, entity_id UNINDEXED, storage UNINDEXED,
 		path, filename, title, description, tags, content, tokenize = 'unicode61'
 	)`); err != nil {
 		return 0, fmt.Errorf("create FTS5 table: %w", err)
@@ -186,11 +187,11 @@ func rebuildInto(workspace config.Workspace) (int, error) {
 		}
 		indexed++
 	}
-	if _, err := transaction.Exec(`INSERT INTO historic_fts(entity_type, entity_id, path, filename, title, description, tags, content)
-		SELECT 'topic', t.id, t.path, '_meta.yaml', t.title, COALESCE(t.description, ''), t.tags, ''
+	if _, err := transaction.Exec(`INSERT INTO historic_fts(entity_type, entity_id, storage, path, filename, title, description, tags, content)
+		SELECT 'topic', t.id, t.storage, t.path, '_meta.yaml', t.title, COALESCE(t.description, ''), t.tags, ''
 		FROM topics AS t
 		UNION ALL
-		SELECT 'file', CAST(id AS TEXT), path, filename, title, COALESCE(description, ''), tags, content FROM files`); err != nil {
+		SELECT 'file', CAST(id AS TEXT), storage, path, filename, title, COALESCE(description, ''), tags, content FROM files`); err != nil {
 		return 0, fmt.Errorf("populate FTS5 index: %w", err)
 	}
 	if err := ensureSchemaMetadata(transaction); err != nil {
@@ -224,8 +225,8 @@ func replaceReadModel(transaction *sql.Tx, topics []topicReadModel, files []file
 		}
 	}
 	fileStatement, err := transaction.Prepare(`INSERT INTO files
-		(id, topic_id, type, path, filename, title, description, status, tags, related, content, asset_kind, created_at, updated_at, mtime, hash, size, word_count)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+		(id, storage, topic_id, type, path, filename, title, description, status, tags, related, content, asset_kind, created_at, updated_at, mtime, hash, size, word_count)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return fmt.Errorf("prepare file read model insert: %w", err)
 	}
@@ -241,7 +242,7 @@ func replaceReadModel(transaction *sql.Tx, topics []topicReadModel, files []file
 		if fileID == "" {
 			fileID = "asset:" + file.TopicID.String() + ":" + file.Path
 		}
-		if _, err := fileStatement.Exec(fileID, file.TopicID.String(), file.Type, file.Path, file.Filename, file.Title, nullable(file.Description), status, string(tags), string(related), file.Content, nullable(file.AssetKind), nullable(file.CreatedAt), nullable(file.UpdatedAt), file.Mtime, file.Hash, file.Size, file.WordCount); err != nil {
+		if _, err := fileStatement.Exec(fileID, file.Storage.String(), file.TopicID.String(), file.Type, file.Path, file.Filename, file.Title, nullable(file.Description), status, string(tags), string(related), file.Content, nullable(file.AssetKind), nullable(file.CreatedAt), nullable(file.UpdatedAt), file.Mtime, file.Hash, file.Size, file.WordCount); err != nil {
 			return fmt.Errorf("insert file %s/%s: %w", file.TopicID, file.Path, err)
 		}
 	}
@@ -340,19 +341,18 @@ func scan(workspace config.Workspace) (scanResult, error) {
 	result := scanResult{records: make([]Record, 0), topics: make([]topicReadModel, 0, len(ids)), files: make([]fileReadModel, 0)}
 	for _, id := range ids {
 		locations := candidates[id]
-		chosen := locations[0]
-		for _, location := range locations[1:] {
-			if location.storage == domain.StorageOpen {
-				chosen = location
+		sort.Slice(locations, func(i, j int) bool {
+			return locations[i].storage == domain.StorageOpen && locations[j].storage != domain.StorageOpen
+		})
+		for _, location := range locations {
+			topic, records, files, err := scanTopic(workspace, id, location)
+			if err != nil {
+				return scanResult{}, err
 			}
+			result.topics = append(result.topics, topic)
+			result.records = append(result.records, records...)
+			result.files = append(result.files, files...)
 		}
-		topic, records, files, err := scanTopic(workspace, id, chosen)
-		if err != nil {
-			return scanResult{}, err
-		}
-		result.topics = append(result.topics, topic)
-		result.records = append(result.records, records...)
-		result.files = append(result.files, files...)
 	}
 	sort.Slice(result.records, func(i, j int) bool { return result.records[i].Path < result.records[j].Path })
 	for index := range result.records {
@@ -458,6 +458,9 @@ func scanTopic(workspace config.Workspace, id domain.ID, candidate topicCandidat
 	})
 	if err != nil {
 		return topicReadModel{}, nil, nil, fmt.Errorf("scan topic %s: %w", workspace.RelativePath(candidate.path), err)
+	}
+	for index := range files {
+		files[index].Storage = candidate.storage
 	}
 	topic.ComputedStatus = aggregateStatus(statuses)
 	return topic, records, files, nil

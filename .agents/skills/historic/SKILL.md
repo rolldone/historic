@@ -89,20 +89,25 @@ historic status <path> complete
 - Topics have no work-status field or topic status command.
 - `computed_status` is an SQLite aggregate/cache value only.
 - `close` and `open` change storage only and never change member status.
-
-Move a topic between storage states:
+- `historic save [id] [--all] [--json]` mirrors open topics into `.historic/.database/` and leaves open workdirs intact. Without an ID it opens an interactive newest-first picker for exactly one open topic; with a topic ID it mirrors only that topic; `--all` explicitly mirrors every open topic. It does not accept `-m/--message` and creates no Git commit.
+- `close` mirrors an open topic to `.database` before removing the open workdir; `close` also creates no Git commit. Use `historic git commit -m "message"` for explicit commits.
+- `historic open [id] [--json]` reopens a closed topic. Without an ID it opens an interactive newest-first picker scoped to closed topics. `--json` without an ID returns an error instead of starting a picker; `--all` is not supported for open.
+- A topic may have both open and closed copies. Open remains authoritative for writes; `find`, `show`, and TUI display versions separately. Compare frontmatter `updated_at` and file `mtime` to identify the newer copy.
 
 ```sh
 historic close 00001
-historic close all [--json]
-historic open 00001
+historic close --all [--json]
+historic open [id] [--json]
 historic import 00001
+historic save [id] [--all] [--json]
 ```
 
-- `historic list` shows open topics by default; `historic list --closed` filters to closed topics only. The `--closed` flag does not mean “include closed.”
-- `historic close <id>` closes one topic; `historic close all` closes the open topics discovered at the start of that command.
+- `historic list` shows open topics by default; `historic list --closed` lists topics in `.historic/.database/`, including mirror snapshots that still have an open copy. The `--closed` flag does not mean “include closed.”
+- `historic close <id>` closes one topic; `historic close --all` closes all open topics discovered at the start of that command. Without an ID or `--all`, `close` opens the interactive picker and acts on exactly one selected topic.
 - Bulk close processes topics deterministically by TopicID then path and reuses the single-topic close lifecycle. Each topic reports an individual result; a failure does not stop later topics, but any partial failure returns a non-zero exit code.
-- `historic close all --json` returns one standard JSON envelope. `data` contains `succeeded`, `failed`, `total`, `closed`, and `failed_count`; `ok` is false when one or more topics fail. An empty target list succeeds with zero counts.
+- `historic close --all --json` returns one standard JSON envelope. `data` contains `succeeded`, `failed`, `total`, `closed`, and `failed_count`; `ok` is false when one or more topics fail. An empty target list succeeds with zero counts.
+- `historic save --all --json` returns the same per-topic result shape with `saved` instead of `closed`; one failure does not stop later mirrors and makes `ok` false. `historic save <id>` reports a single-target result.
+- `save` and `close` without IDs support interactive topic search; JSON mode without an ID returns a validation error instead of starting the TUI. `--all` cannot be combined with an ID.
 - Only valid first-level open topic folders are targets. Closed topics, metadata/index files, staging entries, and nested folders are not included.
 - `open` means `.historic/<topic-id>-<slug>/`.
 - `closed` means `.historic/.database/<topic-id>-<slug>/`.

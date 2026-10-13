@@ -14,14 +14,14 @@ func TestViewRespectsTerminalViewportAndKeepsSelectedVisible(t *testing.T) {
 	model.height = 10
 	model.results = make([]search.Result, DefaultLimit)
 	for index := range model.results {
-		model.results[index] = search.Result{ID: "00001", Title: "very long result title that must be clipped safely"}
+		model.results[index] = search.Result{ID: "00001", Title: "very long result title that must be clipped safely", Storage: "open", UpdatedAt: "2026-10-13"}
 	}
 	model.selected = 8
 	view := model.View()
 	if lines := strings.Count(view, "\n") + 1; lines > model.height {
 		t.Fatalf("view lines=%d exceeds height=%d\n%s", lines, model.height, view)
 	}
-	if !strings.Contains(view, "> 00001") {
+	if !strings.Contains(view, "> [OPEN]") {
 		t.Fatal("selected item is not visible")
 	}
 	if !strings.Contains(view, "...") {
@@ -33,7 +33,7 @@ func TestViewUsesCompactLayoutForSmallTerminal(t *testing.T) {
 	model := newModel(config.Workspace{})
 	model.width = 30
 	model.height = 7
-	model.results = []search.Result{{ID: "00001", Title: "topic"}}
+	model.results = []search.Result{{ID: "00001", Title: "topic", Storage: "open", UpdatedAt: "2026-10-13"}}
 	view := model.View()
 	if lines := strings.Count(view, "\n") + 1; lines > model.height {
 		t.Fatalf("compact view lines=%d exceeds height=%d\n%s", lines, model.height, view)

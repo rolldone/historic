@@ -29,6 +29,10 @@ func resolveTopic(workspace config.Workspace, id domain.ID) (topicLocation, erro
 	return topicLocation{path: path, storage: storage}, nil
 }
 
+func (service Service) MirrorTopic(id domain.ID) (Change, error) {
+	return mirrorTopic(service.Workspace, id)
+}
+
 func (service Service) Close(id domain.ID) (Change, error) {
 	return closeTopic(service.Workspace, id)
 }
@@ -181,6 +185,66 @@ func closeTopic(workspace config.Workspace, id domain.ID) (Change, error) {
 	return closeTopicAt(workspace, id, path)
 }
 
+func mirrorTopic(workspace config.Workspace, id domain.ID) (Change, error) {
+	if !id.Valid() {
+		return Change{}, fmt.Errorf("%w: %q", domain.ErrInvalidID, id)
+	}
+	path, storage, err := TopicLocation(workspace, id)
+	if err != nil {
+		return Change{}, err
+	}
+	if storage != domain.StorageOpen {
+		return Change{}, fmt.Errorf("%w: topic %s is not open", domain.ErrConflict, id)
+	}
+	return mirrorTopicAt(workspace, id, path)
+}
+
+func mirrorTopicAt(workspace config.Workspace, id domain.ID, expectedPath string) (Change, error) {
+	path, storage, err := TopicLocation(workspace, id)
+	if err != nil {
+		return Change{}, err
+	}
+	if storage != domain.StorageOpen || filepath.Clean(path) != filepath.Clean(expectedPath) {
+		return Change{}, fmt.Errorf("%w: topic %s location changed before mirror", domain.ErrConflict, id)
+	}
+	meta, err := validateCopiedTopic(path, id)
+	if err != nil {
+		return Change{}, fmt.Errorf("validate open topic: %w", err)
+	}
+	sourceManifest, err := buildTopicManifest(path)
+	if err != nil {
+		return Change{}, fmt.Errorf("build mirror manifest: %w", err)
+	}
+	archive, err := findClosedTopic(workspace, id)
+	if err != nil {
+		return Change{}, err
+	}
+	var archiveManifest topicManifest
+	if archive.path != "" {
+		if err := validateTopicPath(workspace, archive.path); err != nil {
+			return Change{}, err
+		}
+		if _, err := validateCopiedTopic(archive.path, id); err != nil {
+			return Change{}, fmt.Errorf("validate existing archive: %w", err)
+		}
+		archiveManifest, err = buildTopicManifest(archive.path)
+		if err != nil {
+			return Change{}, fmt.Errorf("build archive manifest: %w", err)
+		}
+	}
+	folder := filepath.Base(path)
+	sameSnapshot := archive.path != "" && filepath.Base(archive.path) == folder && manifestsEqual(sourceManifest, archiveManifest)
+	if !sameSnapshot {
+		if err := stageDifferentialArchive(workspace, path, archive.path, folder, sourceManifest, archiveManifest); err != nil {
+			return Change{}, err
+		}
+	}
+	if err := finalizeClosedTopicMode(workspace, path, archive.path, folder, sameSnapshot, false); err != nil {
+		return Change{}, err
+	}
+	return Change{ID: id, Title: meta.Frontmatter.Title, Previous: meta.Frontmatter.Status, Current: meta.Frontmatter.Status, Path: workspace.RelativePath(filepath.Join(workspace.Database, folder)), Storage: domain.StorageOpen, PreviousStorage: domain.StorageOpen, Archived: true}, nil
+}
+
 func closeTopicAt(workspace config.Workspace, id domain.ID, expectedPath string) (Change, error) {
 	if !id.Valid() {
 		return Change{}, fmt.Errorf("%w: %q", domain.ErrInvalidID, id)
@@ -238,7 +302,7 @@ func closeTopicAt(workspace config.Workspace, id domain.ID, expectedPath string)
 			return Change{}, err
 		}
 	}
-	if err := finalizeClosedTopic(workspace, location.path, archive.path, folder, sameSnapshot); err != nil {
+	if err := finalizeClosedTopicMode(workspace, location.path, archive.path, folder, sameSnapshot, true); err != nil {
 		return Change{}, err
 	}
 	return Change{ID: id, Title: meta.Frontmatter.Title, Previous: meta.Frontmatter.Status, Current: meta.Frontmatter.Status, Path: workspace.RelativePath(filepath.Join(workspace.Database, folder)), Storage: domain.StorageClosed, PreviousStorage: domain.StorageOpen, Archived: true}, nil
@@ -443,17 +507,23 @@ func copyTopicFile(source, destination string) error {
 }
 
 func finalizeClosedTopic(workspace config.Workspace, source, archive, folder string, sameSnapshot bool) error {
+	return finalizeClosedTopicMode(workspace, source, archive, folder, sameSnapshot, true)
+}
+
+func finalizeClosedTopicMode(workspace config.Workspace, source, archive, folder string, sameSnapshot, removeSource bool) error {
 	staging := filepath.Join(workspace.Database, ".staging-close-"+folder)
 	destination := filepath.Join(workspace.Database, folder)
 	backup := filepath.Join(workspace.Database, ".staging-close-backup-"+folder)
 	sourceBackup := filepath.Join(workspace.Histories, ".staging-close-source-"+folder)
-	if _, err := os.Lstat(sourceBackup); err == nil {
-		if !sameSnapshot {
-			_ = os.RemoveAll(staging)
+	if removeSource {
+		if _, err := os.Lstat(sourceBackup); err == nil {
+			if !sameSnapshot {
+				_ = os.RemoveAll(staging)
+			}
+			return fmt.Errorf("%w: close source staging path already exists", domain.ErrConflict)
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("inspect close source staging path: %w", err)
 		}
-		return fmt.Errorf("%w: close source staging path already exists", domain.ErrConflict)
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("inspect close source staging path: %w", err)
 	}
 	oldMoved := false
 	if !sameSnapshot && archive != "" {
@@ -480,19 +550,25 @@ func finalizeClosedTopic(workspace config.Workspace, source, archive, folder str
 			}
 		}
 	}
-	if err := os.Rename(source, sourceBackup); err != nil {
-		rollbackArchive()
-		return fmt.Errorf("stage open workdir removal: %w", err)
+	if removeSource {
+		if err := os.Rename(source, sourceBackup); err != nil {
+			rollbackArchive()
+			return fmt.Errorf("stage open workdir removal: %w", err)
+		}
 	}
 	if _, err := indexer.Rebuild(workspace); err != nil {
-		_ = os.Rename(sourceBackup, source)
+		if removeSource {
+			_ = os.Rename(sourceBackup, source)
+		}
 		rollbackArchive()
 		return fmt.Errorf("rebuild storage index: %w", err)
 	}
-	if err := os.RemoveAll(sourceBackup); err != nil {
-		_ = os.Rename(sourceBackup, source)
-		rollbackArchive()
-		return fmt.Errorf("remove closed workdir: %w", err)
+	if removeSource {
+		if err := os.RemoveAll(sourceBackup); err != nil {
+			_ = os.Rename(sourceBackup, source)
+			rollbackArchive()
+			return fmt.Errorf("remove closed workdir: %w", err)
+		}
 	}
 	if oldMoved {
 		if err := os.RemoveAll(backup); err != nil {

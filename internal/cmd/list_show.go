@@ -65,27 +65,28 @@ func newShowCommand() *cobra.Command {
 			if err != nil {
 				return writeCommandError(cmd, "show", jsonOutput, err)
 			}
-			view, err := repository.NewTopicStore(workspace).ShowTopic(id, includeClosed)
+			views, err := repository.NewTopicStore(workspace).ShowTopics(id, includeClosed)
 			if err != nil {
 				return writeCommandError(cmd, "show", jsonOutput, err)
 			}
-			result := topicShowOutput{Command: "show", OK: true, Data: view, Error: nil}
+			result := topicShowOutput{Command: "show", OK: true, Data: views, Error: nil}
 			if jsonOutput {
 				return json.NewEncoder(cmd.OutOrStdout()).Encode(result)
 			}
-			_, err = fmt.Fprintf(cmd.OutOrStdout(), "%s  %s [%s]\nPath: %s\n", view.ID, view.Title, view.Storage, view.Path)
-			if err != nil {
-				return err
-			}
-			for _, file := range view.Files {
-				if _, err = fmt.Fprintf(cmd.OutOrStdout(), "- %s (%s)\n", file.Path, file.Status); err != nil {
+			for _, view := range views {
+				if _, err = fmt.Fprintf(cmd.OutOrStdout(), "%s  %s [%s] updated_at=%s mtime=%s\nPath: %s\n", view.ID, view.Title, strings.ToUpper(view.Storage), view.Updated, view.Mtime, view.Path); err != nil {
 					return err
+				}
+				for _, file := range view.Files {
+					if _, err = fmt.Fprintf(cmd.OutOrStdout(), "- %s (%s)\n", file.Path, file.Status); err != nil {
+						return err
+					}
 				}
 			}
 			return nil
 		},
 	}
-	command.Flags().BoolVar(&includeClosed, "closed", false, "show a closed topic")
+	command.Flags().BoolVar(&includeClosed, "closed", false, "show only closed versions")
 	command.Flags().BoolVar(&jsonOutput, "json", false, "output stable JSON")
 	return command
 }
@@ -98,10 +99,10 @@ type topicListOutput struct {
 }
 
 type topicShowOutput struct {
-	Command string               `json:"command"`
-	OK      bool                 `json:"ok"`
-	Data    repository.TopicView `json:"data"`
-	Error   any                  `json:"error"`
+	Command string                 `json:"command"`
+	OK      bool                   `json:"ok"`
+	Data    []repository.TopicView `json:"data"`
+	Error   any                    `json:"error"`
 }
 
 func commandWorkspace() (config.Workspace, error) {

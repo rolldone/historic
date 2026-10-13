@@ -83,18 +83,25 @@ func TestRebuildUsesTopicIdentityAndLogicalPaths(t *testing.T) {
 	if err := database.QueryRow("SELECT COUNT(*) FROM topics WHERE id = '00001'").Scan(&topicCount); err != nil {
 		t.Fatal(err)
 	}
-	if topicCount != 1 {
-		t.Fatalf("logical topic count = %d, want 1", topicCount)
+	if topicCount != 2 {
+		t.Fatalf("topic version count = %d, want 2 (open + closed)", topicCount)
 	}
 	var slug, physicalPath, storage string
-	if err := database.QueryRow("SELECT slug, path, storage FROM topics WHERE id = '00001'").Scan(&slug, &physicalPath, &storage); err != nil {
+	if err := database.QueryRow("SELECT slug, path, storage FROM topics WHERE id = '00001' AND storage = 'open'").Scan(&slug, &physicalPath, &storage); err != nil {
 		t.Fatal(err)
 	}
 	if slug != "renamed-topic" || physicalPath != ".historic/00001-renamed-topic" || storage != "open" {
 		t.Fatalf("topic identity = slug %q path %q storage %q", slug, physicalPath, storage)
 	}
+	var closedSlug, closedPath string
+	if err := database.QueryRow("SELECT slug, path FROM topics WHERE id = '00001' AND storage = 'closed'").Scan(&closedSlug, &closedPath); err != nil {
+		t.Fatal(err)
+	}
+	if closedSlug != "old-topic" || closedPath != ".historic/.database/00001-old-topic" {
+		t.Fatalf("closed topic identity = slug %q path %q", closedSlug, closedPath)
+	}
 	var logicalPath string
-	if err := database.QueryRow("SELECT path FROM files WHERE topic_id = '00001' AND path = 'wos/task.md'").Scan(&logicalPath); err != nil {
+	if err := database.QueryRow("SELECT path FROM files WHERE topic_id = '00001' AND storage = 'open' AND path = 'wos/task.md'").Scan(&logicalPath); err != nil {
 		t.Fatal(err)
 	}
 	if logicalPath != "wos/task.md" {
@@ -104,15 +111,15 @@ func TestRebuildUsesTopicIdentityAndLogicalPaths(t *testing.T) {
 	if err := database.QueryRow("SELECT COUNT(*) FROM files WHERE topic_id = '00001'").Scan(&fileCount); err != nil {
 		t.Fatal(err)
 	}
-	if fileCount != 1 {
-		t.Fatalf("logical child file count = %d, want 1", fileCount)
+	if fileCount != 2 {
+		t.Fatalf("file version count = %d, want 2 (one per storage)", fileCount)
 	}
 	var oldSnapshotCount int
-	if err := database.QueryRow("SELECT COUNT(*) FROM files WHERE content LIKE '%old snapshot%'").Scan(&oldSnapshotCount); err != nil {
+	if err := database.QueryRow("SELECT COUNT(*) FROM files WHERE storage = 'closed' AND content LIKE '%old task body%'").Scan(&oldSnapshotCount); err != nil {
 		t.Fatal(err)
 	}
-	if oldSnapshotCount != 0 {
-		t.Fatalf("closed snapshot was indexed as a duplicate: %d", oldSnapshotCount)
+	if oldSnapshotCount != 1 {
+		t.Fatalf("closed snapshot indexed %d times, want 1", oldSnapshotCount)
 	}
 }
 

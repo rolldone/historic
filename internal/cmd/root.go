@@ -6,8 +6,6 @@ import (
 	"io"
 
 	"historic/internal/config"
-	"historic/internal/domain"
-	"historic/internal/lifecycle"
 
 	"github.com/spf13/cobra"
 )
@@ -51,7 +49,7 @@ func NewRootCommand() *cobra.Command {
 	root.AddCommand(newDeleteTopicCommand())
 	root.AddCommand(newPurgeCommand())
 	root.AddCommand(newCloseCommand())
-	root.AddCommand(newStorageCommand("open", func(service lifecycle.Service, id domain.ID) (lifecycle.Change, error) { return service.Open(id) }))
+	root.AddCommand(newOpenCommand())
 	return root
 }
 

@@ -6,28 +6,50 @@ import (
 
 	"historic/internal/domain"
 	"historic/internal/lifecycle"
+	"historic/internal/tui"
 
 	"github.com/spf13/cobra"
 )
 
 func newCloseCommand() *cobra.Command {
-	var jsonOutput bool
+	var jsonOutput, all bool
 	command := &cobra.Command{
-		Use:   "close <id|all>",
-		Short: "close a topic or all open topics",
-		Args:  cobra.ExactArgs(1),
+		Use:   "close [id] [--all]",
+		Short: "Close one or all open topics",
+		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if args[0] != "all" {
+			if all && len(args) > 0 {
+				return writeCommandError(cmd, "close", jsonOutput, fmt.Errorf("--all cannot be combined with a topic ID"))
+			}
+			if len(args) == 1 && args[0] != "all" {
 				return runStorageCommand(cmd, "close", args[0], jsonOutput, func(service lifecycle.Service, id domain.ID) (lifecycle.Change, error) {
 					return service.Close(id)
 				})
 			}
-
+			if len(args) == 1 && args[0] == "all" {
+				all = true
+			}
 			workspace, err := commandWorkspace()
 			if err != nil {
 				return writeCommandError(cmd, "close", jsonOutput, err)
 			}
-			result, closeErr := lifecycle.NewService(workspace).CloseAll()
+			service := lifecycle.NewService(workspace)
+			if !all {
+				if jsonOutput {
+					return writeCommandError(cmd, "close", true, fmt.Errorf("topic ID or --all is required with --json"))
+				}
+				selected, pickErr := tui.PickTopic(workspace, tui.TopicPickerOptions{Input: cmd.InOrStdin(), Output: cmd.OutOrStdout()})
+				if pickErr != nil {
+					return pickErr
+				}
+				if selected == nil {
+					return nil
+				}
+				return runStorageCommand(cmd, "close", selected.ID, false, func(service lifecycle.Service, id domain.ID) (lifecycle.Change, error) {
+					return service.Close(id)
+				})
+			}
+			result, closeErr := service.CloseAll()
 			response := struct {
 				Command string                   `json:"command"`
 				OK      bool                     `json:"ok"`
@@ -53,6 +75,7 @@ func newCloseCommand() *cobra.Command {
 		},
 	}
 	command.Flags().BoolVar(&jsonOutput, "json", false, "output stable JSON")
+	command.Flags().BoolVar(&all, "all", false, "close all open topics")
 	return command
 }
 

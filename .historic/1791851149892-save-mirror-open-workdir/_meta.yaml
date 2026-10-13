@@ -1,0 +1,57 @@
+id: "1791851149892"
+title: Save Mirror Open Workdir
+created: "2026-10-13"
+files:
+    - id: 01a132ae-e047-72ba-a721-749bfc560d0c
+      path: note-handoff-tim-dev.md
+      type: note
+      status: progress
+    - id: 01a132a6-e2e5-718a-9b33-d960e5f13a0d
+      path: spec-save-mirrors-open-workdir.md
+      type: spec
+      status: complete
+    - id: 01a132a6-e391-7914-99fd-ef294a9f09dc
+      path: wos/01-extract-mirror-operation.md
+      type: task
+      status: complete
+    - id: 01a132a6-e3ff-7b54-bfb7-528f3c45fd05
+      path: wos/02-save-mirrors-all-open-topics.md
+      type: task
+      status: complete
+    - id: 01a132a6-e4a3-74ed-a97a-aa71af631b54
+      path: wos/03-remove-commit-and-message-flag.md
+      type: task
+      status: complete
+    - id: 01a132a6-e507-7a25-8aa0-19002d9e3b2c
+      path: wos/04-updated-at-divergence.md
+      type: task
+      status: complete
+    - id: 01a132a6-e579-7837-a709-683e6fd235dd
+      path: wos/05-save-mirror-test-matrix.md
+      type: task
+      status: complete
+    - id: 01a132ac-808d-7220-9a9a-337643923075
+      path: wos/06-remove-duplicate-suppression.md
+      type: task
+      status: complete
+    - id: 01a132ac-80f6-7b52-a5f5-cc72197e9b9e
+      path: wos/07-show-dual-version.md
+      type: task
+      status: complete
+    - id: 01a132ac-8176-7b2b-a130-e7bfa9f0407d
+      path: wos/08-tui-dual-version.md
+      type: task
+      status: complete
+    - id: 01a132f4-ad83-7c18-94f2-bd38a6c3f0c7
+      path: wos/09-interactive-topic-picker.md
+      type: task
+      status: complete
+    - id: 01a132f4-ad83-79e9-ad62-baa2970dbfa6
+      path: wos/10-selective-save-and-close.md
+      type: task
+      status: complete
+    - id: 01a132f4-ad83-735c-97ac-2ccb62754b6d
+      path: wos/11-selective-open-closed-topic.md
+      type: task
+      status: complete
+assets: []

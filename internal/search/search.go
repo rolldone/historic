@@ -147,9 +147,6 @@ func RecentTopicsPage(workspace config.Workspace, options Options) (SearchPage, 
 	}
 	defer database.Close()
 	where, args := topicPredicates(options)
-	if !options.OpenOnly && !options.ClosedOnly && !options.ActiveOnly && !options.ArchivedOnly {
-		where = append(where, "(storage = 'open' OR NOT EXISTS (SELECT 1 FROM topics AS open_topic WHERE open_topic.id = topics.id AND open_topic.storage = 'open'))")
-	}
 	args = append(args, pagination.PageSize+1, (pagination.Page-1)*pagination.PageSize)
 	rows, err := database.Query(`SELECT id, title, COALESCE(description, ''), COALESCE(computed_status, ''), storage, path, tags, created_at, COALESCE(updated_at, '')
 		FROM topics WHERE `+strings.Join(where, " AND ")+` ORDER BY `+recentOrder(options.Sort)+` LIMIT ? OFFSET ?`, args...)
@@ -210,11 +207,6 @@ func FindPage(workspace config.Workspace, options Options) (SearchPage, error) {
 	predicates, predicateArgs := resultPredicates(options)
 	where = append(where, predicates...)
 	args = append(args, predicateArgs...)
-	if !options.OpenOnly && !options.ClosedOnly && !options.ActiveOnly && !options.ArchivedOnly {
-		// Prefer the open copy for logical duplicates. Closed is the fallback
-		// only when no open topic with the same ID exists in the indexed model.
-		where = append(where, "(t.storage = 'open' OR NOT EXISTS (SELECT 1 FROM topics AS open_topic WHERE open_topic.id = t.id AND open_topic.storage = 'open'))")
-	}
 	statement := `SELECT CASE WHEN historic_fts.entity_type = 'topic' THEN 'topic' ELSE COALESCE(f.type, 'asset') END, historic_fts.entity_id, COALESCE(t.id, f.topic_id),
 		COALESCE(CASE WHEN historic_fts.entity_type = 'topic' THEN t.title ELSE f.title END, ''),
 		COALESCE(CASE WHEN historic_fts.entity_type = 'topic' THEN t.description ELSE f.description END, ''),
@@ -232,8 +224,8 @@ func FindPage(workspace config.Workspace, options Options) (SearchPage, error) {
 		COALESCE(t.title, ''), COALESCE(t.description, ''), COALESCE(t.computed_status, ''),
 		COALESCE(t.storage, ''), COALESCE(t.path, ''), COALESCE(t.tags, '[]')
 		FROM historic_fts
-		LEFT JOIN files AS f ON historic_fts.entity_type = 'file' AND CAST(f.id AS TEXT) = historic_fts.entity_id
-		LEFT JOIN topics AS t ON t.id = CASE WHEN historic_fts.entity_type = 'topic' THEN historic_fts.entity_id ELSE f.topic_id END
+		LEFT JOIN files AS f ON historic_fts.entity_type = 'file' AND CAST(f.id AS TEXT) = historic_fts.entity_id AND f.storage = historic_fts.storage
+		LEFT JOIN topics AS t ON t.storage = historic_fts.storage AND t.id = CASE WHEN historic_fts.entity_type = 'topic' THEN historic_fts.entity_id ELSE f.topic_id END
 		WHERE ` + strings.Join(where, " AND ") + `
 		ORDER BY ` + resultOrder(options.Sort) + ` LIMIT ? OFFSET ?`
 	args = append(args, pagination.PageSize+1, (pagination.Page-1)*pagination.PageSize)
@@ -258,7 +250,7 @@ func FindPage(workspace config.Workspace, options Options) (SearchPage, error) {
 		if result.Type == "historic_file" || result.Type == "asset" {
 			logicalPath = strings.TrimPrefix(result.Path, topicPath+"/")
 		}
-		key := result.Type + "\x00" + result.TopicID + "\x00" + logicalPath
+		key := result.Type + "\x00" + result.TopicID + "\x00" + result.Storage + "\x00" + logicalPath
 		if _, exists := seen[key]; exists {
 			continue
 		}
@@ -321,28 +313,30 @@ func openIndex(workspace config.Workspace) (*sql.DB, error) {
 }
 
 func resultOrder(sortOption string) string {
+	storageRank := "CASE WHEN COALESCE(t.storage, f.storage) = 'open' THEN 0 ELSE 1 END ASC, "
 	switch sortOption {
 	case "updated":
-		return "COALESCE(CASE WHEN historic_fts.entity_type = 'topic' THEN t.updated_at ELSE f.updated_at END, CASE WHEN historic_fts.entity_type = 'topic' THEN t.created_at ELSE f.created_at END) DESC, CASE WHEN historic_fts.entity_type = 'topic' THEN t.created_at ELSE f.mtime END DESC, CASE WHEN historic_fts.entity_type = 'topic' THEN t.path ELSE f.path END ASC"
+		return "COALESCE(CASE WHEN historic_fts.entity_type = 'topic' THEN t.updated_at ELSE f.updated_at END, CASE WHEN historic_fts.entity_type = 'topic' THEN t.created_at ELSE f.created_at END) DESC, CASE WHEN historic_fts.entity_type = 'topic' THEN t.created_at ELSE f.mtime END DESC, " + storageRank + "CASE WHEN historic_fts.entity_type = 'topic' THEN t.path ELSE f.path END ASC"
 	case "created":
-		return "CASE WHEN historic_fts.entity_type = 'topic' THEN t.created_at ELSE f.created_at END DESC, CASE WHEN historic_fts.entity_type = 'topic' THEN t.created_at ELSE f.mtime END DESC, CASE WHEN historic_fts.entity_type = 'topic' THEN t.path ELSE f.path END ASC"
+		return "CASE WHEN historic_fts.entity_type = 'topic' THEN t.created_at ELSE f.created_at END DESC, CASE WHEN historic_fts.entity_type = 'topic' THEN t.created_at ELSE f.mtime END DESC, " + storageRank + "CASE WHEN historic_fts.entity_type = 'topic' THEN t.path ELSE f.path END ASC"
 	case "title":
-		return "CASE WHEN historic_fts.entity_type = 'topic' THEN t.title ELSE f.title END ASC, CASE WHEN historic_fts.entity_type = 'topic' THEN t.path ELSE f.path END ASC"
+		return "CASE WHEN historic_fts.entity_type = 'topic' THEN t.title ELSE f.title END ASC, " + storageRank + "CASE WHEN historic_fts.entity_type = 'topic' THEN t.path ELSE f.path END ASC"
 	default:
-		return "rank ASC, COALESCE(CASE WHEN historic_fts.entity_type = 'topic' THEN t.updated_at ELSE f.updated_at END, CASE WHEN historic_fts.entity_type = 'topic' THEN t.created_at ELSE f.created_at END) DESC, CASE WHEN historic_fts.entity_type = 'topic' THEN t.created_at ELSE f.mtime END DESC, CASE WHEN historic_fts.entity_type = 'topic' THEN t.path ELSE f.path END ASC"
+		return "rank ASC, COALESCE(CASE WHEN historic_fts.entity_type = 'topic' THEN t.updated_at ELSE f.updated_at END, CASE WHEN historic_fts.entity_type = 'topic' THEN t.created_at ELSE f.created_at END) DESC, CASE WHEN historic_fts.entity_type = 'topic' THEN t.created_at ELSE f.mtime END DESC, " + storageRank + "CASE WHEN historic_fts.entity_type = 'topic' THEN t.path ELSE f.path END ASC"
 	}
 }
 
 func recentOrder(sortOption string) string {
+	storageRank := "CASE WHEN storage = 'open' THEN 0 ELSE 1 END ASC, "
 	switch sortOption {
 	case "title":
-		return "title ASC, path ASC"
+		return "title ASC, " + storageRank + "path ASC"
 	case "created":
-		return "created_at DESC, path ASC"
+		return "created_at DESC, " + storageRank + "path ASC"
 	case "updated":
-		return "COALESCE(updated_at, created_at) DESC, created_at DESC, path ASC"
+		return "COALESCE(updated_at, created_at) DESC, created_at DESC, " + storageRank + "path ASC"
 	default:
-		return "COALESCE(updated_at, created_at) DESC, created_at DESC, path ASC"
+		return "COALESCE(updated_at, created_at) DESC, created_at DESC, " + storageRank + "path ASC"
 	}
 }
 
