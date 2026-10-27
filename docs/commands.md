@@ -185,3 +185,5 @@ Every JSON-capable command uses the envelope:
 ```
 
 `historic rebuild` is the unified workflow for all open and closed topics. It recursively scans every topic file, regenerates the `_meta.yaml` files/assets manifest, computes aggregate status only in SQLite, rebuilds storage-aware SQLite/FTS5, validates the temporary index, and atomically replaces the prior index. If `_meta.yaml` is missing, it is minimally recovered from the folder ID/slug; recovery is rolled back if rebuild fails.
+
+The SQLite index schema is owned by the installed binary. Rebuild writes the schema of whichever binary is running, so after pulling source changes that alter the schema you must reinstall before validating (`./build-global.sh`, then `historic version` and `historic rebuild --json`). A stale binary keeps the previous `index_schema_version` and cannot create newer columns such as `topics.extends_id` or `files.forwarded_to`; `historic doctor` then reports `rebuild required`.

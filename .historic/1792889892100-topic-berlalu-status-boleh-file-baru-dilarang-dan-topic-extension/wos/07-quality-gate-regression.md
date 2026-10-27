@@ -1,9 +1,9 @@
 ---
-title: 'WO 07 — Quality Gate dan Regression Suite Topic Extension'
-description: "Mengintegrasikan test lintas paket untuk status/manifest, create --extends, forward, index migration, show JSON, serta menjalankan quality gate final."
-status: create
+title: WO 07 — Quality Gate dan Regression Suite Topic Extension
+description: Mengintegrasikan test lintas paket untuk status/manifest, create --extends, forward, index migration, show JSON, serta menjalankan quality gate final.
+status: complete
 created: "2026-10-25"
-updated: "2026-10-28"
+updated: "2026-10-27"
 tags:
     - testing
     - quality-gate
@@ -75,3 +75,32 @@ disetujui.
 
 Keputusan 2026-10-28: `--extends` menerima parent **open maupun closed** (sesuai SPEC §5.3).
 Pertanyaan terbuka SPEC §12 no.1 ditutup; tidak ada pembatasan closed-only.
+
+## Hasil pelaksanaan (2026-10-28)
+
+Regression suite lintas-paket ditambahkan tanpa menduplikasi unit test yang sudah ada:
+
+| Grup | Test baru |
+| --- | --- |
+| Lifecycle (CLI end-to-end) | `TestRegressionStatusOnClosedTopicSyncsManifestAndReviewFilter` |
+| Lifecycle/ambigu | `TestRegressionAmbiguousPathAcrossOpenAndClosedCopies` |
+| Repository/perilaku lama | `TestRegressionAddOnClosedTopicMatchesLegacyBehavior` |
+| Create/extension | `TestRegressionExtensionChainAndParentImmutability` |
+| Forward | `TestRegressionForwardLifecycleAndFilters` |
+| Index/rebuild | `TestRegressionRebuildIsIdempotentWithExtensions` |
+
+Gap lain yang sudah tertutup oleh WO sebelumnya: migrasi schema lama
+(`TestInitializeMigratesLegacyTopicsReadModelWithExtendsColumn`), rollback index
+(`TestRebuildRecoveryRollbackPreservesMissingMetadataAndIndex`), dry-run non-destruktif
+(`TestUpgradeWorkspaceDryRunIsNonDestructive`, `TestMigrateFileIDsDryRunPreservesBytes`),
+dan immutability parent (`TestCreateTopicExtendsClosedParent`).
+
+Dokumentasi "binary stale": ditambahkan ke `README.md`, `docs/commands.md`, dan
+`.agents/skills/historic/SKILL.md` (schema index dimiliki binary terpasang; reinstall
+dulu sebelum validasi schema).
+
+Temuan di luar scope → dipindahkan ke **WO 11** (standarisasi tanggal `created`/`updated`
+ke UTC).
+
+Verifikasi: `gofmt` bersih, `go vet ./...` bersih, `go test ./...` lulus,
+`historic rebuild --json` → `errors: 0`.

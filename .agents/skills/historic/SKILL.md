@@ -30,6 +30,7 @@ Historic is a local-first work-memory CLI. Markdown is the source of truth. SQLi
 - Markdown is the source of truth. Run `historic rebuild --json` after recovery or manual index-affecting filesystem changes.
 - JSON-capable commands preserve `{ "command", "ok", "data", "error" }`.
 - JSON errors must not be duplicated on stderr.
+- The installed binary determines the SQLite index schema it can write. After pulling source changes that alter the schema, reinstall before validating behavior (`./build-global.sh`, then `historic version` and `historic rebuild --json`). A stale binary keeps the old `index_schema_version` and cannot create the newer columns, which `historic doctor` reports as `rebuild required`.
 
 ## Getting started
 

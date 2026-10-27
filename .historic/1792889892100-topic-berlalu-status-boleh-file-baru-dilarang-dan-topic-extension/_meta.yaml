@@ -33,7 +33,7 @@ files:
     - id: 01a17096-3af1-7201-a1d4-4eb3f52f661a
       path: wos/07-quality-gate-regression.md
       type: task
-      status: create
+      status: complete
     - id: 01a17f90-d056-7cab-b5ca-d5d264ff4b54
       path: wos/08-forwarded-status-and-index.md
       type: task
@@ -46,4 +46,8 @@ files:
       path: wos/10-forwarded-visibility-and-docs.md
       type: task
       status: complete
+    - id: 01a17fbc-acc4-7dcd-a20c-f0c75a705638
+      path: wos/11-utc-date-standardization.md
+      type: task
+      status: create
 assets: []

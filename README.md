@@ -168,6 +168,14 @@ Use `upgrade` for legacy five-digit topic folders, legacy FileID manifests, or a
 - A lock prevents concurrent upgrade/rebuild replacement.
 - Do not manually add SQLite columns or delete `.historic/.index.sqlite`.
 
+The installed binary owns the index schema it can write. Installing newer source without reinstalling the binary leaves an older `index_schema_version` in place, so `historic doctor` may report `rebuild required` and the new columns (`topics.extends_id`, `files.forwarded_to`) stay missing. Reinstall before re-testing schema-dependent behavior:
+
+```sh
+./build-global.sh   # rebuilds and installs ~/.local/bin/historic
+historic version    # confirm IndexSchemaVersion
+historic rebuild --json
+```
+
 ## Development and quality gate
 
 ```sh
