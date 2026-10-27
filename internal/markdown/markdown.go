@@ -102,6 +102,9 @@ func ValidateFrontmatter(metadata domain.Frontmatter) error {
 			return fmt.Errorf("%w: field %q item %d must be a five-digit ID or relative path", ErrInvalidFrontmatter, "related", index)
 		}
 	}
+	if metadata.ForwardedTo != "" && !metadata.ForwardedTo.Valid() {
+		return fmt.Errorf("%w: field %q must be a valid topic ID when provided", ErrInvalidFrontmatter, "forwarded_to")
+	}
 	return nil
 }
 

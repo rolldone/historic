@@ -199,7 +199,7 @@ func TestStatusOpenAndCloseSets(t *testing.T) {
 			t.Errorf("%q should be open only", status)
 		}
 	}
-	for _, status := range []Status{StatusComplete, StatusFailed, StatusCancelled, StatusArchived} {
+	for _, status := range []Status{StatusComplete, StatusFailed, StatusCancelled, StatusArchived, StatusForwarded} {
 		if !status.IsClose() || status.IsOpen() {
 			t.Errorf("%q should be close only", status)
 		}
@@ -228,8 +228,24 @@ func TestStatusReviewContract(t *testing.T) {
 	}
 }
 
+func TestStatusForwardedContract(t *testing.T) {
+	if !StatusForwarded.IsValid() {
+		t.Fatalf("StatusForwarded.IsValid() = false, want true")
+	}
+	if !StatusForwarded.IsClose() {
+		t.Fatalf("StatusForwarded.IsClose() = false, want true")
+	}
+	if StatusForwarded.IsOpen() {
+		t.Fatalf("StatusForwarded.IsOpen() = true, want false")
+	}
+	status, err := ParseStatus("forwarded")
+	if err != nil || status != StatusForwarded {
+		t.Fatalf("ParseStatus(forwarded) = %q, %v", status, err)
+	}
+}
+
 func TestTransitionMatrix(t *testing.T) {
-	valid := []Status{StatusCreate, StatusDraft, StatusPending, StatusPlanned, StatusProgress, StatusReview, StatusBlocked, StatusComplete, StatusFailed, StatusCancelled, StatusArchived}
+	valid := []Status{StatusCreate, StatusDraft, StatusPending, StatusPlanned, StatusProgress, StatusReview, StatusBlocked, StatusComplete, StatusFailed, StatusCancelled, StatusArchived, StatusForwarded}
 	for _, current := range valid {
 		for _, next := range valid {
 			want := current == next || !current.IsClose()

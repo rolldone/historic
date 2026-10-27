@@ -77,8 +77,17 @@ func newShowCommand() *cobra.Command {
 				if _, err = fmt.Fprintf(cmd.OutOrStdout(), "%s  %s [%s] updated_at=%s mtime=%s\nPath: %s\n", view.ID, view.Title, strings.ToUpper(view.Storage), view.Updated, view.Mtime, view.Path); err != nil {
 					return err
 				}
+				if view.Extends != "" {
+					if _, err = fmt.Fprintf(cmd.OutOrStdout(), "extends: %s\n", view.Extends); err != nil {
+						return err
+					}
+				}
 				for _, file := range view.Files {
-					if _, err = fmt.Fprintf(cmd.OutOrStdout(), "- %s (%s)\n", file.Path, file.Status); err != nil {
+					line := fmt.Sprintf("- %s (%s)", file.Path, file.Status)
+					if file.ForwardedTo != "" {
+						line += fmt.Sprintf(" → %s", file.ForwardedTo)
+					}
+					if _, err = fmt.Fprintln(cmd.OutOrStdout(), line); err != nil {
 						return err
 					}
 				}

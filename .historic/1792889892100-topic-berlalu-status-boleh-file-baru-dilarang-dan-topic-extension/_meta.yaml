@@ -21,15 +21,15 @@ files:
     - id: 01a17096-3a0d-7652-9060-590873685eff
       path: wos/04-index-extends-column.md
       type: task
-      status: create
+      status: complete
     - id: 01a17096-3a80-7d93-828c-c7bf4d1a2f73
       path: wos/05-show-extends-field.md
       type: task
-      status: create
+      status: complete
     - id: 01a17096-3aad-7c71-bb45-7a20a2bc0698
       path: wos/06-docs-and-skill-update.md
       type: task
-      status: create
+      status: complete
     - id: 01a17096-3af1-7201-a1d4-4eb3f52f661a
       path: wos/07-quality-gate-regression.md
       type: task
@@ -37,13 +37,13 @@ files:
     - id: 01a17f90-d056-7cab-b5ca-d5d264ff4b54
       path: wos/08-forwarded-status-and-index.md
       type: task
-      status: create
+      status: complete
     - id: 01a17f90-d0f5-736d-bb14-d42c842b19ba
       path: wos/09-forward-command.md
       type: task
-      status: create
+      status: complete
     - id: 01a17f90-d12d-72d0-b08b-3924841096a3
       path: wos/10-forwarded-visibility-and-docs.md
       type: task
-      status: create
+      status: complete
 assets: []

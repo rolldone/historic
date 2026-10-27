@@ -36,10 +36,11 @@ type TopicMetadata struct {
 
 // ManifestFile describes a managed Markdown file discovered below a topic.
 type ManifestFile struct {
-	ID     domain.FileID `yaml:"id"`
-	Path   string        `yaml:"path"`
-	Type   string        `yaml:"type"`
-	Status domain.Status `yaml:"status"`
+	ID          domain.FileID  `yaml:"id"`
+	Path        string         `yaml:"path"`
+	Type        string         `yaml:"type"`
+	Status      domain.Status  `yaml:"status"`
+	ForwardedTo domain.TopicID `yaml:"forwarded_to,omitempty"`
 }
 
 // ManifestAsset describes a non-managed file discovered below a topic.
@@ -134,6 +135,9 @@ func validateManifestFiles(files []ManifestFile) error {
 		if !file.Status.IsValid() {
 			return fmt.Errorf("field %q item %d has invalid status %q", "files", index, file.Status)
 		}
+		if file.ForwardedTo != "" && !file.ForwardedTo.Valid() {
+			return fmt.Errorf("field %q item %d has invalid forwarded_to %q", "files", index, file.ForwardedTo)
+		}
 		if _, exists := seenPaths[file.Path]; exists {
 			return fmt.Errorf("field %q contains duplicate path %q", "files", file.Path)
 		}
@@ -205,6 +209,9 @@ func validateManifestFilesLenient(files []ManifestFile) error {
 		}
 		if !file.Status.IsValid() {
 			return fmt.Errorf("field %q item %d has invalid status %q", "files", index, file.Status)
+		}
+		if file.ForwardedTo != "" && !file.ForwardedTo.Valid() {
+			return fmt.Errorf("field %q item %d has invalid forwarded_to %q", "files", index, file.ForwardedTo)
 		}
 		if _, exists := seenPaths[file.Path]; exists {
 			return fmt.Errorf("field %q contains duplicate path %q", "files", file.Path)

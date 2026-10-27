@@ -9,5 +9,5 @@ const (
 	// WorkspaceFormatVersion identifies the on-disk .historic workspace layout.
 	WorkspaceFormatVersion = 2
 	// IndexSchemaVersion is the schema required by this binary.
-	IndexSchemaVersion = 5
+	IndexSchemaVersion = 6
 )

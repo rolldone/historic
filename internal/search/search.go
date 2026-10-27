@@ -17,6 +17,9 @@ import (
 	_ "modernc.org/sqlite"
 )
 
+// validStatusHint lists the accepted --status values for validation errors.
+const validStatusHint = "create, draft, pending, planned, progress, review, blocked, complete, failed, cancelled, archived, or forwarded"
+
 // Options controls a FTS5 search. Structured filters are applied by SQL and
 // are never interpolated into the FTS query.
 type Options struct {
@@ -345,7 +348,7 @@ func validateOptions(options Options, requireKeyword bool) error {
 		return fmt.Errorf("open and closed filters cannot be combined")
 	}
 	if options.Status != "" && !options.Status.IsValid() {
-		return fmt.Errorf("invalid status %q; use create, draft, pending, planned, progress, review, blocked, complete, failed, cancelled, or archived", options.Status)
+		return fmt.Errorf("invalid status %q; use %s", options.Status, validStatusHint)
 	}
 	included := append([]domain.Status{}, options.StatusIn...)
 	if options.Status != "" {
@@ -365,7 +368,7 @@ func validateOptions(options Options, requireKeyword bool) error {
 	}
 	for _, excluded := range options.StatusNot {
 		if !excluded.IsValid() {
-			return fmt.Errorf("invalid excluded status %q; use create, draft, pending, planned, progress, review, blocked, complete, failed, cancelled, or archived", excluded)
+			return fmt.Errorf("invalid excluded status %q; use %s", excluded, validStatusHint)
 		}
 	}
 	if options.Type != "" && !validType(options.Type) {

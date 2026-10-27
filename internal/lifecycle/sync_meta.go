@@ -135,7 +135,7 @@ func scanTopicFiles(topic string, id domain.ID, previous []markdown.ManifestFile
 						return generateErr
 					}
 				}
-				managed = append(managed, markdown.ManifestFile{ID: fileID, Path: relative, Type: markdown.FileType(relative), Status: document.Frontmatter.Status})
+				managed = append(managed, markdown.ManifestFile{ID: fileID, Path: relative, Type: markdown.FileType(relative), Status: document.Frontmatter.Status, ForwardedTo: document.Frontmatter.ForwardedTo})
 				return nil
 			}
 			if markdown.LooksLikeHistoricFile(input) {

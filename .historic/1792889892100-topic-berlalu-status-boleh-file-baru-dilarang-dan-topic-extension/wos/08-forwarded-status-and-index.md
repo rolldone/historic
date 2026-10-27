@@ -1,9 +1,9 @@
 ---
-title: 'WO 08 — Status forwarded pada Domain, Frontmatter, Manifest, dan Index'
-description: "Menambahkan status file terminal forwarded beserta field forwarded_to pada frontmatter, manifest, dan read model SQLite sebagai fondasi fitur forward."
-status: create
+title: WO 08 — Status forwarded pada Domain, Frontmatter, Manifest, dan Index
+description: Menambahkan status file terminal forwarded beserta field forwarded_to pada frontmatter, manifest, dan read model SQLite sebagai fondasi fitur forward.
+status: complete
 created: "2026-10-28"
-updated: "2026-10-28"
+updated: "2026-10-27"
 tags:
     - domain
     - status

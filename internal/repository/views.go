@@ -35,6 +35,7 @@ type FileView struct {
 	Title       string `json:"title"`
 	Description string `json:"description"`
 	Status      string `json:"status"`
+	ForwardedTo string `json:"forwarded_to,omitempty"`
 }
 
 // ListTopics returns deterministic topic views for one storage scope. Both the
@@ -199,7 +200,7 @@ func readFiles(topicPath, root string) ([]FileView, error) {
 		if err != nil {
 			return err
 		}
-		files = append(files, FileView{Path: filepath.ToSlash(relative), Title: document.Frontmatter.Title, Description: document.Frontmatter.Description, Status: document.Frontmatter.Status.String()})
+		files = append(files, FileView{Path: filepath.ToSlash(relative), Title: document.Frontmatter.Title, Description: document.Frontmatter.Description, Status: document.Frontmatter.Status.String(), ForwardedTo: document.Frontmatter.ForwardedTo.String()})
 		return nil
 	})
 	if err != nil && !errors.Is(err, os.ErrNotExist) {

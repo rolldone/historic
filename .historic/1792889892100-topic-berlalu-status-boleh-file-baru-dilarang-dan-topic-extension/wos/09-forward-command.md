@@ -1,9 +1,9 @@
 ---
-title: 'WO 09 — Command historic forward dengan Validasi Strict'
-description: "Menambahkan command historic forward untuk memindahkan task ke topic lanjutan: --to topic yang sudah ada atau --create topic baru, dengan validasi extends wajib."
-status: create
+title: WO 09 — Command historic forward dengan Validasi Strict
+description: 'Menambahkan command historic forward untuk memindahkan task ke topic lanjutan: --to topic yang sudah ada atau --create topic baru, dengan validasi extends wajib.'
+status: complete
 created: "2026-10-28"
-updated: "2026-10-28"
+updated: "2026-10-27"
 tags:
     - cli
     - forward

@@ -42,6 +42,8 @@ historic show <timestamp-topic-id>
 
 `historic create` allocates a monotonic Unix epoch-millisecond TopicID under an inter-process lock. During migration, legacy five-digit IDs can still be resolved. Use `historic add` to create notes or Work Orders. When multiple topics are active, provide an explicit `--id` for commands that need to select a topic.
 
+`historic create "<title>" --extends <topic-id>` starts a continuation topic. The parent may be open or closed; its metadata is never modified, and no files, tags, or related entries are copied. The relation is stored one-way as `extends: "<topic-id>"` in the child `_meta.yaml`, is immutable, and is shown by `historic show <child-id>` (`data[].extends`). An unknown or malformed parent fails before any directory is created.
+
 ## Internal Git passthrough
 
 Use `historic git <git-args...>` to run Git with `.historic/.database` as the working directory:
@@ -82,11 +84,16 @@ Update one managed Markdown member file:
 ```sh
 historic status <path> progress
 historic status <path> draft
-historic status <path> complete
+historic status <path> review
+historic status .historic/.database/<topic-id>-<slug>/wos/01-task.md complete
+historic status <path> forwarded
 ```
 
-- Work status belongs only to managed member frontmatter.
+- Work status belongs only to managed member frontmatter. Valid statuses: `create`, `draft`, `pending`, `planned`, `progress`, `review`, `blocked` (open) and `complete`, `failed`, `cancelled`, `archived`, `forwarded` (terminal).
 - Topics have no work-status field or topic status command.
+- Status changes work on closed topics too. Pass an explicit `.historic/.database/...` path; a path that matches both an open and a closed copy is rejected as ambiguous.
+- Each status change also rewrites `_meta.yaml.files[]` (status and type) in the same operation, so no manual rebuild is needed. A manifest failure is reported as a partial-application error that points to `historic rebuild`.
+- Assigning a non-`forwarded` status clears `forwarded_to`; assigning `forwarded` keeps an existing destination but does not create one. Use `historic forward` to record a destination.
 - `computed_status` is an SQLite aggregate/cache value only.
 - `close` and `open` change storage only and never change member status.
 - `historic save [id] [--all] [--json]` mirrors open topics into `.historic/.database/` and leaves open workdirs intact. Without an ID it opens an interactive newest-first picker for exactly one open topic; with a topic ID it mirrors only that topic; `--all` explicitly mirrors every open topic. It does not accept `-m/--message` and creates no Git commit.
@@ -113,6 +120,23 @@ historic save [id] [--all] [--json]
 - `closed` means `.historic/.database/<topic-id>-<slug>/`.
 - Close/open preserve all topic bytes and member frontmatter statuses.
 - `import` is a compatibility alias for opening a closed topic.
+
+## Forwarding work to a continuation topic
+
+When a task cannot be finished in its topic, forward it to a topic that extends it:
+
+```sh
+historic forward wos/03-analisis-kuota.md --to <child-topic-id>
+historic forward wos/03-analisis-kuota.md --create "Lanjutan Proyek"
+```
+
+- Exactly one of `--to` or `--create` is required.
+- `--to` must name an existing topic whose `extends` equals the source file's topic ID; any other target is rejected without filesystem changes.
+- `--create "<title>"` creates the continuation topic with `extends` = source topic first, then forwards the file. If creation fails, file status is unchanged; if forwarding then fails, the new topic directory is removed.
+- Only managed Markdown files in an **open** topic can be forwarded. Forward a closed copy after `historic open`.
+- Forward never moves, copies, or deletes content: only `status: forwarded` and `forwarded_to: "<topic-id>"` change (frontmatter plus `_meta.yaml.files[]`).
+- Repeating forward is idempotent and retargets `forwarded_to`. Any later non-`forwarded` status clears it.
+- `historic show <topic-id> --json` exposes `data[].files[].forwarded_to`, and `historic find --status forwarded` filters these files.
 
 ## Schema compatibility, migration, and recovery
 

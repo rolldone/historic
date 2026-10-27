@@ -48,7 +48,19 @@ historic status 19-fts5-index.md complete --json
 historic status .historic/<topic-id>-<slug>/wos/20-advanced-query-filters.md review
 ```
 
-`historic status` changes only the target managed Markdown frontmatter, sets `updated`, rejects absolute/traversal paths, and rebuilds the SQLite/FTS index. It accepts `create`, `draft`, `pending`, `progress`, `review`, `blocked`, `complete`, `failed`, and `cancelled`. Topic status commands such as `historic complete <id>` are not used: topics have no work status; update the member file path instead.
+`historic status` changes only the target managed Markdown frontmatter, sets `updated`, rejects absolute/traversal paths, and rebuilds the SQLite/FTS index. It accepts `create`, `draft`, `pending`, `planned`, `progress`, `review`, `blocked`, `complete`, `failed`, `cancelled`, `archived`, and `forwarded`. Topic status commands such as `historic complete <id>` are not used: topics have no work status; update the member file path instead.
+
+Status changes are supported on files in closed topics as well. Pass an explicit path such as `.historic/.database/<topic-id>-<slug>/wos/01-task.md`; a bare filename that exists in both an open and a closed copy is rejected as ambiguous. Each status change also synchronizes `_meta.yaml.files[]` in the same operation, so no manual `historic rebuild` is required. If that manifest write fails, the command fails with a partial-application error that points to `historic rebuild`.
+
+Continue work in a new topic that extends an existing one, and forward tasks that belong there:
+
+```sh
+historic create "Lanjutan Proyek" --extends 1791851149892 --json
+historic forward wos/03-analisis-kuota.md --to <child-topic-id> --json
+historic forward wos/03-analisis-kuota.md --create "Lanjutan Proyek" --json
+```
+
+`--extends` records a one-way `extends: "<topic-id>"` relation in the new topic's `_meta.yaml`; the parent topic (open or closed) is never modified and no files are copied. `historic forward` only writes `status: forwarded` plus `forwarded_to: "<topic-id>"` on the source file; the Markdown body is neither moved nor copied, and the target topic must extend the source topic. Forwarding requires an open source topic, so run `historic open` first for closed copies. Changing the file to any non-`forwarded` status clears `forwarded_to`.
 
 Canonical topic metadata is stored in `_meta.yaml`. It contains identity, manual topic metadata, and generated `files`/`assets` manifests. Every valid Historic Markdown file anywhere under the topic is a member file; files under `wos/` use type `task`. `_meta.yaml` is excluded and `_meta.md` is an asset.
 

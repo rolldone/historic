@@ -1,9 +1,9 @@
 ---
-title: 'WO 06 — Dokumentasi Topic Berlalu, Extension, dan Status review'
-description: "Menyinkronkan README, docs/commands.md, dan Historic skill dengan perilaku add pada closed, create --extends, status closed, dan review."
-status: create
+title: WO 06 — Dokumentasi Topic Berlalu, Extension, dan Status review
+description: Menyinkronkan README, docs/commands.md, dan Historic skill dengan perilaku add pada closed, create --extends, status closed, dan review.
+status: complete
 created: "2026-10-25"
-updated: "2026-10-28"
+updated: "2026-10-27"
 tags:
     - docs
     - skill

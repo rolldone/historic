@@ -1,9 +1,9 @@
 ---
-title: 'WO 04 — Index dan Migrasi untuk Relasi Topic Extension'
-description: "Membuat read model SQLite menyimpan extends_id yang diturunkan dari metadata Markdown dan memigrasikan index lama secara aman."
-status: create
+title: WO 04 — Index dan Migrasi untuk Relasi Topic Extension
+description: Membuat read model SQLite menyimpan extends_id yang diturunkan dari metadata Markdown dan memigrasikan index lama secara aman.
+status: complete
 created: "2026-10-25"
-updated: "2026-10-28"
+updated: "2026-10-27"
 tags:
     - index
     - migration

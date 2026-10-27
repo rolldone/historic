@@ -19,19 +19,31 @@ var topicPathFolderPattern = regexp.MustCompile(`^([0-9]{5}|[0-9]{13})-(.+)$`)
 
 // FileChange describes one successful file-level status change.
 type FileChange struct {
-	ID       domain.ID
-	Title    string
-	Previous domain.Status
-	Current  domain.Status
-	Path     string
-	Updated  string
+	ID          domain.ID
+	Title       string
+	Previous    domain.Status
+	Current     domain.Status
+	Path        string
+	Updated     string
+	ForwardedTo domain.TopicID
 }
 
 // ChangeFileStatus changes only the frontmatter of one Markdown file and
 // rebuilds the source-derived index. It never archives or moves a topic.
+// Switching away from the terminal forwarded status clears forwarded_to.
 func ChangeFileStatus(workspace config.Workspace, inputPath string, next domain.Status) (FileChange, error) {
+	return changeFileStatus(workspace, inputPath, next, "")
+}
+
+// changeFileStatus applies a status change and, when forwardedTo is set,
+// records the forward destination on the same document. Callers that pass a
+// non-forwarded status always clear any existing forwarded_to.
+func changeFileStatus(workspace config.Workspace, inputPath string, next domain.Status, forwardedTo domain.TopicID) (FileChange, error) {
 	if !next.IsValid() {
 		return FileChange{}, fmt.Errorf("%w: %q", domain.ErrInvalidStatus, next)
+	}
+	if forwardedTo != "" && !forwardedTo.Valid() {
+		return FileChange{}, fmt.Errorf("%w: forwarded_to %q", domain.ErrInvalidID, forwardedTo)
 	}
 	path, err := resolveMarkdownPath(workspace, inputPath)
 	if err != nil {
@@ -48,6 +60,13 @@ func ChangeFileStatus(workspace config.Workspace, inputPath string, next domain.
 	updated := time.Now().UTC().Format("2006-01-02")
 	document.Frontmatter.Status = next
 	document.Frontmatter.Updated = updated
+	switch {
+	case next != domain.StatusForwarded:
+		// Leaving the terminal forwarded status drops the destination.
+		document.Frontmatter.ForwardedTo = ""
+	case forwardedTo != "":
+		document.Frontmatter.ForwardedTo = forwardedTo
+	}
 	if err := markdown.WriteFile(path, document); err != nil {
 		return FileChange{}, fmt.Errorf("update file status: %w", err)
 	}
@@ -65,6 +84,7 @@ func ChangeFileStatus(workspace config.Workspace, inputPath string, next domain.
 	return FileChange{
 		ID: document.Frontmatter.ID, Title: document.Frontmatter.Title,
 		Previous: previous, Current: next, Path: relative, Updated: updated,
+		ForwardedTo: document.Frontmatter.ForwardedTo,
 	}, nil
 }
 

@@ -21,6 +21,7 @@ const (
 	StatusFailed    Status = "failed"
 	StatusCancelled Status = "cancelled"
 	StatusArchived  Status = "archived"
+	StatusForwarded Status = "forwarded"
 )
 
 var (
@@ -63,7 +64,7 @@ func ParseStatus(value string) (Status, error) {
 
 var validStatuses = map[Status]struct{}{
 	StatusCreate: {}, StatusDraft: {}, StatusPending: {}, StatusPlanned: {}, StatusProgress: {}, StatusReview: {}, StatusBlocked: {},
-	StatusComplete: {}, StatusFailed: {}, StatusCancelled: {}, StatusArchived: {},
+	StatusComplete: {}, StatusFailed: {}, StatusCancelled: {}, StatusArchived: {}, StatusForwarded: {},
 }
 
 var openStatuses = map[Status]struct{}{
@@ -71,7 +72,7 @@ var openStatuses = map[Status]struct{}{
 }
 
 var closeStatuses = map[Status]struct{}{
-	StatusComplete: {}, StatusFailed: {}, StatusCancelled: {}, StatusArchived: {},
+	StatusComplete: {}, StatusFailed: {}, StatusCancelled: {}, StatusArchived: {}, StatusForwarded: {},
 }
 
 // LegacyTopicID names the pre-migration five-digit topic identity.
@@ -215,6 +216,7 @@ type Frontmatter struct {
 	Updated     string   `yaml:"updated,omitempty"`
 	Tags        []string `yaml:"tags,omitempty"`
 	Related     []ID     `yaml:"related,omitempty"`
+	ForwardedTo TopicID  `yaml:"forwarded_to,omitempty"`
 }
 
 // IndexRecord is the rebuildable SQLite index representation of an entry.

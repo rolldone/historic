@@ -4,12 +4,14 @@
 
 ```sh
 historic init
-historic create "Topic Title"
+historic create "Topic Title" [--extends <topic-id>] [--json]
 historic add <name> [--id <topic-id>]
 historic list [--closed] [--json]
 historic show <topic-id> [--closed] [--json]
 historic version [--json]
 ```
+
+`historic create --extends <topic-id>` records a one-way `extends: "<topic-id>"` relation in the new topic's `_meta.yaml` and returns it as `data.extends` (empty string when absent). The parent topic may be open or closed; it is validated before any directory is created and its own metadata is never modified. Tags, related entries, and files are not copied. The relation is immutable and cannot be changed or removed by a later command. `--extends` may be given only once, and an unknown or malformed parent fails without creating a topic directory.
 
 `historic list` shows open topics by default; `historic list --closed` shows topics stored in `.historic/.database/`, including mirror snapshots created by `historic save`. Open and closed topics are independent listing scopes, so a closed-only listing also includes topics that still have an open copy. `historic show <topic-id>` lists every storage version of the topic (open first) with `updated_at` and `mtime` markers; `--closed` limits the output to closed versions.
 
@@ -75,7 +77,26 @@ historic import <id> [--json]
 historic status <path> <status> [--json]
 ```
 
-This command is for any managed Markdown file with valid Historic frontmatter. It updates that member file's `status` and `updated`, then rebuilds the index. The member frontmatter ID may differ from the parent topic ID. It rejects regular assets, Markdown without valid Historic frontmatter, unsafe paths, and symlink targets. Valid statuses include `create`, `draft`, `pending`, `progress`, `review`, `blocked`, `complete`, `failed`, and `cancelled`.
+This command is for any managed Markdown file with valid Historic frontmatter. It updates that member file's `status` and `updated`, then rebuilds the index. The member frontmatter ID may differ from the parent topic ID. It rejects regular assets, Markdown without valid Historic frontmatter, unsafe paths, and symlink targets. Valid statuses include `create`, `draft`, `pending`, `planned`, `progress`, `review`, `blocked`, `complete`, `failed`, `cancelled`, `archived`, and `forwarded`.
+
+Status may be changed for files in closed topics. Use an explicit path such as `.historic/.database/<topic-id>-<slug>/wos/01-task.md`; a bare filename present in both an open and a closed copy is rejected as ambiguous instead of picking one. The same operation also synchronizes the owning topic's `_meta.yaml.files[]` entry (status and type), so `historic rebuild` is no longer required after a status change. If the manifest write fails, the command exits with a partial-application error naming the repair path (`historic rebuild`); the index stays consistent with Markdown.
+
+Setting any status other than `forwarded` clears `forwarded_to` from both the frontmatter and the manifest. Setting `forwarded` through `status` keeps an existing destination but does not create one; use `historic forward` to record a destination.
+
+## Forward
+
+```sh
+historic forward <path> --to <topic-id> [--json]
+historic forward <path> --create "<title>" [--json]
+```
+
+`forward` marks the source file as `status: forwarded` and records `forwarded_to: "<topic-id>"` in its frontmatter and in `_meta.yaml.files[]`. The Markdown body is neither moved nor copied and the file is never deleted. Exactly one of `--to` or `--create` is required.
+
+- `--to` must name an existing topic whose `extends` equals the source file's topic ID. A target that does not extend the source topic is rejected with no filesystem change.
+- `--create "<title>"` creates a new topic with `extends` set to the source topic, then forwards the file to it. If topic creation fails, the file status is unchanged; if forwarding fails afterwards, the newly created topic directory is removed.
+- The source file must be a managed Markdown file in an open topic. Forwarding a closed copy is rejected with a `historic open` hint.
+- Repeating forward is idempotent and updates `forwarded_to` to the new valid destination.
+- JSON output returns `data.path`, `data.previous`, `data.current`, `data.forwarded_to`, and `data.created_topic` (empty unless `--create` was used).
 
 ## One-shot search
 

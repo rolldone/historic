@@ -63,6 +63,7 @@ type fileReadModel struct {
 	Status      domain.Status
 	Tags        []string
 	Related     []domain.ID
+	ForwardedTo domain.TopicID
 	Content     string
 	AssetKind   string
 	CreatedAt   string
@@ -84,6 +85,7 @@ type topicReadModel struct {
 	UpdatedAt      string
 	Tags           []string
 	Related        []domain.ID
+	Extends        domain.TopicID
 	ComputedStatus domain.Status
 	Content        string
 }
@@ -211,8 +213,8 @@ func replaceReadModel(transaction *sql.Tx, topics []topicReadModel, files []file
 		return fmt.Errorf("clear topics read model: %w", err)
 	}
 	topicStatement, err := transaction.Prepare(`INSERT INTO topics
-		(id, num_padded, title, description, slug, path, storage, created_at, updated_at, tags, related, computed_status)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+		(id, num_padded, title, description, slug, path, storage, created_at, updated_at, tags, related, extends_id, computed_status)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return fmt.Errorf("prepare topic read model insert: %w", err)
 	}
@@ -220,13 +222,13 @@ func replaceReadModel(transaction *sql.Tx, topics []topicReadModel, files []file
 	for _, topic := range topics {
 		tags, _ := json.Marshal(topic.Tags)
 		related, _ := json.Marshal(topic.Related)
-		if _, err := topicStatement.Exec(topic.ID.String(), topic.ID.String(), topic.Title, nullable(topic.Description), topic.Slug, topic.Path, topic.Storage.String(), topic.CreatedAt, nullable(topic.UpdatedAt), string(tags), string(related), nullable(topic.ComputedStatus.String())); err != nil {
+		if _, err := topicStatement.Exec(topic.ID.String(), topic.ID.String(), topic.Title, nullable(topic.Description), topic.Slug, topic.Path, topic.Storage.String(), topic.CreatedAt, nullable(topic.UpdatedAt), string(tags), string(related), nullable(topic.Extends.String()), nullable(topic.ComputedStatus.String())); err != nil {
 			return fmt.Errorf("insert topic %s: %w", topic.ID, err)
 		}
 	}
 	fileStatement, err := transaction.Prepare(`INSERT INTO files
-		(id, storage, topic_id, type, path, filename, title, description, status, tags, related, content, asset_kind, created_at, updated_at, mtime, hash, size, word_count)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+		(id, storage, topic_id, type, path, filename, title, description, status, tags, related, forwarded_to, content, asset_kind, created_at, updated_at, mtime, hash, size, word_count)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return fmt.Errorf("prepare file read model insert: %w", err)
 	}
@@ -242,7 +244,7 @@ func replaceReadModel(transaction *sql.Tx, topics []topicReadModel, files []file
 		if fileID == "" {
 			fileID = "asset:" + file.TopicID.String() + ":" + file.Path
 		}
-		if _, err := fileStatement.Exec(fileID, file.Storage.String(), file.TopicID.String(), file.Type, file.Path, file.Filename, file.Title, nullable(file.Description), status, string(tags), string(related), file.Content, nullable(file.AssetKind), nullable(file.CreatedAt), nullable(file.UpdatedAt), file.Mtime, file.Hash, file.Size, file.WordCount); err != nil {
+		if _, err := fileStatement.Exec(fileID, file.Storage.String(), file.TopicID.String(), file.Type, file.Path, file.Filename, file.Title, nullable(file.Description), status, string(tags), string(related), nullable(file.ForwardedTo.String()), file.Content, nullable(file.AssetKind), nullable(file.CreatedAt), nullable(file.UpdatedAt), file.Mtime, file.Hash, file.Size, file.WordCount); err != nil {
 			return fmt.Errorf("insert file %s/%s: %w", file.TopicID, file.Path, err)
 		}
 	}
@@ -384,6 +386,7 @@ func scanTopic(workspace config.Workspace, id domain.ID, candidate topicCandidat
 		ID: id, Title: meta.Title, Description: meta.Description, Slug: candidate.slug,
 		Path: workspace.RelativePath(candidate.path), Storage: candidate.storage,
 		CreatedAt: meta.Created, UpdatedAt: meta.Updated, Tags: meta.Tags, Related: meta.Related,
+		Extends: meta.Extends,
 	}
 	info, statErr := os.Stat(metaPath)
 	if statErr != nil {
@@ -467,7 +470,7 @@ func scanTopic(workspace config.Workspace, id domain.ID, candidate topicCandidat
 }
 
 func fileReadModelFromDocument(id domain.ID, relative, path string, info os.FileInfo, document markdown.Document, fileType string, fileID domain.FileID) fileReadModel {
-	return fileReadModel{FileID: fileID, TopicID: id, Type: fileType, Path: relative, Filename: filepath.Base(path), Title: document.Frontmatter.Title, Description: document.Frontmatter.Description, Status: document.Frontmatter.Status, Tags: document.Frontmatter.Tags, Related: document.Frontmatter.Related, Content: document.Body, CreatedAt: document.Frontmatter.Created, UpdatedAt: document.Frontmatter.Updated, Mtime: info.ModTime().UTC().Format(time.RFC3339Nano), Hash: hashFile(path), Size: info.Size(), WordCount: wordCount(document.Body)}
+	return fileReadModel{FileID: fileID, TopicID: id, Type: fileType, Path: relative, Filename: filepath.Base(path), Title: document.Frontmatter.Title, Description: document.Frontmatter.Description, Status: document.Frontmatter.Status, Tags: document.Frontmatter.Tags, Related: document.Frontmatter.Related, ForwardedTo: document.Frontmatter.ForwardedTo, Content: document.Body, CreatedAt: document.Frontmatter.Created, UpdatedAt: document.Frontmatter.Updated, Mtime: info.ModTime().UTC().Format(time.RFC3339Nano), Hash: hashFile(path), Size: info.Size(), WordCount: wordCount(document.Body)}
 }
 
 func fileReadModelFromAsset(id domain.ID, relative, path string, info os.FileInfo) fileReadModel {

@@ -1,9 +1,9 @@
 ---
-title: 'WO 05 — Tampilkan Relasi extends pada historic show'
-description: "Mengekspos parent topic pada historic show human dan JSON melalui read model, tanpa mengubah output induk dengan backlink atau output list/find di MVP."
-status: create
+title: WO 05 — Tampilkan Relasi extends pada historic show
+description: Mengekspos parent topic pada historic show human dan JSON melalui read model, tanpa mengubah output induk dengan backlink atau output list/find di MVP.
+status: complete
 created: "2026-10-25"
-updated: "2026-10-28"
+updated: "2026-10-27"
 tags:
     - show
     - cli

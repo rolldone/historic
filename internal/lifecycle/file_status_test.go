@@ -281,6 +281,62 @@ func TestChangeFileStatusAmbiguousOpenAndClosedCopies(t *testing.T) {
 	}
 }
 
+func TestChangeFileStatusClearsForwardedTo(t *testing.T) {
+	workspace, err := config.Initialize(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	topic := filepath.Join(workspace.Histories, "1792889892200-child")
+	sub := filepath.Join(topic, "wos")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := markdown.WriteTopicMetadata(filepath.Join(topic, markdown.MetaFilename), markdown.TopicMetadata{
+		ID: "1792889892200", Title: "Child", Created: "2026-10-25", Extends: "1791851149892",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	document, err := markdown.NewDocument(domain.Frontmatter{
+		ID: "1792889892200", Title: "Task", Status: domain.StatusForwarded, Created: "2026-10-25",
+		ForwardedTo: "1792889892200",
+	}, "body")
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(sub, "01-task.md")
+	if err := markdown.WriteFile(target, document); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ChangeFileStatus(workspace, "wos/01-task.md", domain.StatusForwarded); err != nil {
+		t.Fatal(err)
+	}
+	before, err := markdown.ReadTopicMetadata(topic)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(before.Files) != 1 || before.Files[0].ForwardedTo != "1792889892200" {
+		t.Fatalf("manifest forwarded_to = %#v", before.Files)
+	}
+
+	if _, err := ChangeFileStatus(workspace, "wos/01-task.md", domain.StatusProgress); err != nil {
+		t.Fatal(err)
+	}
+	updated, err := markdown.ParseFile(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.Frontmatter.Status != domain.StatusProgress || updated.Frontmatter.ForwardedTo != "" {
+		t.Fatalf("frontmatter after unforward = %#v", updated.Frontmatter)
+	}
+	after, err := markdown.ReadTopicMetadata(topic)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(after.Files) != 1 || after.Files[0].ForwardedTo != "" || after.Files[0].Status != domain.StatusProgress {
+		t.Fatalf("manifest after unforward = %#v", after.Files)
+	}
+}
+
 func TestChangeFileStatusRejectsUnsafeAndInvalidTargets(t *testing.T) {
 	workspace, err := config.Initialize(t.TempDir())
 	if err != nil {

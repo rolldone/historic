@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS topics (
     updated_at TEXT,
     tags TEXT NOT NULL DEFAULT '[]',
     related TEXT NOT NULL DEFAULT '[]',
+    extends_id TEXT,
     computed_status TEXT,
     PRIMARY KEY (id, storage)
 );
@@ -46,6 +47,7 @@ CREATE TABLE IF NOT EXISTS files (
     status TEXT,
     tags TEXT NOT NULL DEFAULT '[]',
     related TEXT NOT NULL DEFAULT '[]',
+    forwarded_to TEXT,
     content TEXT NOT NULL DEFAULT '',
     asset_kind TEXT,
     created_at TEXT,

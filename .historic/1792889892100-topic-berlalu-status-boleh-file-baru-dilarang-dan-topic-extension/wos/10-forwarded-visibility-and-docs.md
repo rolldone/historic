@@ -1,9 +1,9 @@
 ---
-title: 'WO 10 — Visibilitas forwarded_to dan Dokumentasi Forward'
-description: "Menampilkan forwarded_to pada historic show, memastikan filter forwarded konsisten di TUI, dan mendokumentasikan alur forward di README, docs/commands.md, serta skill."
-status: create
+title: WO 10 — Visibilitas forwarded_to dan Dokumentasi Forward
+description: Menampilkan forwarded_to pada historic show, memastikan filter forwarded konsisten di TUI, dan mendokumentasikan alur forward di README, docs/commands.md, serta skill.
+status: complete
 created: "2026-10-28"
-updated: "2026-10-28"
+updated: "2026-10-27"
 tags:
     - show
     - tui
