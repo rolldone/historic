@@ -49,5 +49,5 @@ files:
     - id: 01a17fbc-acc4-7dcd-a20c-f0c75a705638
       path: wos/11-utc-date-standardization.md
       type: task
-      status: create
+      status: complete
 assets: []

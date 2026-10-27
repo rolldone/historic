@@ -17,7 +17,19 @@ import (
 
 var topicPathFolderPattern = regexp.MustCompile(`^([0-9]{5}|[0-9]{13})-(.+)$`)
 
-// FileChange describes one successful file-level status change.
+// fileStatusNow is injectable so tests can lock the UTC date behavior.
+var fileStatusNow = func() time.Time { return time.Now() }
+
+// laterDate returns the later of two YYYY-MM-DD dates. It keeps `updated` from
+// moving behind `created`, which can otherwise happen for legacy documents
+// written with a local-time date ahead of the current UTC date.
+func laterDate(left, right string) string {
+	if left > right {
+		return left
+	}
+	return right
+}
+
 type FileChange struct {
 	ID          domain.ID
 	Title       string
@@ -57,7 +69,7 @@ func changeFileStatus(workspace config.Workspace, inputPath string, next domain.
 		return FileChange{}, fmt.Errorf("file status unsupported: target must be a Markdown file")
 	}
 	previous := document.Frontmatter.Status
-	updated := time.Now().UTC().Format("2006-01-02")
+	updated := laterDate(document.Frontmatter.Created, fileStatusNow().UTC().Format("2006-01-02"))
 	document.Frontmatter.Status = next
 	document.Frontmatter.Updated = updated
 	switch {

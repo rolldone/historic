@@ -1,7 +1,7 @@
 ---
-title: 'WO 11 — Standarkan Tanggal created/updated ke UTC'
-description: "Menghilangkan inkonsistensi timezone antara created (waktu lokal) dan updated (UTC) yang dapat menghasilkan updated lebih awal dari created."
-status: create
+title: WO 11 — Standarkan Tanggal created/updated ke UTC
+description: Menghilangkan inkonsistensi timezone antara created (waktu lokal) dan updated (UTC) yang dapat menghasilkan updated lebih awal dari created.
+status: complete
 created: "2026-10-28"
 updated: "2026-10-28"
 tags:
@@ -78,3 +78,26 @@ mengganggu perbandingan "mana yang lebih baru" pada dokumen dual-copy.
 
 Risiko rendah. Bergantung pada perilaku tanggal WO-02 (sinkronisasi manifest) dan
 WO-08 (status `forwarded`) karena keduanya ikut menulis `updated`.
+
+## Hasil pelaksanaan (2026-10-28)
+
+- `internal/repository/topics.go`: `dateToday()` kini `timeNow().UTC().Format("2006-01-02")`
+  — satu-satunya penulis `created` (dipakai `CreateTopic` dan `AddEntry`).
+- `internal/lifecycle/file_status.go`: ditambah `fileStatusNow` (injectable) dan helper
+  `laterDate(created, updated)`; `updated` = `max(created, UTC today)` sehingga tidak
+  pernah mundur melewati `created` pada dokumen legacy.
+- `internal/lifecycle/sync_meta.go`: `recoverTopicMetadata` memakai `laterDate` yang sama
+  bila `updated` tidak kosong.
+- Audit penulis tanggal: hanya `dateToday()` (created) dan `file_status.go` (updated)
+  yang menulis tanggal; `sync_meta.go` sudah UTC sebelumnya. Tidak ada penulis lain
+  (mirror/close/save/upgrade mempertahankan bytes).
+
+Test baru:
+- `internal/repository/utc_date_test.go` — `created` UTC pada `CreateTopic` dan `AddEntry`
+  dengan clock UTC+7.
+- `internal/lifecycle/utc_date_test.go` — `updated` UTC, guard `updated >= created`
+  (clock lebih awal dari `created` legacy), dan guard pada recovery metadata.
+
+Verifikasi: `gofmt` bersih, `go vet ./...` bersih, `go test ./...` lulus. Smoke test
+zona `Pacific/Kiritimati` (UTC+14, tanggal lokal 2026-10-28) menghasilkan
+`created: "2026-10-27"` dan `updated: "2026-10-27"` (UTC), sesuai harapan.

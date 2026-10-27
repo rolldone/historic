@@ -62,6 +62,8 @@ historic forward wos/03-analisis-kuota.md --create "Lanjutan Proyek" --json
 
 `--extends` records a one-way `extends: "<topic-id>"` relation in the new topic's `_meta.yaml`; the parent topic (open or closed) is never modified and no files are copied. `historic forward` only writes `status: forwarded` plus `forwarded_to: "<topic-id>"` on the source file; the Markdown body is neither moved nor copied, and the target topic must extend the source topic. Forwarding requires an open source topic, so run `historic open` first for closed copies. Changing the file to any non-`forwarded` status clears `forwarded_to`.
 
+Calendar dates (`created`, `updated`) are always written in **UTC** as `YYYY-MM-DD`, independent of the host timezone. `updated` never moves behind `created`, including for legacy documents that were written with a local-time date.
+
 Canonical topic metadata is stored in `_meta.yaml`. It contains identity, manual topic metadata, and generated `files`/`assets` manifests. Every valid Historic Markdown file anywhere under the topic is a member file; files under `wos/` use type `task`. `_meta.yaml` is excluded and `_meta.md` is an asset.
 
 Metadata reconciliation and index recovery use the unified rebuild workflow:

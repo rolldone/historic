@@ -91,6 +91,10 @@ func recoverTopicMetadata(topic string, id domain.ID) (markdown.TopicMetadata, e
 			updated = document.Frontmatter.Updated
 		}
 	}
+	if updated != "" {
+		// Never let the recovered `updated` move behind `created`.
+		updated = laterDate(created, updated)
+	}
 	metadata := markdown.TopicMetadata{ID: id, Title: title, Created: created, Updated: updated}
 	if err := markdown.WriteTopicMetadata(filepath.Join(topic, markdown.MetaFilename), metadata); err != nil {
 		return markdown.TopicMetadata{}, err

@@ -408,7 +408,9 @@ func (store TopicStore) topicIDExists(id domain.ID) bool {
 	return false
 }
 
-func dateToday() string { return timeNow().Format("2006-01-02") }
+// dateToday returns the current UTC calendar date. Every Historic date field is
+// UTC so `created` and `updated` stay comparable regardless of host timezone.
+func dateToday() string { return timeNow().UTC().Format("2006-01-02") }
 
 var timeNow = func() time.Time { return time.Now() }
 
