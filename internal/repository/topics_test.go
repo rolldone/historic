@@ -30,7 +30,7 @@ func TestCreateTopicAutoIDUsesModernTimestampAllocation(t *testing.T) {
 	if err := os.Mkdir(filepath.Join(store.Workspace.Database, "00002-archived"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	topic, err := store.CreateTopic("New Topic", "")
+	topic, err := store.CreateTopic("New Topic", "", "")
 	if err != nil {
 		t.Fatalf("CreateTopic: %v", err)
 	}
@@ -55,14 +55,14 @@ func TestCreateTopicAutoIDUsesModernTimestampAllocation(t *testing.T) {
 
 func TestCreateTopicManualIDAndCollision(t *testing.T) {
 	store := newTestStore(t)
-	created, err := store.CreateTopic("Manual Topic", "00015")
+	created, err := store.CreateTopic("Manual Topic", "00015", "")
 	if err != nil {
 		t.Fatalf("manual CreateTopic: %v", err)
 	}
 	if created.ID != "00015" {
 		t.Fatalf("ID = %s, want 00015", created.ID)
 	}
-	_, err = store.CreateTopic("Other Topic", "00015")
+	_, err = store.CreateTopic("Other Topic", "00015", "")
 	if !errors.Is(err, domain.ErrDuplicateID) {
 		t.Fatalf("duplicate error = %v, want ErrDuplicateID", err)
 	}
@@ -71,7 +71,7 @@ func TestCreateTopicManualIDAndCollision(t *testing.T) {
 func TestCreateTopicRejectsInvalidAndEmptyInput(t *testing.T) {
 	store := newTestStore(t)
 	for title, id := range map[string]string{"": "", "No ID": "15"} {
-		if _, err := store.CreateTopic(title, id); err == nil {
+		if _, err := store.CreateTopic(title, id, ""); err == nil {
 			t.Errorf("CreateTopic(%q, %q) accepted invalid input", title, id)
 		}
 	}
@@ -86,7 +86,7 @@ func TestCreateTopicDoesNotOverwriteExistingFolder(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(path, "keep.md"), []byte("keep"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	_, err := store.CreateTopic("Existing Topic", "00001")
+	_, err := store.CreateTopic("Existing Topic", "00001", "")
 	if !errors.Is(err, domain.ErrDuplicateID) {
 		t.Fatalf("error = %v, want ErrDuplicateID", err)
 	}

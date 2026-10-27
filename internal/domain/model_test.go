@@ -206,6 +206,28 @@ func TestStatusOpenAndCloseSets(t *testing.T) {
 	}
 }
 
+func TestStatusReviewContract(t *testing.T) {
+	if !StatusReview.IsValid() {
+		t.Fatalf("StatusReview.IsValid() = false, want true")
+	}
+	if !StatusReview.IsOpen() {
+		t.Fatalf("StatusReview.IsOpen() = false, want true")
+	}
+	if StatusReview.IsClose() {
+		t.Fatalf("StatusReview.IsClose() = true, want false")
+	}
+	status, err := ParseStatus("review")
+	if err != nil {
+		t.Fatalf("ParseStatus(review) error = %v, want nil", err)
+	}
+	if status != StatusReview {
+		t.Fatalf("ParseStatus(review) = %q, want %q", status, StatusReview)
+	}
+	if _, err := ParseStatus("Review"); !errors.Is(err, ErrInvalidStatus) {
+		t.Fatalf("ParseStatus(Review) error = %v, want ErrInvalidStatus", err)
+	}
+}
+
 func TestTransitionMatrix(t *testing.T) {
 	valid := []Status{StatusCreate, StatusDraft, StatusPending, StatusPlanned, StatusProgress, StatusReview, StatusBlocked, StatusComplete, StatusFailed, StatusCancelled, StatusArchived}
 	for _, current := range valid {

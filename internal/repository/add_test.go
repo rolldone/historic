@@ -12,7 +12,7 @@ import (
 
 func TestAddEntryCreatesMarkdownAndUpdatesMeta(t *testing.T) {
 	store := newTestStore(t)
-	topic, err := store.CreateTopic("Admin Dashboard", "00014")
+	topic, err := store.CreateTopic("Admin Dashboard", "00014", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,7 +86,7 @@ func TestNormalizeEntryNameRejectsUnsafeNames(t *testing.T) {
 
 func TestAddEntryNumbersWorkOrder(t *testing.T) {
 	store := newTestStore(t)
-	topic, err := store.CreateTopic("Topic", "00001")
+	topic, err := store.CreateTopic("Topic", "00001", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -112,7 +112,7 @@ func TestAddEntryNumbersWorkOrder(t *testing.T) {
 
 func TestAddEntryCanonicalCollisionAndForce(t *testing.T) {
 	store := newTestStore(t)
-	topic, err := store.CreateTopic("Topic", "00001")
+	topic, err := store.CreateTopic("Topic", "00001", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -133,7 +133,7 @@ func TestAddEntryCanonicalCollisionAndForce(t *testing.T) {
 
 func TestAddEntryRejectsTraversalAndOverwrite(t *testing.T) {
 	store := newTestStore(t)
-	topic, err := store.CreateTopic("Topic", "00001")
+	topic, err := store.CreateTopic("Topic", "00001", "")
 	if err != nil {
 		t.Fatal(err)
 	}

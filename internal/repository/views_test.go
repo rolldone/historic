@@ -74,10 +74,10 @@ func TestListTopicsRejectsSymlinkedTopicRoot(t *testing.T) {
 
 func TestListTopicsDefaultsToActiveAndSortsByID(t *testing.T) {
 	store := newTestStore(t)
-	if _, err := store.CreateTopic("Second", "00002"); err != nil {
+	if _, err := store.CreateTopic("Second", "00002", ""); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.CreateTopic("First", "00001"); err != nil {
+	if _, err := store.CreateTopic("First", "00001", ""); err != nil {
 		t.Fatal(err)
 	}
 	archived := filepath.Join(store.Workspace.Database, "00003-archived")
@@ -105,7 +105,7 @@ func TestListTopicsDefaultsToActiveAndSortsByID(t *testing.T) {
 
 func TestShowTopicIncludesFilesAndRejectsMissing(t *testing.T) {
 	store := newTestStore(t)
-	topic, err := store.CreateTopic("Topic", "00014")
+	topic, err := store.CreateTopic("Topic", "00014", "")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -23,6 +23,7 @@ type TopicView struct {
 	Mtime       string     `json:"mtime,omitempty"`
 	Path        string     `json:"path"`
 	Storage     string     `json:"storage"`
+	Extends     string     `json:"extends,omitempty"`
 	Files       []FileView `json:"files"`
 	Body        string     `json:"body,omitempty"`
 	Active      bool       `json:"active"`
@@ -162,6 +163,7 @@ func (store TopicStore) readTopicView(path string, active, includeBody bool) (To
 		Created: meta.Created, Updated: meta.Updated, Mtime: info.ModTime().UTC().Format(time.RFC3339Nano),
 		Path: store.Workspace.RelativePath(path), Body: "", Active: active,
 		Storage: map[bool]string{true: "open", false: "closed"}[active],
+		Extends: meta.Extends.String(),
 		Files:   []FileView{},
 	}
 	if includeBody {

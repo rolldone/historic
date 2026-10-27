@@ -51,13 +51,48 @@ func ChangeFileStatus(workspace config.Workspace, inputPath string, next domain.
 	if err := markdown.WriteFile(path, document); err != nil {
 		return FileChange{}, fmt.Errorf("update file status: %w", err)
 	}
-	if _, err := indexer.Rebuild(workspace); err != nil {
-		return FileChange{}, fmt.Errorf("rebuild file status index: %w", err)
+	relative := workspace.RelativePath(path)
+	manifestErr := syncFileStatusManifest(workspace, path)
+	_, rebuildErr := indexer.Rebuild(workspace)
+	switch {
+	case manifestErr != nil && rebuildErr != nil:
+		return FileChange{}, fmt.Errorf("file status partially applied for %s: frontmatter updated but topic manifest sync failed (%v) and index rebuild failed (%v); run \"historic rebuild\" to recover", relative, manifestErr, rebuildErr)
+	case manifestErr != nil:
+		return FileChange{}, fmt.Errorf("file status partially applied for %s: frontmatter updated but topic manifest sync failed: %w; run \"historic rebuild\" to recover", relative, manifestErr)
+	case rebuildErr != nil:
+		return FileChange{}, fmt.Errorf("file status partially applied for %s: frontmatter and manifest updated but index rebuild failed: %w; run \"historic rebuild\" to recover", relative, rebuildErr)
 	}
 	return FileChange{
 		ID: document.Frontmatter.ID, Title: document.Frontmatter.Title,
-		Previous: previous, Current: next, Path: workspace.RelativePath(path), Updated: updated,
+		Previous: previous, Current: next, Path: relative, Updated: updated,
 	}, nil
+}
+
+// syncFileStatusManifest reconciles the owning topic's _meta.yaml.files entry
+// so a status change is reflected without requiring a manual rebuild.
+func syncFileStatusManifest(workspace config.Workspace, filePath string) error {
+	topic, err := topicRootForFile(workspace, filePath)
+	if err != nil {
+		return err
+	}
+	_, err = syncMetaTopic(workspace, workspace.RelativePath(topic), false)
+	return err
+}
+
+func topicRootForFile(workspace config.Workspace, filePath string) (string, error) {
+	dir := filepath.Dir(filePath)
+	for {
+		parent := filepath.Dir(dir)
+		if filepath.Clean(dir) != filepath.Clean(parent) &&
+			(filepath.Clean(parent) == filepath.Clean(workspace.Histories) || filepath.Clean(parent) == filepath.Clean(workspace.Database)) {
+			return dir, nil
+		}
+		if filepath.Clean(parent) == filepath.Clean(dir) {
+			break
+		}
+		dir = parent
+	}
+	return "", fmt.Errorf("%w: file %q is not inside a topic", domain.ErrTopicMissing, workspace.RelativePath(filePath))
 }
 
 func resolveMarkdownPath(workspace config.Workspace, inputPath string) (string, error) {
@@ -107,6 +142,7 @@ func resolveMarkdownPath(workspace config.Workspace, inputPath string) (string, 
 	if len(candidates) == 0 {
 		return "", fmt.Errorf("%w: Markdown file %q", domain.ErrTopicMissing, inputPath)
 	}
+	candidates = uniquePaths(candidates)
 	if len(candidates) > 1 {
 		return "", fmt.Errorf("%w: file path %q matches multiple Markdown files", domain.ErrConflict, inputPath)
 	}
@@ -114,6 +150,23 @@ func resolveMarkdownPath(workspace config.Workspace, inputPath string) (string, 
 		return "", fmt.Errorf("file status unsupported: target is a regular asset without Historic frontmatter")
 	}
 	return candidates[0], nil
+}
+
+// uniquePaths drops duplicate candidates that resolve to the same file. The
+// archive root lives inside the active root, so an explicit .database path is
+// discovered by both scans and must not be reported as an ambiguity.
+func uniquePaths(paths []string) []string {
+	seen := make(map[string]struct{}, len(paths))
+	result := make([]string, 0, len(paths))
+	for _, path := range paths {
+		clean := filepath.Clean(path)
+		if _, exists := seen[clean]; exists {
+			continue
+		}
+		seen[clean] = struct{}{}
+		result = append(result, path)
+	}
+	return result
 }
 
 func isInside(root, path string) bool {

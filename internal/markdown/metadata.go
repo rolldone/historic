@@ -29,6 +29,7 @@ type TopicMetadata struct {
 	Updated     string          `yaml:"updated,omitempty"`
 	Tags        []string        `yaml:"tags,omitempty"`
 	Related     []domain.ID     `yaml:"related,omitempty"`
+	Extends     domain.TopicID  `yaml:"extends,omitempty"`
 	Files       []ManifestFile  `yaml:"files"`
 	Assets      []ManifestAsset `yaml:"assets"`
 }
@@ -88,11 +89,27 @@ func ValidateTopicMetadata(metadata TopicMetadata) error {
 			return fmt.Errorf("%w: field %q item %d must be a topic ID or relative path", ErrInvalidFrontmatter, "related", index)
 		}
 	}
+	if err := validateExtends(metadata.Extends); err != nil {
+		return err
+	}
 	if err := validateManifestFiles(metadata.Files); err != nil {
 		return fmt.Errorf("%w: %v", ErrInvalidFrontmatter, err)
 	}
 	if err := validateManifestAssets(metadata.Assets); err != nil {
 		return fmt.Errorf("%w: %v", ErrInvalidFrontmatter, err)
+	}
+	return nil
+}
+
+// validateExtends enforces the extends format only. Whether the referenced
+// topic exists is validated by the repository so rebuild stays tolerant of
+// dangling references.
+func validateExtends(extends domain.TopicID) error {
+	if extends == "" {
+		return nil
+	}
+	if !extends.Valid() {
+		return fmt.Errorf("%w: field %q must be a valid topic ID", ErrInvalidFrontmatter, "extends")
 	}
 	return nil
 }
@@ -165,6 +182,9 @@ func ValidateTopicMetadataLenient(metadata TopicMetadata) error {
 			return fmt.Errorf("%w: field %q item %d must be a topic ID or relative path", ErrInvalidFrontmatter, "related", index)
 		}
 	}
+	if err := validateExtends(metadata.Extends); err != nil {
+		return err
+	}
 	if err := validateManifestFilesLenient(metadata.Files); err != nil {
 		return fmt.Errorf("%w: %v", ErrInvalidFrontmatter, err)
 	}
@@ -221,6 +241,24 @@ func validateManifestPath(value string) error {
 		}
 	}
 	return nil
+}
+
+// FileType classifies a managed Markdown file from its path relative to the
+// topic root. It is the single source of truth shared by the indexer read model
+// and the generated topic manifest so both agree on the reported type.
+func FileType(path string) string {
+	slash := filepath.ToSlash(path)
+	base := strings.ToLower(filepath.Base(slash))
+	name := strings.TrimSuffix(base, filepath.Ext(base))
+	for _, kind := range []string{"prd", "spec", "issue", "note", "decision", "task"} {
+		if name == kind || strings.HasPrefix(name, kind+"-") {
+			return kind
+		}
+	}
+	if strings.HasPrefix(slash, "wos/") || strings.Contains(slash, "/wos/") {
+		return "task"
+	}
+	return "file"
 }
 
 // ParseTopicMetadata parses canonical _meta.yaml bytes.

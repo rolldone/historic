@@ -135,7 +135,7 @@ func scanTopicFiles(topic string, id domain.ID, previous []markdown.ManifestFile
 						return generateErr
 					}
 				}
-				managed = append(managed, markdown.ManifestFile{ID: fileID, Path: relative, Type: manifestFileType(relative), Status: document.Frontmatter.Status})
+				managed = append(managed, markdown.ManifestFile{ID: fileID, Path: relative, Type: markdown.FileType(relative), Status: document.Frontmatter.Status})
 				return nil
 			}
 			if markdown.LooksLikeHistoricFile(input) {
@@ -153,20 +153,6 @@ func scanTopicFiles(topic string, id domain.ID, previous []markdown.ManifestFile
 	sort.Slice(managed, func(i, j int) bool { return managed[i].Path < managed[j].Path })
 	sort.Slice(assets, func(i, j int) bool { return assets[i].Path < assets[j].Path })
 	return managed, assets, nil
-}
-
-func manifestFileType(path string) string {
-	base := strings.ToLower(filepath.Base(path))
-	name := strings.TrimSuffix(base, filepath.Ext(base))
-	for _, kind := range []string{"prd", "spec", "issue", "note", "decision", "task"} {
-		if name == kind || strings.HasPrefix(name, kind+"-") {
-			return kind
-		}
-	}
-	if strings.Contains(filepath.ToSlash(path), "/wos/") || strings.HasPrefix(filepath.ToSlash(path), "wos/") {
-		return "task"
-	}
-	return "file"
 }
 
 func manifestAssetType(path string) string {

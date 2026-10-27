@@ -3,3 +3,11 @@
 .historic/.database/.git/
 .historic/.staging-*/
 .historic/.database/.staging-*/
+
+# Historic runtime artifacts
+.historic/.index.sqlite.backup
+.historic/.topic-id.last
+.historic/.trash-*/
+
+# Local sync/debug scratch
+.sync_temp/

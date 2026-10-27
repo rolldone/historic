@@ -1,0 +1,49 @@
+id: "1792889892100"
+title: Topic Berlalu Status Boleh dan Topic Extension
+created: "2026-10-25"
+files:
+    - id: 01a17091-c80c-7f07-88a9-e04ff0264fb6
+      path: spec-topic-berlalu-dan-extension.md
+      type: spec
+      status: draft
+    - id: 01a17096-2038-7e13-8358-089d7fb27a82
+      path: wos/01-domain-error-and-status-contract.md
+      type: task
+      status: complete
+    - id: 01a17096-20a1-717f-bda6-ae273f6e0d4b
+      path: wos/02-manifest-sync-on-status.md
+      type: task
+      status: complete
+    - id: 01a17096-211b-7372-9287-b5a3af425d8a
+      path: wos/03-topic-extension-create.md
+      type: task
+      status: complete
+    - id: 01a17096-3a0d-7652-9060-590873685eff
+      path: wos/04-index-extends-column.md
+      type: task
+      status: create
+    - id: 01a17096-3a80-7d93-828c-c7bf4d1a2f73
+      path: wos/05-show-extends-field.md
+      type: task
+      status: create
+    - id: 01a17096-3aad-7c71-bb45-7a20a2bc0698
+      path: wos/06-docs-and-skill-update.md
+      type: task
+      status: create
+    - id: 01a17096-3af1-7201-a1d4-4eb3f52f661a
+      path: wos/07-quality-gate-regression.md
+      type: task
+      status: create
+    - id: 01a17f90-d056-7cab-b5ca-d5d264ff4b54
+      path: wos/08-forwarded-status-and-index.md
+      type: task
+      status: create
+    - id: 01a17f90-d0f5-736d-bb14-d42c842b19ba
+      path: wos/09-forward-command.md
+      type: task
+      status: create
+    - id: 01a17f90-d12d-72d0-b08b-3924841096a3
+      path: wos/10-forwarded-visibility-and-docs.md
+      type: task
+      status: create
+assets: []

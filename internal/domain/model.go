@@ -178,6 +178,7 @@ type Topic struct {
 	Updated     *time.Time
 	Tags        []string
 	Related     []ID
+	Extends     TopicID
 	Path        string
 	Slug        string
 }

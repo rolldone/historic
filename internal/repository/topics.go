@@ -15,6 +15,7 @@ import (
 	"historic/internal/config"
 	"historic/internal/domain"
 	"historic/internal/identifier"
+	"historic/internal/lifecycle"
 	"historic/internal/markdown"
 )
 
@@ -34,12 +35,18 @@ func NewTopicStore(workspace config.Workspace) TopicStore {
 }
 
 // CreateTopic creates a topic and its required _meta.yaml atomically enough to
-// leave no topic directory behind when metadata generation fails.
-func (store TopicStore) CreateTopic(title string, requestedID string) (domain.Topic, error) {
+// leave no topic directory behind when metadata generation fails. A non-empty
+// extends value records the parent topic ID one-way on the new topic metadata;
+// the parent topic is never modified.
+func (store TopicStore) CreateTopic(title string, requestedID string, extends string) (domain.Topic, error) {
 	if strings.TrimSpace(title) == "" {
 		return domain.Topic{}, fmt.Errorf("%w: title is empty", domain.ErrInvalidSlug)
 	}
 	slug, err := domain.SlugTitle(title)
+	if err != nil {
+		return domain.Topic{}, err
+	}
+	parent, err := store.resolveExtends(extends)
 	if err != nil {
 		return domain.Topic{}, err
 	}
@@ -76,7 +83,7 @@ func (store TopicStore) CreateTopic(title string, requestedID string) (domain.To
 	}
 
 	created := dateToday()
-	metadata := markdown.TopicMetadata{ID: id, Title: title, Description: "", Created: created}
+	metadata := markdown.TopicMetadata{ID: id, Title: title, Description: "", Created: created, Extends: parent}
 	if err := os.Mkdir(topicPath, 0o755); err != nil {
 		return domain.Topic{}, fmt.Errorf("create topic directory %s: %w", topicPath, err)
 	}
@@ -89,7 +96,24 @@ func (store TopicStore) CreateTopic(title string, requestedID string) (domain.To
 		lastPath := filepath.Join(store.Workspace.Histories, ".topic-id.last")
 		_ = os.WriteFile(lastPath, []byte(id.String()), 0o644)
 	}
-	return domain.Topic{ID: id, Title: title, Description: metadata.Description, Created: parseDate(created), Path: topicPath, Slug: slug}, nil
+	return domain.Topic{ID: id, Title: title, Description: metadata.Description, Created: parseDate(created), Extends: parent, Path: topicPath, Slug: slug}, nil
+}
+
+// resolveExtends validates the optional parent topic reference before any
+// filesystem artifact is created.
+func (store TopicStore) resolveExtends(extends string) (domain.TopicID, error) {
+	value := strings.TrimSpace(extends)
+	if value == "" {
+		return "", nil
+	}
+	parent, err := domain.ParseTopicID(value)
+	if err != nil {
+		return "", fmt.Errorf("%w: --extends %q", domain.ErrInvalidID, extends)
+	}
+	if _, _, err := lifecycle.TopicLocation(store.Workspace, domain.ID(parent)); err != nil {
+		return "", fmt.Errorf("resolve --extends topic %s: %w", parent, err)
+	}
+	return parent, nil
 }
 
 // AddEntry creates a Markdown entry in an active topic and keeps canonical

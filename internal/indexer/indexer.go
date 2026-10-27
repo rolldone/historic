@@ -544,20 +544,10 @@ func scanFile(workspace config.Workspace, path string, topicID domain.ID) (Recor
 }
 
 func inferType(path string) string {
-	base := strings.ToLower(filepath.Base(path))
-	if base == markdown.MetaFilename {
+	if strings.EqualFold(filepath.Base(path), markdown.MetaFilename) {
 		return "meta"
 	}
-	name := strings.TrimSuffix(base, ".md")
-	for _, kind := range []string{"prd", "spec", "issue", "note", "decision", "task"} {
-		if name == kind || strings.HasPrefix(name, kind+"-") {
-			return kind
-		}
-	}
-	if strings.Contains(filepath.ToSlash(path), "/wos/") {
-		return "task"
-	}
-	return "file"
+	return markdown.FileType(path)
 }
 
 func wordCount(content string) int {

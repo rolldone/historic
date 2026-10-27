@@ -1,6 +1,7 @@
 package lifecycle
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -72,6 +73,211 @@ func TestChangeFileStatusUpdatesOnlyTargetAndRebuilds(t *testing.T) {
 	}
 	if indexed, err := indexer.Count(workspace); err != nil || indexed != 3 {
 		t.Fatalf("index count = %d, %v", indexed, err)
+	}
+}
+
+func TestChangeFileStatusSyncsManifestWithoutRebuild(t *testing.T) {
+	workspace, err := config.Initialize(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	topic := filepath.Join(workspace.Histories, "00002-topic")
+	sub := filepath.Join(topic, "wos")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	metadata := markdown.TopicMetadataFromFrontmatter(
+		domain.Frontmatter{ID: "00002", Title: "Topic", Status: domain.StatusProgress, Created: "2026-09-19"}, "")
+	metadata.Tags = []string{"lifecycle"}
+	if err := markdown.WriteTopicMetadata(filepath.Join(topic, markdown.MetaFilename), metadata); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(topic, "assets"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(topic, "assets", "logo.png"), []byte("png"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	document, err := markdown.NewDocument(
+		domain.Frontmatter{ID: "00002", Title: "Work Order", Status: domain.StatusProgress, Created: "2026-09-19"}, "body")
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(sub, "01-work-order.md")
+	if err := markdown.WriteFile(target, document); err != nil {
+		t.Fatal(err)
+	}
+
+	change, err := ChangeFileStatus(workspace, "wos/01-work-order.md", domain.StatusDraft)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if change.Current != domain.StatusDraft {
+		t.Fatalf("change = %#v", change)
+	}
+	synced, err := markdown.ReadTopicMetadata(topic)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(synced.Files) != 1 {
+		t.Fatalf("manifest files = %#v", synced.Files)
+	}
+	entry := synced.Files[0]
+	if entry.Path != "wos/01-work-order.md" || entry.Status != domain.StatusDraft {
+		t.Fatalf("manifest entry = %#v", entry)
+	}
+	if entry.Type != markdown.FileType(entry.Path) || entry.Type != "task" {
+		t.Fatalf("manifest type = %q, want task", entry.Type)
+	}
+	if len(synced.Assets) != 1 || synced.Assets[0].Path != "assets/logo.png" || synced.Assets[0].Type != "image" {
+		t.Fatalf("manifest assets = %#v", synced.Assets)
+	}
+	if synced.ID != "00002" || synced.Title != "Topic" || synced.Created != "2026-09-19" || len(synced.Tags) != 1 {
+		t.Fatalf("metadata mutated = %#v", synced)
+	}
+
+	metaPath := filepath.Join(topic, markdown.MetaFilename)
+	first, err := os.ReadFile(metaPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ChangeFileStatus(workspace, "wos/01-work-order.md", domain.StatusDraft); err != nil {
+		t.Fatal(err)
+	}
+	second, err := os.ReadFile(metaPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(first) != string(second) {
+		t.Fatal("repeated status change rewrote an unchanged manifest")
+	}
+}
+
+func TestChangeFileStatusSyncsManifestForClosedTopic(t *testing.T) {
+	workspace, err := config.Initialize(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	topic := filepath.Join(workspace.Database, "00003-closed")
+	sub := filepath.Join(topic, "wos")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	metadata := markdown.TopicMetadataFromFrontmatter(
+		domain.Frontmatter{ID: "00003", Title: "Closed", Status: domain.StatusProgress, Created: "2026-09-19"}, "")
+	if err := markdown.WriteTopicMetadata(filepath.Join(topic, markdown.MetaFilename), metadata); err != nil {
+		t.Fatal(err)
+	}
+	document, err := markdown.NewDocument(
+		domain.Frontmatter{ID: "00003", Title: "Task", Status: domain.StatusProgress, Created: "2026-09-19"}, "body")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := markdown.WriteFile(filepath.Join(sub, "02-task.md"), document); err != nil {
+		t.Fatal(err)
+	}
+
+	relative := ".historic/.database/00003-closed/wos/02-task.md"
+	if _, err := ChangeFileStatus(workspace, relative, domain.StatusReview); err != nil {
+		t.Fatal(err)
+	}
+	synced, err := markdown.ReadTopicMetadata(topic)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(synced.Files) != 1 || synced.Files[0].Status != domain.StatusReview {
+		t.Fatalf("closed manifest = %#v", synced.Files)
+	}
+}
+
+func TestChangeFileStatusReportsManifestFailure(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("permission-based failure simulation requires a non-root user")
+	}
+	workspace, err := config.Initialize(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	topic := filepath.Join(workspace.Histories, "00004-topic")
+	sub := filepath.Join(topic, "wos")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	metadata := markdown.TopicMetadataFromFrontmatter(
+		domain.Frontmatter{ID: "00004", Title: "Topic", Status: domain.StatusProgress, Created: "2026-09-19"}, "")
+	if err := markdown.WriteTopicMetadata(filepath.Join(topic, markdown.MetaFilename), metadata); err != nil {
+		t.Fatal(err)
+	}
+	document, err := markdown.NewDocument(
+		domain.Frontmatter{ID: "00004", Title: "Task", Status: domain.StatusProgress, Created: "2026-09-19"}, "body")
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(sub, "01-task.md")
+	if err := markdown.WriteFile(target, document); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(topic, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.Chmod(topic, 0o755) }()
+
+	_, err = ChangeFileStatus(workspace, "wos/01-task.md", domain.StatusDraft)
+	if err == nil || !strings.Contains(err.Error(), "manifest sync failed") || !strings.Contains(err.Error(), "historic rebuild") {
+		t.Fatalf("manifest failure error = %v", err)
+	}
+	updated, err := markdown.ParseFile(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.Frontmatter.Status != domain.StatusDraft {
+		t.Fatalf("frontmatter not applied: %#v", updated.Frontmatter)
+	}
+	if indexed, err := indexer.Count(workspace); err != nil || indexed != 2 {
+		t.Fatalf("index count = %d, %v; index must stay consistent with Markdown", indexed, err)
+	}
+}
+
+func TestChangeFileStatusAmbiguousOpenAndClosedCopies(t *testing.T) {
+	workspace, err := config.Initialize(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	metadata := markdown.TopicMetadataFromFrontmatter(
+		domain.Frontmatter{ID: "00005", Title: "Dual", Status: domain.StatusProgress, Created: "2026-09-19"}, "")
+	document, err := markdown.NewDocument(
+		domain.Frontmatter{ID: "00005", Title: "Task", Status: domain.StatusProgress, Created: "2026-09-19"}, "body")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, topic := range []string{
+		filepath.Join(workspace.Histories, "00005-dual"),
+		filepath.Join(workspace.Database, "00005-dual"),
+	} {
+		if err := os.MkdirAll(filepath.Join(topic, "wos"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := markdown.WriteTopicMetadata(filepath.Join(topic, markdown.MetaFilename), metadata); err != nil {
+			t.Fatal(err)
+		}
+		if err := markdown.WriteFile(filepath.Join(topic, "wos", "01-task.md"), document); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if _, err := ChangeFileStatus(workspace, "wos/01-task.md", domain.StatusComplete); !errors.Is(err, domain.ErrConflict) {
+		t.Fatalf("ambiguous path error = %v, want ErrConflict", err)
+	}
+	closed := ".historic/.database/00005-dual/wos/01-task.md"
+	if _, err := ChangeFileStatus(workspace, closed, domain.StatusReview); err != nil {
+		t.Fatalf("explicit closed path rejected: %v", err)
+	}
+	synced, err := markdown.ReadTopicMetadata(filepath.Join(workspace.Database, "00005-dual"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(synced.Files) != 1 || synced.Files[0].Status != domain.StatusReview {
+		t.Fatalf("closed manifest = %#v", synced.Files)
 	}
 }
 
