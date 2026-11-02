@@ -41,10 +41,13 @@ Historic is a local-first work-memory CLI. Markdown is the source of truth. SQLi
 historic init
 historic create "My Topic"
 historic list
+historic list --sort id
 historic show <timestamp-topic-id>
 ```
 
 `historic create` allocates a monotonic Unix epoch-millisecond TopicID under an inter-process lock. During migration, legacy five-digit IDs can still be resolved. Use `historic add` to create notes or Work Orders. When multiple topics are active, provide an explicit `--id` for commands that need to select a topic.
+
+`historic list` is newest-first by default: `updated_at` DESC with `created_at` fallback, then ID DESC, then open-first, then path ASC — matching `find` and the TUI. `--sort` accepts `updated` (default), `created`, `title` (ascending), and `id` (legacy ID ASC, for scripts that depended on the old order). An unknown value fails with `invalid --sort value "..."; use updated, created, title, or id`. `--sort` also works with `--closed`. Sorting is in memory over filesystem views; the SQLite read model is untouched, and `list --json` keeps the same fields with only the element order changed.
 
 `historic list` and `historic show` display a derived topic status (human output and `computed_status` in `--json`). The value is a read model computed from managed member files and is never written to `_meta.yaml` or frontmatter. Aggregation is deterministic and uses priority, not arithmetic: no managed files -> empty; any open file -> `blocked` > `review` > `progress` > `planned` > `pending` > `draft` > `create`; otherwise `failed` wins, then all-`cancelled`, otherwise `complete`. `forwarded` and `archived` count as `complete`, and assets are ignored.
 
@@ -137,7 +140,7 @@ historic import 00001
 historic save [id] [--all] [--json]
 ```
 
-- `historic list` shows open topics by default; `historic list --closed` lists topics in `.historic/.database/`, including mirror snapshots that still have an open copy. The `--closed` flag does not mean “include closed.”
+- `historic list` shows open topics by default; `historic list --closed` lists topics in `.historic/.database/`, including mirror snapshots that still have an open copy. The `--closed` flag does not mean “include closed.” Default ordering is newest-first (`updated_at`, falling back to `created_at`); use `--sort updated|created|title|id` to change it, where `id` reproduces the legacy ID-ascending order.
 - `historic close <id>` closes one topic; `historic close --all` closes all open topics discovered at the start of that command. Without an ID or `--all`, `close` opens the interactive picker and acts on exactly one selected topic.
 - Bulk close processes topics deterministically by TopicID then path and reuses the single-topic close lifecycle. Each topic reports an individual result; a failure does not stop later topics, but any partial failure returns a non-zero exit code.
 - `historic close --all --json` returns one standard JSON envelope. `data` contains `succeeded`, `failed`, `total`, `closed`, and `failed_count`; `ok` is false when one or more topics fail. An empty target list succeeds with zero counts.

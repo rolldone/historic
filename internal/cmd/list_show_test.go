@@ -116,7 +116,7 @@ func TestListAndShowExposeComputedTopicStatus(t *testing.T) {
 	if err := json.Unmarshal([]byte(jsonList), &list); err != nil {
 		t.Fatalf("decode list: %v (%q)", err, jsonList)
 	}
-	if len(list.Data) != 2 || list.Data[0].ComputedStatus != "progress" || list.Data[1].ComputedStatus != "" {
+	if len(list.Data) != 2 || list.Data[0].ID != "00002" || list.Data[0].ComputedStatus != "" || list.Data[1].ComputedStatus != "progress" {
 		t.Fatalf("list computed status = %#v", list.Data)
 	}
 

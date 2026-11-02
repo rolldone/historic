@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"historic/internal/domain"
@@ -72,7 +73,7 @@ func TestListTopicsRejectsSymlinkedTopicRoot(t *testing.T) {
 	}
 }
 
-func TestListTopicsDefaultsToActiveAndSortsByID(t *testing.T) {
+func TestListTopicsDefaultsToActiveAndSortsByLegacyIDWithFlag(t *testing.T) {
 	store := newTestStore(t)
 	if _, err := store.CreateTopic("Second", "00002", ""); err != nil {
 		t.Fatal(err)
@@ -87,7 +88,7 @@ func TestListTopicsDefaultsToActiveAndSortsByID(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(archived, markdown.MetaFilename), []byte("id: 00003\ntitle: Archived\nstatus: archived\ncreated: 2026-09-18\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	views, err := store.ListTopics(false)
+	views, err := store.ListTopicsSorted(false, ListSortID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -101,6 +102,115 @@ func TestListTopicsDefaultsToActiveAndSortsByID(t *testing.T) {
 	if len(closed) != 1 || closed[0].ID != "00003" || closed[0].Storage != "closed" || closed[0].Active {
 		t.Fatalf("closed views = %#v", closed)
 	}
+}
+
+func writeListTopic(t *testing.T, root, folder, id, title, created, updated string) {
+	t.Helper()
+	path := filepath.Join(root, folder)
+	if err := os.MkdirAll(path, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	metadata := markdown.TopicMetadata{ID: domain.ID(id), Title: title, Created: created, Updated: updated}
+	if err := markdown.WriteTopicMetadata(filepath.Join(path, markdown.MetaFilename), metadata); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func viewIDs(views []TopicView) []string {
+	ids := make([]string, 0, len(views))
+	for _, view := range views {
+		ids = append(ids, view.ID+":"+view.Storage)
+	}
+	return ids
+}
+
+func TestListTopicsDefaultsToUpdatedDescendingWithCreatedFallback(t *testing.T) {
+	store := newTestStore(t)
+	writeListTopic(t, store.Workspace.Histories, "00001-old", "00001", "Old", "2026-01-01", "2026-01-05")
+	writeListTopic(t, store.Workspace.Histories, "00002-newest", "00002", "Newest", "2026-01-01", "2026-03-01")
+	writeListTopic(t, store.Workspace.Histories, "00003-no-updated", "00003", "Fallback", "2026-02-15", "")
+
+	views, err := store.ListTopics(false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"00002:open", "00003:open", "00001:open"}
+	if got := viewIDs(views); !equalStrings(got, want) {
+		t.Fatalf("default order = %v, want %v", got, want)
+	}
+
+	created, err := store.ListTopicsSorted(false, ListSortCreated)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantCreated := []string{"00003:open", "00002:open", "00001:open"}
+	if got := viewIDs(created); !equalStrings(got, wantCreated) {
+		t.Fatalf("created order = %v, want %v", got, wantCreated)
+	}
+}
+
+func TestListTopicsTieBreaksByIDDescendingThenOpenFirstThenPath(t *testing.T) {
+	store := newTestStore(t)
+	writeListTopic(t, store.Workspace.Histories, "00005-alpha", "00005", "Alpha", "2026-01-01", "2026-02-01")
+	writeListTopic(t, store.Workspace.Histories, "00004-beta", "00004", "Beta", "2026-01-01", "2026-02-01")
+
+	views, err := store.ListTopics(false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"00005:open", "00004:open"}
+	if got := viewIDs(views); !equalStrings(got, want) {
+		t.Fatalf("tie-break order = %v, want %v", got, want)
+	}
+}
+
+func TestListTopicsSortsTitleAndRejectsUnknownKey(t *testing.T) {
+	store := newTestStore(t)
+	writeListTopic(t, store.Workspace.Histories, "00001-zulu", "00001", "Zulu", "2026-01-01", "2026-02-01")
+	writeListTopic(t, store.Workspace.Histories, "00002-alpha", "00002", "alpha", "2026-01-01", "2026-01-01")
+
+	byTitle, err := store.ListTopicsSorted(false, ListSortTitle)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"00002:open", "00001:open"}
+	if got := viewIDs(byTitle); !equalStrings(got, want) {
+		t.Fatalf("title order = %v, want %v", got, want)
+	}
+
+	if _, err := store.ListTopicsSorted(false, ListSort("nope")); !errors.Is(err, ErrInvalidListSort) {
+		t.Fatalf("unknown sort error = %v", err)
+	}
+	if _, err := ParseListSort("nope"); err == nil || !strings.Contains(err.Error(), "use updated, created, title, or id") {
+		t.Fatalf("validation message = %v", err)
+	}
+}
+
+func TestListTopicsSortsClosedScope(t *testing.T) {
+	store := newTestStore(t)
+	writeListTopic(t, store.Workspace.Database, "00001-older", "00001", "Older", "2026-01-01", "2026-01-02")
+	writeListTopic(t, store.Workspace.Database, "00002-newer", "00002", "Newer", "2026-01-01", "2026-04-02")
+
+	views, err := store.ListTopicsSorted(true, ListSortUpdated)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"00002:closed", "00001:closed"}
+	if got := viewIDs(views); !equalStrings(got, want) {
+		t.Fatalf("closed order = %v, want %v", got, want)
+	}
+}
+
+func equalStrings(left, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for index := range left {
+		if left[index] != right[index] {
+			return false
+		}
+	}
+	return true
 }
 
 func TestListTopicsComputesDerivedTopicStatus(t *testing.T) {

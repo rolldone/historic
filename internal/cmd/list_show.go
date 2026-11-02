@@ -16,16 +16,21 @@ import (
 
 func newListCommand() *cobra.Command {
 	var closedOnly, jsonOutput bool
+	var sortValue string
 	command := &cobra.Command{
 		Use:   "list",
 		Short: "List Historic topics",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			sortKey, err := repository.ParseListSort(sortValue)
+			if err != nil {
+				return writeCommandError(cmd, "list", jsonOutput, err)
+			}
 			workspace, err := commandWorkspace()
 			if err != nil {
 				return writeCommandError(cmd, "list", jsonOutput, err)
 			}
-			views, err := repository.NewTopicStore(workspace).ListTopics(closedOnly)
+			views, err := repository.NewTopicStore(workspace).ListTopicsSorted(closedOnly, sortKey)
 			if err != nil {
 				return writeCommandError(cmd, "list", jsonOutput, err)
 			}
@@ -46,6 +51,7 @@ func newListCommand() *cobra.Command {
 		},
 	}
 	command.Flags().BoolVar(&closedOnly, "closed", false, "list only closed topics")
+	command.Flags().StringVar(&sortValue, "sort", string(repository.ListSortUpdated), "sort order: updated, created, title, or id")
 	command.Flags().BoolVar(&jsonOutput, "json", false, "output stable JSON")
 	return command
 }

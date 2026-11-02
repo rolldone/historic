@@ -134,10 +134,14 @@ Read topics with explicit closed scope when needed:
 
 ```sh
 historic list
+historic list --sort id
 historic list --closed
+historic list --closed --sort updated
 historic show <topic-id>
 historic show <topic-id> --closed
 ```
+
+`historic list` is newest-first by default: the primary key is `updated_at` (falling back to `created_at`) descending, then topic ID descending, then open-first, then path ascending. Use `--sort` to change it: `updated` (default), `created`, `title` (ascending), or `id` (legacy ID ascending, for scripts that relied on the old order). `--sort` combines with `--closed`. `list --json` keeps the same fields; only the element order changes.
 
 Search both storage states by default:
 

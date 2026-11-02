@@ -6,7 +6,7 @@
 historic init
 historic create "Topic Title" [--extends <topic-id>] [--json]
 historic add <name> [--id <topic-id>]
-historic list [--closed] [--json]
+historic list [--closed] [--sort updated|created|title|id] [--json]
 historic show <topic-id> [--closed] [--json]
 historic version [--json]
 ```
@@ -14,6 +14,17 @@ historic version [--json]
 `historic create --extends <topic-id>` records a one-way `extends: "<topic-id>"` relation in the new topic's `_meta.yaml` and returns it as `data.extends` (empty string when absent). The parent topic may be open or closed; it is validated before any directory is created and its own metadata is never modified. Tags, related entries, and files are not copied. The relation is immutable and cannot be changed or removed by a later command. `--extends` may be given only once, and an unknown or malformed parent fails without creating a topic directory.
 
 `historic list` shows open topics by default; `historic list --closed` shows topics stored in `.historic/.database/`, including mirror snapshots created by `historic save`. Open and closed topics are independent listing scopes, so a closed-only listing also includes topics that still have an open copy. `historic show <topic-id>` lists every storage version of the topic (open first) with `updated_at` and `mtime` markers; `--closed` limits the output to closed versions. Both commands display the derived topic status (`-` when the topic has no managed files) and include `computed_status` in `--json`; the value is never written to Markdown.
+
+`historic list` sorts newest-first by default, matching `find` and the TUI:
+
+```text
+updated_at DESC (fallback created_at DESC)
+  -> ID DESC
+  -> open-first (open copy before closed copy for the same TopicID)
+  -> path ASC
+```
+
+`--sort` accepts `updated` (default), `created` (created_at DESC), `title` (case-insensitive ascending, then the same tie-breakers), and `id` (legacy ID ASC + open-first, kept for scripts that depended on the old order). An unknown value fails with `invalid --sort value "..."; use updated, created, title, or id`. `--sort` works for both the open scope and `--closed`. Sorting happens in memory over filesystem views; the SQLite read model is untouched. `list --json` keeps the same fields and only the element order changes.
 
 `historic version` prints `VersionName`, `VersionCode`, `WorkspaceFormatVersion`, and `IndexSchemaVersion`. JSON output includes all four values as a stable envelope.
 

@@ -42,9 +42,48 @@ type FileView struct {
 	ForwardedTo string `json:"forwarded_to,omitempty"`
 }
 
-// ListTopics returns deterministic topic views for one storage scope. Both the
-// open workdir and its closed mirror are listed independently, matching find.
+// ListSort selects the ordering used by ListTopics.
+type ListSort string
+
+const (
+	// ListSortUpdated orders by the effective activity date descending
+	// (updated_at, falling back to created_at). It is the list default.
+	ListSortUpdated ListSort = "updated"
+	// ListSortCreated orders by created_at descending.
+	ListSortCreated ListSort = "created"
+	// ListSortTitle orders alphabetically by title ascending.
+	ListSortTitle ListSort = "title"
+	// ListSortID reproduces the legacy ID ascending order.
+	ListSortID ListSort = "id"
+)
+
+// ErrInvalidListSort reports an unsupported --sort value.
+var ErrInvalidListSort = errors.New("invalid --sort value")
+
+// ParseListSort validates one --sort value, naming the accepted values.
+func ParseListSort(value string) (ListSort, error) {
+	switch trimmed := ListSort(strings.TrimSpace(value)); trimmed {
+	case ListSortUpdated, ListSortCreated, ListSortTitle, ListSortID:
+		return trimmed, nil
+	default:
+		return "", fmt.Errorf("%w %q; use updated, created, title, or id", ErrInvalidListSort, value)
+	}
+}
+
+// ListTopics returns deterministic topic views for one storage scope using the
+// default activity ordering (updated_at descending, falling back to created_at).
 func (store TopicStore) ListTopics(closedOnly bool) ([]TopicView, error) {
+	return store.ListTopicsSorted(closedOnly, ListSortUpdated)
+}
+
+// ListTopicsSorted returns deterministic topic views for one storage scope.
+// Both the open workdir and its closed mirror are listed independently, matching
+// find. Ordering is applied in memory: the primary key, then ID descending, then
+// open-first, then path ascending.
+func (store TopicStore) ListTopicsSorted(closedOnly bool, sortKey ListSort) ([]TopicView, error) {
+	if _, err := ParseListSort(string(sortKey)); err != nil {
+		return nil, err
+	}
 	views := make([]TopicView, 0)
 	for _, root := range []struct {
 		path   string
@@ -88,13 +127,59 @@ func (store TopicStore) ListTopics(closedOnly bool) ([]TopicView, error) {
 			views = append(views, view)
 		}
 	}
-	sort.Slice(views, func(i, j int) bool {
-		if views[i].ID != views[j].ID {
-			return views[i].ID < views[j].ID
-		}
-		return views[i].Storage == "open" && views[j].Storage != "open"
-	})
+	sortViews(views, sortKey)
 	return views, nil
+}
+
+// sortViews applies a deterministic total order: the requested primary key,
+// then ID descending, then open-first, then path ascending.
+func sortViews(views []TopicView, sortKey ListSort) {
+	sort.SliceStable(views, func(i, j int) bool {
+		left, right := views[i], views[j]
+		if comparison, ordered := comparePrimary(left, right, sortKey); ordered && comparison != 0 {
+			return comparison < 0
+		}
+		if left.ID != right.ID {
+			if sortKey == ListSortID {
+				return left.ID < right.ID
+			}
+			return left.ID > right.ID
+		}
+		if (left.Storage == "open") != (right.Storage == "open") {
+			return left.Storage == "open"
+		}
+		return left.Path < right.Path
+	})
+}
+
+// comparePrimary returns -1 when left sorts first, 1 when right sorts first, and
+// 0 when the primary keys tie.
+func comparePrimary(left, right TopicView, sortKey ListSort) (int, bool) {
+	switch sortKey {
+	case ListSortCreated:
+		return strings.Compare(right.Created, left.Created), true
+	case ListSortTitle:
+		leftTitle, rightTitle := strings.ToLower(left.Title), strings.ToLower(right.Title)
+		if leftTitle != rightTitle {
+			return strings.Compare(leftTitle, rightTitle), true
+		}
+		return 0, true
+	case ListSortID:
+		return 0, true
+	default:
+		leftDate, rightDate := effectiveActivityDate(left), effectiveActivityDate(right)
+		if leftDate != rightDate {
+			return strings.Compare(rightDate, leftDate), true
+		}
+		return 0, true
+	}
+}
+
+func effectiveActivityDate(view TopicView) string {
+	if strings.TrimSpace(view.Updated) != "" {
+		return view.Updated
+	}
+	return view.Created
 }
 
 // ShowTopics returns all versions of a topic, open first; includeClosed filters to closed copies only.
