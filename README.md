@@ -107,7 +107,7 @@ Work status belongs to managed member files only. That status is authoritative; 
 
 Use `historic status <member-path> <status>` for work status and `historic close/open <id>` for storage movement.
 
-To run a Git command against the internal repository, use `historic git <git-args...>`. For example, `historic git status` runs with `.historic/.database` as its working directory and forwards Git streams directly. Every subcommand is passed only when explicitly requested; Historic never automatically runs `push`, `pull`, `commit`, or `init`.
+To run a Git command against the internal repository, use `historic git <git-args...>`. For example, `historic git status` runs with `.historic/.database` as its working directory and forwards Git streams directly. Every subcommand is passed only when explicitly requested; the passthrough never runs `push`, `pull`, `commit`, or `init` on its own. (Separately, lifecycle commands auto-commit mirror changes locally — see below.)
 
 ## Repository separation and backup
 
@@ -117,11 +117,17 @@ Because open workdirs (`.historic/<topic-id>-<slug>/`) are no longer backed up b
 
 ```sh
 historic save --all                   # mirror every open topic into .historic/.database
-historic git add --all                # stage inside the internal repository
-historic git commit -m "snapshot"     # commit locally (no push)
 ```
 
-`historic save` only mirrors bytes into the internal repository; it does not commit. This flow replaces the project repository as the backup mechanism for the Historic workspace. `historic close` also mirrors the topic but creates no commit, so run the `save`/`add`/`commit` flow for anything you want versioned.
+`historic save` mirrors bytes and then **auto-commits** in the internal repository, so the single command above is enough to snapshot the workspace. Auto-commit is local-only: it never pushes and never adds a remote. Operations that change the mirror (`save`, `close`, `status`/`delete` on a closed path, and `rebuild`) each produce **at most one** commit with a deterministic message:
+
+```text
+auto: save 1793622992705 (6 path berubah)
+auto: save --all (20 path berubah)
+auto: rebuild ? (3 path berubah)
+```
+
+If there is nothing to commit the step is skipped (`no-changes`); if the internal repository does not exist it is skipped (`no-repository`). A failed commit (for example a missing Git identity) is reported as a non-fatal warning and the operation still succeeds. Use `historic git commit -m "..."` when you want an explicitly labelled manual commit instead. This flow replaces the project repository as the backup mechanism for the Historic workspace.
 
 
 Read topics with explicit closed scope when needed:

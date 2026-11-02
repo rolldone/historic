@@ -54,6 +54,24 @@ func (repository Repository) AddAll() error {
 	return err
 }
 
+// StatusPorcelain returns the short machine-readable working tree status.
+func (repository Repository) StatusPorcelain() (string, error) {
+	return repository.run("status", "--porcelain")
+}
+
+// CommitConfigured commits staged changes using the repository's configured
+// identity. Unlike Commit it never injects fallback author values, so a missing
+// user.name/user.email surfaces as an actionable error.
+func (repository Repository) CommitConfigured(message string) (string, error) {
+	if strings.TrimSpace(message) == "" {
+		return "", fmt.Errorf("%w: commit message is empty", ErrGitConflict)
+	}
+	if _, err := repository.run("commit", "-m", message); err != nil {
+		return "", err
+	}
+	return repository.Head()
+}
+
 // Commit creates a commit and returns its ID. A clean tree returns ErrNothingToCommit.
 func (repository Repository) Commit(message string) (string, error) {
 	if strings.TrimSpace(message) == "" {

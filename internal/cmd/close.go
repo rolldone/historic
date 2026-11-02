@@ -22,7 +22,7 @@ func newCloseCommand() *cobra.Command {
 				return writeCommandError(cmd, "close", jsonOutput, fmt.Errorf("--all cannot be combined with a topic ID"))
 			}
 			if len(args) == 1 && args[0] != "all" {
-				return runStorageCommand(cmd, "close", args[0], jsonOutput, func(service lifecycle.Service, id domain.ID) (lifecycle.Change, error) {
+				return runStorageCommand(cmd, "close", args[0], jsonOutput, true, func(service lifecycle.Service, id domain.ID) (lifecycle.Change, error) {
 					return service.Close(id)
 				})
 			}
@@ -45,17 +45,22 @@ func newCloseCommand() *cobra.Command {
 				if selected == nil {
 					return nil
 				}
-				return runStorageCommand(cmd, "close", selected.ID, false, func(service lifecycle.Service, id domain.ID) (lifecycle.Change, error) {
+				return runStorageCommand(cmd, "close", selected.ID, false, true, func(service lifecycle.Service, id domain.ID) (lifecycle.Change, error) {
 					return service.Close(id)
 				})
 			}
 			result, closeErr := service.CloseAll()
+			var commit *lifecycle.AutoCommitResult
+			if closeErr == nil {
+				change := lifecycle.AutoCommitAll(workspace, "close")
+				commit = &change
+			}
 			response := struct {
-				Command string                   `json:"command"`
-				OK      bool                     `json:"ok"`
-				Data    lifecycle.CloseAllResult `json:"data"`
-				Error   any                      `json:"error"`
-			}{Command: "close", OK: closeErr == nil, Data: result}
+				Command string               `json:"command"`
+				OK      bool                 `json:"ok"`
+				Data    closeAllResponseData `json:"data"`
+				Error   any                  `json:"error"`
+			}{Command: "close", OK: closeErr == nil, Data: closeAllResponseData{CloseAllResult: result, Commit: commit}}
 			if closeErr != nil {
 				response.Error = closeErr.Error()
 			}
@@ -65,6 +70,9 @@ func newCloseCommand() *cobra.Command {
 				}
 			} else {
 				if err := writeCloseAllHuman(cmd, result); err != nil {
+					return err
+				}
+				if err := writeAutoCommitHuman(cmd, commit); err != nil {
 					return err
 				}
 			}
@@ -79,7 +87,7 @@ func newCloseCommand() *cobra.Command {
 	return command
 }
 
-func runStorageCommand(cmd *cobra.Command, name, value string, jsonOutput bool, move func(lifecycle.Service, domain.ID) (lifecycle.Change, error)) error {
+func runStorageCommand(cmd *cobra.Command, name, value string, jsonOutput, autoCommit bool, move func(lifecycle.Service, domain.ID) (lifecycle.Change, error)) error {
 	workspace, err := commandWorkspace()
 	if err != nil {
 		return writeCommandError(cmd, name, jsonOutput, err)
@@ -92,12 +100,19 @@ func runStorageCommand(cmd *cobra.Command, name, value string, jsonOutput bool, 
 	if err != nil {
 		return writeCommandError(cmd, name, jsonOutput, err)
 	}
-	data := lifecycleData{ID: change.ID.String(), Title: change.Title, Previous: change.Previous.String(), Current: change.Current.String(), Path: change.Path, Storage: change.Storage.String(), PreviousStorage: change.PreviousStorage.String(), Archived: change.Archived}
+	var commit *lifecycle.AutoCommitResult
+	if autoCommit {
+		result := lifecycle.AutoCommitTopic(workspace, name, id)
+		commit = &result
+	}
+	data := lifecycleData{ID: change.ID.String(), Title: change.Title, Previous: change.Previous.String(), Current: change.Current.String(), Path: change.Path, Storage: change.Storage.String(), PreviousStorage: change.PreviousStorage.String(), Archived: change.Archived, Commit: commit}
 	if jsonOutput {
 		return json.NewEncoder(cmd.OutOrStdout()).Encode(lifecycleOutput{Command: name, OK: true, Data: data})
 	}
-	_, err = fmt.Fprintf(cmd.OutOrStdout(), "%s %s: [%s] → [%s]\n", change.ID, change.Title, change.PreviousStorage, change.Storage)
-	return err
+	if _, err = fmt.Fprintf(cmd.OutOrStdout(), "%s %s: [%s] → [%s]\n", change.ID, change.Title, change.PreviousStorage, change.Storage); err != nil {
+		return err
+	}
+	return writeAutoCommitHuman(cmd, commit)
 }
 
 func writeCloseAllHuman(cmd *cobra.Command, result lifecycle.CloseAllResult) error {

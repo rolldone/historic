@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -59,7 +60,10 @@ func TestLogAndDiffCommands(t *testing.T) {
 			Message string `json:"message"`
 		} `json:"data"`
 	}
-	if err := json.Unmarshal(output.Bytes(), &log); err != nil || !log.OK || len(log.Data) != 0 {
+	if err := json.Unmarshal(output.Bytes(), &log); err != nil || !log.OK || len(log.Data) != 1 {
 		t.Fatalf("log = %q, %v", output.String(), err)
+	}
+	if !strings.HasPrefix(log.Data[0].Message, "auto: close 00001 ") {
+		t.Fatalf("log message = %q", log.Data[0].Message)
 	}
 }

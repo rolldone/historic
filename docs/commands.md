@@ -69,7 +69,7 @@ historic import <id> [--json]
 
 `save` and `close` without an ID open an interactive picker for open topics, sorted by newest `updated_at` (falling back to `_meta.yaml` mtime); type to filter, use Up/Down and Enter to select, or Esc/q to cancel. `save <id>` mirrors one topic while retaining its open workdir; `save --all` explicitly mirrors all open topics. `close <id>` mirrors then closes one topic; `close --all` explicitly closes all open topics and reports partial failures. `open` without an ID opens the same picker scoped to closed topics; `open <id>` remains available. JSON mode without an ID returns an error instead of starting an interactive picker. `--all` cannot be combined with an ID and is supported only by save and close.
 
-`close`, `open`, and `import` change storage only and preserve member frontmatter statuses and topic contents. A partial failure in `close --all` continues processing and exits non-zero; `--json` returns one envelope with per-topic results and totals. Save never changes storage and never creates a Git commit; use `historic git commit -m "message"` to commit explicitly.
+`close`, `open`, and `import` change storage only and preserve member frontmatter statuses and topic contents. A partial failure in `close --all` continues processing and exits non-zero; `--json` returns one envelope with per-topic results and totals. Save never changes storage. `save` and `close` auto-commit the internal repository (see Auto-commit below); use `historic git commit -m "message"` only when you want an explicitly labelled manual commit.
 
 ## File status
 
@@ -167,9 +167,37 @@ historic git log -1 --oneline
 historic git diff --stat
 ```
 
-All Git subcommands and flags are passed through as requested, including `push`, `pull`, `commit`, and `init`; Historic does not run these operations automatically. An explicit `historic git init` is passed to Git normally. The proxy does not otherwise initialize the repository or alter Git configuration. With no Git arguments it prints usage. `historic log`, `historic diff`, and `historic save` remain separate Historic commands.
+All Git subcommands and flags are passed through as requested, including `push`, `pull`, `commit`, and `init`; the passthrough itself runs nothing automatically. An explicit `historic git init` is passed to Git normally. The proxy does not otherwise initialize the repository or alter Git configuration. With no Git arguments it prints usage. `historic log`, `historic diff`, and `historic save` remain separate Historic commands.
 
-Snapshots are local-only and include both open and closed topic storage under `.historic`. `save` refreshes the closed snapshot while leaving the open topic intact; `close` mirrors then removes the open workdir. Both are filesystem operations and do not create commits or automatically change work status. The open copy is authoritative for writes. Search/show can display both versions; compare `updated_at` (frontmatter) and file `mtime` to identify which snapshot is newer.
+Snapshots are local-only and include both open and closed topic storage under `.historic`. `save` refreshes the closed snapshot while leaving the open topic intact; `close` mirrors then removes the open workdir. Both are filesystem operations plus one automatic internal commit; storage movement never changes work status. The open copy is authoritative for writes. Search/show can display both versions; compare `updated_at` (frontmatter) and file `mtime` to identify which snapshot is newer.
+
+## Auto-commit
+
+Operations that change the closed mirror `.historic/.database` run `git add --all` and `git commit` in the internal repository. Auto-commit is local-only: no push, no remote, no branch/tag/checkout, and no workdir/`.git`-tracked files.
+
+| Trigger | Message |
+| --- | --- |
+| `save <topic-id>` | `auto: save <topic-id> (n path berubah)` |
+| `save --all` | `auto: save --all (n path berubah)` — one aggregate commit |
+| `close <topic-id>` | `auto: close <topic-id> (n path berubah)` |
+| `close --all` | `auto: close --all (n path berubah)` — one aggregate commit |
+| `status`/`delete` on a closed path | `auto: status <topic-id> (1 path berubah)` |
+| `rebuild` | `auto: rebuild ? (n path berubah)` |
+
+- `n` is the number of `git status --porcelain` entries counted before staging; `?` is used when there is no single target topic.
+- The `auto:` prefix is reserved for Historic. Manual commits via `historic git commit -m` never use it.
+- One operation produces at most one commit. `close --all` and `save --all` produce a single aggregate commit, never one per topic.
+- Changes in an **open** workdir do not commit; use `historic save` to mirror them first. `open` (reopen) does not trigger a commit.
+- No changes: the step is skipped with `commit.reason` = `no-changes` (not an error). No internal repository: skipped with `no-repository`.
+- A commit failure (including a missing Git identity) is a non-fatal warning: the main operation still succeeds, exits zero, and recommends running `historic git add --all` and `historic git commit -m` manually. Historic never invents `user.name`/`user.email`.
+
+Commands that trigger auto-commit include a nullable `commit` object on the JSON envelope:
+
+```json
+{"committed": true, "hash": "abc1234", "message": "auto: save 1793622992705 (6 path berubah)", "changed_paths": 6}
+```
+
+or `{"committed": false, "reason": "no-changes"}`. Human output adds one line such as `auto-commit: abc1234 auto: save 1793622992705 (6 path berubah)`, `auto-commit: skipped (no-changes)`, or a `auto-commit gagal (tidak fatal): ...` warning.
 
 ## Rebuild and output
 

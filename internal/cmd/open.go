@@ -18,7 +18,7 @@ func newOpenCommand() *cobra.Command {
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) > 0 {
-				return runStorageCommand(cmd, "open", args[0], jsonOutput, func(service lifecycle.Service, id domain.ID) (lifecycle.Change, error) {
+				return runStorageCommand(cmd, "open", args[0], jsonOutput, false, func(service lifecycle.Service, id domain.ID) (lifecycle.Change, error) {
 					return service.Open(id)
 				})
 			}
@@ -36,7 +36,7 @@ func newOpenCommand() *cobra.Command {
 			if selected == nil {
 				return nil
 			}
-			return runStorageCommand(cmd, "open", selected.ID, false, func(service lifecycle.Service, id domain.ID) (lifecycle.Change, error) {
+			return runStorageCommand(cmd, "open", selected.ID, false, false, func(service lifecycle.Service, id domain.ID) (lifecycle.Change, error) {
 				return service.Open(id)
 			})
 		},

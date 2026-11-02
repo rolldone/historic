@@ -61,21 +61,30 @@ historic git diff --stat
 ```
 
 - Arguments are passed directly to the Git executable without shell interpretation; stdin, stdout, stderr, and Git's exit status are forwarded.
-- The proxy does not run Git actions automatically. It forwards only the subcommand the user explicitly supplies, including `push`, `pull`, `commit`, and `init`; never append or infer such actions.
+- The proxy does not run Git actions automatically. It forwards only the subcommand the user explicitly supplies, including `push`, `pull`, `commit`, and `init`; never append or infer such actions. Auto-commit (below) lives in the lifecycle layer, never in this passthrough.
 - Do not add a remote, change Git configuration, or push unless explicitly requested by the user.
 - With no Git arguments, the command prints usage. This proxy is distinct from Historic's `historic log`, `historic diff`, `historic save`, and `historic restore` commands.
+
+## Auto-commit (internal, local-only)
+
+Operations that change the closed mirror `.historic/.database` run `git add --all` + `git commit` in the internal repository. It is local-only: no push, no remote, no branch/tag/checkout.
+
+- Triggers: `save <id>`/`--all`, `close <id>`/`--all`, `status`/`delete` on a closed path, and `rebuild`.
+- One operation produces at most one commit (`--all` is a single aggregate commit, not one per topic).
+- Message format is locked: `auto: <command> <topic-id> (n path berubah)`; bulk uses `--all`; `rebuild` uses `?` as the target. The `auto:` prefix is reserved for Historic — never use it for manual commits.
+- No changes -> skipped (`commit.reason = no-changes`); no `.database/.git` -> skipped (`no-repository`). Both are successful, silent-in-JSON skips, not errors.
+- Commit failure (including a missing Git identity) is a non-fatal warning: the main operation still succeeds, and JSON exposes `commit.committed: false` with the reason. Never invent Git identity values; suggest `historic git config` instead.
+- Open workdir changes do not commit. Mirror them with `historic save` to get a commit.
 
 ## Backup flow (open workdirs)
 
 Open workdirs (`.historic/<topic-id>-<slug>/`) are no longer backed up by the project repository. Snapshot them through the internal repository:
 
 ```sh
-historic save --all                   # mirror every open topic into .historic/.database
-historic git add --all                # stage inside the internal repository
-historic git commit -m "snapshot"     # commit locally (no push)
+historic save --all                   # mirror + auto-commit every open topic
 ```
 
-- `historic save` mirrors bytes only; it creates no commit. `historic close` also mirrors but creates no commit.
+- `historic save` mirrors bytes and then auto-commits, so this one command is the snapshot. Use `historic git commit -m "..."` only for an explicitly labelled manual commit.
 - This flow replaces the project repository as the workspace backup mechanism. Never add a remote or push the internal repository.
 
 ## Search and TUI
@@ -115,8 +124,8 @@ historic status <path> forwarded
 - Assigning a non-`forwarded` status clears `forwarded_to`; assigning `forwarded` keeps an existing destination but does not create one. Use `historic forward` to record a destination.
 - `computed_status` is an SQLite derived aggregate/cache value only. Recompute it through normal write operations or `historic rebuild`; never write it into `_meta.yaml` or frontmatter.
 - `close` and `open` change storage only and never change member status.
-- `historic save [id] [--all] [--json]` mirrors open topics into `.historic/.database/` and leaves open workdirs intact. Without an ID it opens an interactive newest-first picker for exactly one open topic; with a topic ID it mirrors only that topic; `--all` explicitly mirrors every open topic. It does not accept `-m/--message` and creates no Git commit.
-- `close` mirrors an open topic to `.database` before removing the open workdir; `close` also creates no Git commit. Use `historic git commit -m "message"` for explicit commits.
+- `historic save [id] [--all] [--json]` mirrors open topics into `.historic/.database/` and leaves open workdirs intact. Without an ID it opens an interactive newest-first picker for exactly one open topic; with a topic ID it mirrors only that topic; `--all` explicitly mirrors every open topic. It does not accept `-m/--message`; it auto-commits the mirror with a deterministic `auto:` message.
+- `close` mirrors an open topic to `.database` before removing the open workdir; `close` then auto-commits once, covering both the mirror and the workdir removal. Use `historic git commit -m "message"` only for an explicitly labelled manual commit.
 - `historic open [id] [--json]` reopens a closed topic. Without an ID it opens an interactive newest-first picker scoped to closed topics. `--json` without an ID returns an error instead of starting a picker; `--all` is not supported for open.
 - A topic may have both open and closed copies. Open remains authoritative for writes; `find`, `show`, and TUI display versions separately. Compare frontmatter `updated_at` and file `mtime` to identify the newer copy.
 

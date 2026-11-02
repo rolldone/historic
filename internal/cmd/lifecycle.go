@@ -51,12 +51,13 @@ type lifecycleOutput struct {
 }
 
 type lifecycleData struct {
-	ID              string `json:"id"`
-	Title           string `json:"title"`
-	Previous        string `json:"previous"`
-	Current         string `json:"current"`
-	Path            string `json:"path"`
-	Storage         string `json:"storage"`
-	PreviousStorage string `json:"previous_storage,omitempty"`
-	Archived        bool   `json:"archived"`
+	ID              string                      `json:"id"`
+	Title           string                      `json:"title"`
+	Previous        string                      `json:"previous"`
+	Current         string                      `json:"current"`
+	Path            string                      `json:"path"`
+	Storage         string                      `json:"storage"`
+	PreviousStorage string                      `json:"previous_storage,omitempty"`
+	Archived        bool                        `json:"archived"`
+	Commit          *lifecycle.AutoCommitResult `json:"commit,omitempty"`
 }

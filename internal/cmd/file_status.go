@@ -29,15 +29,22 @@ func newFileStatusCommand() *cobra.Command {
 			if err != nil {
 				return writeCommandError(cmd, "status", jsonOutput, err)
 			}
+			var commit *lifecycle.AutoCommitResult
+			if id, closed := closedTopicID(workspace, change.Path); closed {
+				result := lifecycle.AutoCommitTopic(workspace, "status", id)
+				commit = &result
+			}
 			response := fileStatusOutput{Command: "status", OK: true, Data: fileStatusData{
 				ID: change.ID.String(), Title: change.Title, Previous: change.Previous.String(),
-				Current: change.Current.String(), Path: change.Path, Updated: change.Updated,
+				Current: change.Current.String(), Path: change.Path, Updated: change.Updated, Commit: commit,
 			}, Error: nil}
 			if jsonOutput {
 				return json.NewEncoder(cmd.OutOrStdout()).Encode(response)
 			}
-			_, err = fmt.Fprintf(cmd.OutOrStdout(), "%s %s: %s → %s (%s)\n", change.ID, change.Path, change.Previous, change.Current, change.Updated)
-			return err
+			if _, err = fmt.Fprintf(cmd.OutOrStdout(), "%s %s: %s → %s (%s)\n", change.ID, change.Path, change.Previous, change.Current, change.Updated); err != nil {
+				return err
+			}
+			return writeAutoCommitHuman(cmd, commit)
 		},
 	}
 	command.Flags().BoolVar(&jsonOutput, "json", false, "output stable JSON")
@@ -52,10 +59,11 @@ type fileStatusOutput struct {
 }
 
 type fileStatusData struct {
-	ID       string `json:"id"`
-	Title    string `json:"title"`
-	Previous string `json:"previous"`
-	Current  string `json:"current"`
-	Path     string `json:"path"`
-	Updated  string `json:"updated"`
+	ID       string                      `json:"id"`
+	Title    string                      `json:"title"`
+	Previous string                      `json:"previous"`
+	Current  string                      `json:"current"`
+	Path     string                      `json:"path"`
+	Updated  string                      `json:"updated"`
+	Commit   *lifecycle.AutoCommitResult `json:"commit,omitempty"`
 }

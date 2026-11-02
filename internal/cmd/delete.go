@@ -30,7 +30,7 @@ func newDeleteCommand() *cobra.Command {
 			if err != nil {
 				return writeCommandError(cmd, "delete", jsonOutput, err)
 			}
-			return writeDeleteResult(cmd, "delete", change, jsonOutput)
+			return writeDeleteResult(cmd, "delete", change, jsonOutput, nil)
 		},
 	}
 	command.Flags().BoolVar(&confirmed, "yes", false, "confirm permanent deletion")
@@ -87,7 +87,12 @@ func newTopicDestructiveCommand(name, short string, purge bool) *cobra.Command {
 			if err != nil {
 				return writeCommandError(cmd, name, jsonOutput, err)
 			}
-			return writeDeleteResult(cmd, name, change, jsonOutput)
+			var commit *lifecycle.AutoCommitResult
+			if change.Storage == domain.StorageClosed {
+				result := lifecycle.AutoCommitTopic(workspace, name, id)
+				commit = &result
+			}
+			return writeDeleteResult(cmd, name, change, jsonOutput, commit)
 		},
 	}
 	command.Flags().BoolVar(&openOnly, "open", false, "target the open workdir")
@@ -100,8 +105,8 @@ func newTopicDestructiveCommand(name, short string, purge bool) *cobra.Command {
 	return command
 }
 
-func writeDeleteResult(cmd *cobra.Command, name string, change lifecycle.DeleteChange, jsonOutput bool) error {
-	data := deleteData{ID: change.ID.String(), Title: change.Title, Path: change.Path, Storage: change.Storage.String(), Target: change.Target, Permanent: change.Permanent}
+func writeDeleteResult(cmd *cobra.Command, name string, change lifecycle.DeleteChange, jsonOutput bool, commit *lifecycle.AutoCommitResult) error {
+	data := deleteData{ID: change.ID.String(), Title: change.Title, Path: change.Path, Storage: change.Storage.String(), Target: change.Target, Permanent: change.Permanent, Commit: commit}
 	if jsonOutput {
 		return json.NewEncoder(cmd.OutOrStdout()).Encode(deleteOutput{Command: name, OK: true, Data: data, Error: nil})
 	}
@@ -112,8 +117,10 @@ func writeDeleteResult(cmd *cobra.Command, name string, change lifecycle.DeleteC
 	if change.Permanent {
 		consequence = "permanently removed"
 	}
-	_, err := fmt.Fprintf(cmd.OutOrStdout(), "Deleted %s %s [%s] at %s: %s\n", data.ID, data.Target, data.Storage, data.Path, consequence)
-	return err
+	if _, err := fmt.Fprintf(cmd.OutOrStdout(), "Deleted %s %s [%s] at %s: %s\n", data.ID, data.Target, data.Storage, data.Path, consequence); err != nil {
+		return err
+	}
+	return writeAutoCommitHuman(cmd, commit)
 }
 
 type deleteOutput struct {
@@ -124,10 +131,11 @@ type deleteOutput struct {
 }
 
 type deleteData struct {
-	ID        string `json:"id"`
-	Title     string `json:"title"`
-	Path      string `json:"path"`
-	Storage   string `json:"storage"`
-	Target    string `json:"target"`
-	Permanent bool   `json:"permanent"`
+	ID        string                      `json:"id"`
+	Title     string                      `json:"title"`
+	Path      string                      `json:"path"`
+	Storage   string                      `json:"storage"`
+	Target    string                      `json:"target"`
+	Permanent bool                        `json:"permanent"`
+	Commit    *lifecycle.AutoCommitResult `json:"commit,omitempty"`
 }

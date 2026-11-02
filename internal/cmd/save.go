@@ -29,10 +29,21 @@ func newSaveCommand() *cobra.Command {
 			service := lifecycle.NewService(workspace)
 			var result lifecycle.MirrorAllResult
 			var saveErr error
+			var commit *lifecycle.AutoCommitResult
 			if len(args) == 1 {
 				result, saveErr = mirrorOne(service, args[0])
+				if saveErr == nil {
+					if id, idErr := domain.ParseTopicIdentity(args[0]); idErr == nil {
+						change := lifecycle.AutoCommitTopic(workspace, "save", id)
+						commit = &change
+					}
+				}
 			} else if all {
 				result, saveErr = service.MirrorAllOpen()
+				if saveErr == nil {
+					change := lifecycle.AutoCommitAll(workspace, "save")
+					commit = &change
+				}
 			} else if jsonOutput {
 				return writeCommandError(cmd, "save", true, fmt.Errorf("topic ID or --all is required with --json"))
 			} else {
@@ -44,13 +55,19 @@ func newSaveCommand() *cobra.Command {
 					return nil
 				}
 				result, saveErr = mirrorOne(service, selected.ID)
+				if saveErr == nil {
+					if id, idErr := domain.ParseTopicIdentity(selected.ID); idErr == nil {
+						change := lifecycle.AutoCommitTopic(workspace, "save", id)
+						commit = &change
+					}
+				}
 			}
 			response := struct {
-				Command string                    `json:"command"`
-				OK      bool                      `json:"ok"`
-				Data    lifecycle.MirrorAllResult `json:"data"`
-				Error   any                       `json:"error"`
-			}{Command: "save", OK: saveErr == nil, Data: result}
+				Command string           `json:"command"`
+				OK      bool             `json:"ok"`
+				Data    saveResponseData `json:"data"`
+				Error   any              `json:"error"`
+			}{Command: "save", OK: saveErr == nil, Data: saveResponseData{MirrorAllResult: result, Commit: commit}}
 			if saveErr != nil {
 				response.Error = saveErr.Error()
 			}
@@ -59,6 +76,8 @@ func newSaveCommand() *cobra.Command {
 					return err
 				}
 			} else if err := writeMirrorAllHuman(cmd, result); err != nil {
+				return err
+			} else if err := writeAutoCommitHuman(cmd, commit); err != nil {
 				return err
 			}
 			if saveErr != nil {

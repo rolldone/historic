@@ -28,12 +28,15 @@ func newRebuildCommand() *cobra.Command {
 			if err != nil {
 				return writeCommandError(cmd, "rebuild", jsonOutput, fmt.Errorf("unified rebuild failed; run historic doctor for diagnosis: %w", err))
 			}
-			response := rebuildOutput{Command: "rebuild", OK: true, Data: rebuildData{Topics: change.Topics, Updated: change.Updated, Errors: change.Errors, Records: change.Records, Index: workspace.RelativePath(workspace.Index)}, Error: nil}
+			commit := lifecycle.AutoCommitRecovery(workspace, "rebuild")
+			response := rebuildOutput{Command: "rebuild", OK: true, Data: rebuildData{Topics: change.Topics, Updated: change.Updated, Errors: change.Errors, Records: change.Records, Index: workspace.RelativePath(workspace.Index), Commit: &commit}, Error: nil}
 			if jsonOutput {
 				return json.NewEncoder(cmd.OutOrStdout()).Encode(response)
 			}
-			_, err = fmt.Fprintf(cmd.OutOrStdout(), "Rebuilt index with %d records at %s\n", response.Data.Records, response.Data.Index)
-			return err
+			if _, err = fmt.Fprintf(cmd.OutOrStdout(), "Rebuilt index with %d records at %s\n", response.Data.Records, response.Data.Index); err != nil {
+				return err
+			}
+			return writeAutoCommitHuman(cmd, &commit)
 		},
 	}
 	command.Flags().BoolVar(&jsonOutput, "json", false, "output stable JSON")
@@ -48,9 +51,10 @@ type rebuildOutput struct {
 }
 
 type rebuildData struct {
-	Topics  int    `json:"topics"`
-	Updated int    `json:"updated"`
-	Errors  int    `json:"errors"`
-	Records int    `json:"records"`
-	Index   string `json:"index"`
+	Topics  int                         `json:"topics"`
+	Updated int                         `json:"updated"`
+	Errors  int                         `json:"errors"`
+	Records int                         `json:"records"`
+	Index   string                      `json:"index"`
+	Commit  *lifecycle.AutoCommitResult `json:"commit"`
 }
