@@ -11,3 +11,7 @@
 
 # Local sync/debug scratch
 .sync_temp/
+
+# Historic workspace — dipisahkan dari repo project (lihat SPEC 1793622083045)
+# Repo internal (.historic/.database) adalah version control Historic, bukan repo project.
+.historic/
