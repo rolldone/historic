@@ -11,10 +11,10 @@ import (
 	"historic/internal/markdown"
 )
 
-// TestFindReturnsBothStorageVersionsForTopicsAndFiles verifies that one TopicID
-// mirrored into closed storage produces one result per version, for topics and
-// for managed files, with the open copy ordered first.
-func TestFindReturnsBothStorageVersionsForTopicsAndFiles(t *testing.T) {
+// TestFindDedupesStorageVersionsForTopicsAndFiles verifies that one TopicID
+// mirrored into closed storage produces one result per logical file, preferring
+// the open storage region regardless of mtime/updated_at.
+func TestFindDedupesStorageVersionsForTopicsAndFiles(t *testing.T) {
 	workspace, err := config.Initialize(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -44,23 +44,22 @@ func TestFindReturnsBothStorageVersionsForTopicsAndFiles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	fileStorages := map[string]int{}
-	for _, item := range filePages.Items {
-		fileStorages[item.Storage]++
+	if len(filePages.Items) != 1 {
+		t.Fatalf("deduped file results = %#v, want exactly one", filePages.Items)
 	}
-	if fileStorages[domain.StorageOpen.String()] != 1 || fileStorages[domain.StorageClosed.String()] != 1 {
-		t.Fatalf("file versions = %v, want one open and one closed", fileStorages)
+	if item := filePages.Items[0]; item.Storage != domain.StorageOpen.String() || item.Path != ".historic/00001-dual/note.md" {
+		t.Fatalf("deduped file result = %+v, want open path", item)
 	}
 
 	topicPages, err := RecentTopicsPage(workspace, Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(topicPages.Items) != 2 {
-		t.Fatalf("recent topics = %d, want 2 versions", len(topicPages.Items))
+	if len(topicPages.Items) != 1 {
+		t.Fatalf("recent topics = %d, want one deduped version", len(topicPages.Items))
 	}
-	if topicPages.Items[0].Storage != domain.StorageOpen.String() || topicPages.Items[1].Storage != domain.StorageClosed.String() {
-		t.Fatalf("recent topic order = %q, %q", topicPages.Items[0].Storage, topicPages.Items[1].Storage)
+	if topicPages.Items[0].Storage != domain.StorageOpen.String() {
+		t.Fatalf("recent topic storage = %q, want open", topicPages.Items[0].Storage)
 	}
 
 	openPages, err := FindPage(workspace, Options{Keyword: "dualtoken", OpenOnly: true})

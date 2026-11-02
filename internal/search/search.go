@@ -150,9 +150,8 @@ func RecentTopicsPage(workspace config.Workspace, options Options) (SearchPage, 
 	}
 	defer database.Close()
 	where, args := topicPredicates(options)
-	args = append(args, pagination.PageSize+1, (pagination.Page-1)*pagination.PageSize)
 	rows, err := database.Query(`SELECT id, title, COALESCE(description, ''), COALESCE(computed_status, ''), storage, path, tags, created_at, COALESCE(updated_at, '')
-		FROM topics WHERE `+strings.Join(where, " AND ")+` ORDER BY `+recentOrder(options.Sort)+` LIMIT ? OFFSET ?`, args...)
+		FROM topics WHERE `+strings.Join(where, " AND ")+` ORDER BY `+recentOrder(options.Sort), args...)
 	if err != nil {
 		return SearchPage{}, fmt.Errorf("query recent topics: %w", err)
 	}
@@ -174,7 +173,7 @@ func RecentTopicsPage(workspace config.Workspace, options Options) (SearchPage, 
 	if err := rows.Err(); err != nil {
 		return SearchPage{}, err
 	}
-	return makeSearchPage(results, pagination), nil
+	return paginateSearchPage(dedupeTopics(results), pagination), nil
 }
 
 // Find searches topics and files using the shared read model and weighted FTS5.
@@ -230,15 +229,14 @@ func FindPage(workspace config.Workspace, options Options) (SearchPage, error) {
 		LEFT JOIN files AS f ON historic_fts.entity_type = 'file' AND CAST(f.id AS TEXT) = historic_fts.entity_id AND f.storage = historic_fts.storage
 		LEFT JOIN topics AS t ON t.storage = historic_fts.storage AND t.id = CASE WHEN historic_fts.entity_type = 'topic' THEN historic_fts.entity_id ELSE f.topic_id END
 		WHERE ` + strings.Join(where, " AND ") + `
-		ORDER BY ` + resultOrder(options.Sort) + ` LIMIT ? OFFSET ?`
-	args = append(args, pagination.PageSize+1, (pagination.Page-1)*pagination.PageSize)
+		ORDER BY ` + resultOrder(options.Sort)
 	rows, err := database.Query(statement, args...)
 	if err != nil {
 		return SearchPage{}, fmt.Errorf("invalid FTS query: %w; try plain keywords and keep filters in their flags", err)
 	}
 	defer rows.Close()
 	results := make([]Result, 0, pagination.PageSize+1)
-	seen := make(map[string]struct{})
+	seen := make(map[string]int)
 	for rows.Next() {
 		var result Result
 		var tagsJSON, topicTagsJSON, snippetText, filename string
@@ -253,11 +251,11 @@ func FindPage(workspace config.Workspace, options Options) (SearchPage, error) {
 		if result.Type == "historic_file" || result.Type == "asset" {
 			logicalPath = strings.TrimPrefix(result.Path, topicPath+"/")
 		}
-		key := result.Type + "\x00" + result.TopicID + "\x00" + result.Storage + "\x00" + logicalPath
-		if _, exists := seen[key]; exists {
-			continue
-		}
-		seen[key] = struct{}{}
+		// Dedupe key is the logical file identity, independent of storage: the
+		// same (TopicID, relative path) must produce a single result. Preference
+		// is by storage region, never by mtime/updated_at, because a mirror can
+		// be newer while the open copy remains authoritative.
+		key := result.TopicID + "\x00" + logicalPath
 		result.Tags = decodeStrings(tagsJSON)
 		result.Score = -rank
 		result.CreatedAt, result.UpdatedAt, result.Mtime, result.Hash, result.Size = createdAt, updatedAt, mtime, hash, size
@@ -280,22 +278,57 @@ func FindPage(workspace config.Workspace, options Options) (SearchPage, error) {
 			result.ID = result.TopicID
 		}
 		result.Active = result.Storage == domain.StorageOpen.String()
+		if index, exists := seen[key]; exists {
+			if results[index].Storage != domain.StorageOpen.String() && result.Storage == domain.StorageOpen.String() {
+				results[index] = result
+			}
+			continue
+		}
+		seen[key] = len(results)
 		results = append(results, result)
 	}
 	if err := rows.Err(); err != nil {
 		return SearchPage{}, fmt.Errorf("iterate search results: %w", err)
 	}
-	return makeSearchPage(results, pagination), nil
+	return paginateSearchPage(results, pagination), nil
 }
 
-func makeSearchPage(results []Result, pagination Pagination) SearchPage {
-	if len(results) > pagination.PageSize {
-		results = results[:pagination.PageSize]
-		pagination.HasMore = true
-		nextPage := pagination.Page + 1
-		pagination.NextPage = &nextPage
+// dedupeTopics keeps one recent-topic row per TopicID, preferring open storage.
+// Recent-topic browsing returns topics only, so TopicID is the logical identity.
+func dedupeTopics(results []Result) []Result {
+	if len(results) == 0 {
+		return results
 	}
-	return SearchPage{Items: results, Pagination: pagination}
+	indexes := make(map[string]int, len(results))
+	deduped := make([]Result, 0, len(results))
+	for _, result := range results {
+		if index, exists := indexes[result.TopicID]; exists {
+			if deduped[index].Storage != domain.StorageOpen.String() && result.Storage == domain.StorageOpen.String() {
+				deduped[index] = result
+			}
+			continue
+		}
+		indexes[result.TopicID] = len(deduped)
+		deduped = append(deduped, result)
+	}
+	return deduped
+}
+
+// paginateSearchPage applies offset/limit after dedupe so pagination metadata
+// reflects the deduped result set rather than raw read-model rows.
+func paginateSearchPage(results []Result, pagination Pagination) SearchPage {
+	offset := (pagination.Page - 1) * pagination.PageSize
+	if offset >= len(results) {
+		return SearchPage{Items: results[len(results):], Pagination: pagination}
+	}
+	end := offset + pagination.PageSize
+	if end >= len(results) {
+		return SearchPage{Items: results[offset:], Pagination: pagination}
+	}
+	pagination.HasMore = true
+	nextPage := pagination.Page + 1
+	pagination.NextPage = &nextPage
+	return SearchPage{Items: results[offset:end], Pagination: pagination}
 }
 
 func openIndex(workspace config.Workspace) (*sql.DB, error) {

@@ -124,8 +124,8 @@ func TestOpenCopyBasedIsolatedSmoke(t *testing.T) {
 		t.Fatalf("closed snapshot was removed: %v", err)
 	}
 	results, err := search.Find(workspace, search.Options{Keyword: "manual"})
-	if err != nil || len(results) != 2 || results[0].Storage != domain.StorageOpen.String() || results[1].Storage != domain.StorageClosed.String() {
-		t.Fatalf("search results = %#v err=%v", results, err)
+	if err != nil || len(results) != 1 || results[0].Storage != domain.StorageOpen.String() {
+		t.Fatalf("search results = %#v err=%v, want one deduped open row", results, err)
 	}
 }
 
