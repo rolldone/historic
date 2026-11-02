@@ -38,7 +38,7 @@ func newListCommand() *cobra.Command {
 				return err
 			}
 			for _, view := range views {
-				if _, err = fmt.Fprintf(cmd.OutOrStdout(), "%s  %-6s  %s  %s\n", view.ID, view.Storage, view.Title, view.Path); err != nil {
+				if _, err = fmt.Fprintf(cmd.OutOrStdout(), "%s  %-6s  %-9s  %s  %s\n", view.ID, view.Storage, displayTopicStatus(view.ComputedStatus), view.Title, view.Path); err != nil {
 					return err
 				}
 			}
@@ -74,7 +74,7 @@ func newShowCommand() *cobra.Command {
 				return json.NewEncoder(cmd.OutOrStdout()).Encode(result)
 			}
 			for _, view := range views {
-				if _, err = fmt.Fprintf(cmd.OutOrStdout(), "%s  %s [%s] updated_at=%s mtime=%s\nPath: %s\n", view.ID, view.Title, strings.ToUpper(view.Storage), view.Updated, view.Mtime, view.Path); err != nil {
+				if _, err = fmt.Fprintf(cmd.OutOrStdout(), "%s  %s [%s] status=%s updated_at=%s mtime=%s\nPath: %s\n", view.ID, view.Title, strings.ToUpper(view.Storage), displayTopicStatus(view.ComputedStatus), view.Updated, view.Mtime, view.Path); err != nil {
 					return err
 				}
 				if view.Extends != "" {
@@ -138,6 +138,13 @@ func commandWorkspaceForRecovery() (config.Workspace, error) {
 		return config.Workspace{}, err
 	}
 	return config.NewWorkspace(root), nil
+}
+
+func displayTopicStatus(status string) string {
+	if status == "" {
+		return "-"
+	}
+	return status
 }
 
 func readinessErrorValue(err error) any {

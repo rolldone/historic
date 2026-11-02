@@ -465,7 +465,7 @@ func scanTopic(workspace config.Workspace, id domain.ID, candidate topicCandidat
 	for index := range files {
 		files[index].Storage = candidate.storage
 	}
-	topic.ComputedStatus = aggregateStatus(statuses)
+	topic.ComputedStatus = domain.AggregateStatus(statuses)
 	return topic, records, files, nil
 }
 
@@ -489,30 +489,6 @@ func assetKind(path string) string {
 		return "pdf"
 	}
 	return strings.TrimPrefix(ext, ".")
-}
-
-func aggregateStatus(statuses []domain.Status) domain.Status {
-	if len(statuses) == 0 {
-		return ""
-	}
-	for _, status := range statuses {
-		if status != domain.StatusComplete && status != domain.StatusCancelled {
-			return status
-		}
-	}
-	if allStatus(statuses, domain.StatusCancelled) {
-		return domain.StatusCancelled
-	}
-	return domain.StatusComplete
-}
-
-func allStatus(statuses []domain.Status, expected domain.Status) bool {
-	for _, status := range statuses {
-		if status != expected {
-			return false
-		}
-	}
-	return true
 }
 
 func scanFile(workspace config.Workspace, path string, topicID domain.ID) (Record, error) {

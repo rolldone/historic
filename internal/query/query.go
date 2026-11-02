@@ -170,7 +170,13 @@ func (service Service) QueryTopicsPage(options Options) (Page[TopicSummary], err
 
 	topicWhere, topicArgs := topicPredicates(options)
 	joinPredicate, fileArgs := fileJoinPredicate(options)
-	args := append(append([]any{}, fileArgs...), topicArgs...)
+	openPlaceholders, openArgs := statusPlaceholders(domain.OpenStatuses())
+	closePlaceholders, closeArgs := statusPlaceholders(domain.CloseStatuses())
+	args := make([]any, 0, len(openArgs)+len(closeArgs)+len(fileArgs)+len(topicArgs)+2)
+	args = append(args, openArgs...)
+	args = append(args, closeArgs...)
+	args = append(args, fileArgs...)
+	args = append(args, topicArgs...)
 	args = append(args, options.MinFiles)
 	if options.MaxFiles > 0 {
 		args = append(args, options.MaxFiles)
@@ -179,10 +185,10 @@ func (service Service) QueryTopicsPage(options Options) (Page[TopicSummary], err
 	query := `WITH grouped AS (
 		SELECT
 			t.id, t.num_padded, t.title, t.description, t.slug, t.path, t.storage,
-			t.created_at, t.updated_at, t.tags, t.related,
+			t.created_at, t.updated_at, t.tags, t.related, t.computed_status,
 			COUNT(CASE WHEN f.type = 'historic_file' THEN 1 END) AS total_files,
-			SUM(CASE WHEN f.type = 'historic_file' AND f.status NOT IN ('complete', 'cancelled') THEN 1 ELSE 0 END) AS active_files,
-			COUNT(CASE WHEN f.type = 'historic_file' AND f.status IN ('complete', 'cancelled') THEN 1 END) AS resolved_files,
+			SUM(CASE WHEN f.type = 'historic_file' AND f.status IN (` + strings.Join(openPlaceholders, ",") + `) THEN 1 ELSE 0 END) AS active_files,
+			COUNT(CASE WHEN f.type = 'historic_file' AND f.status IN (` + strings.Join(closePlaceholders, ",") + `) THEN 1 END) AS resolved_files,
 			COUNT(CASE WHEN f.type = 'historic_file' AND f.status = 'complete' THEN 1 END) AS complete_files,
 			COUNT(CASE WHEN f.type = 'historic_file' AND f.status = 'cancelled' THEN 1 END) AS cancelled_files,
 			MAX(CASE WHEN f.type = 'historic_file' THEN COALESCE(f.updated_at, f.created_at, f.mtime) END) AS last_file_updated_at
@@ -190,7 +196,7 @@ func (service Service) QueryTopicsPage(options Options) (Page[TopicSummary], err
 		LEFT JOIN files AS f ON f.topic_id = t.id AND f.storage = t.storage AND ` + joinPredicate + `
 		WHERE ` + strings.Join(topicWhere, " AND ") + `
 		GROUP BY t.id, t.num_padded, t.title, t.description, t.slug, t.path, t.storage,
-			t.created_at, t.updated_at, t.tags, t.related
+			t.created_at, t.updated_at, t.tags, t.related, t.computed_status
 		HAVING COUNT(CASE WHEN f.type = 'historic_file' THEN 1 END) >= ?` + func() string {
 		if options.MaxFiles > 0 {
 			return " AND COUNT(CASE WHEN f.type = 'historic_file' THEN 1 END) <= ?"
@@ -200,12 +206,7 @@ func (service Service) QueryTopicsPage(options Options) (Page[TopicSummary], err
 	)
 	SELECT id, num_padded, title, description, slug, path, storage, created_at, updated_at,
 		tags, related, total_files, active_files, resolved_files, complete_files, cancelled_files,
-		CASE
-			WHEN total_files = 0 THEN NULL
-			WHEN active_files > 0 THEN 'active'
-			WHEN cancelled_files = resolved_files THEN 'cancelled'
-			ELSE 'complete'
-		END AS computed_status,
+		computed_status,
 		last_file_updated_at
 	FROM grouped
 	ORDER BY ` + aggregateOrder(options.Sort) + ` LIMIT ? OFFSET ?`
@@ -429,6 +430,16 @@ func validateOptions(options Options) error {
 		}
 	}
 	return nil
+}
+
+func statusPlaceholders(statuses []domain.Status) ([]string, []any) {
+	placeholders := make([]string, len(statuses))
+	args := make([]any, len(statuses))
+	for index, status := range statuses {
+		placeholders[index] = "?"
+		args[index] = status.String()
+	}
+	return placeholders, args
 }
 
 func topicPredicates(options Options) ([]string, []any) {

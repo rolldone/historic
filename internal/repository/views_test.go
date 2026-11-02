@@ -103,6 +103,47 @@ func TestListTopicsDefaultsToActiveAndSortsByID(t *testing.T) {
 	}
 }
 
+func TestListTopicsComputesDerivedTopicStatus(t *testing.T) {
+	store := newTestStore(t)
+	topic, err := store.CreateTopic("Topic", "00030", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	write := func(name string, status domain.Status) {
+		t.Helper()
+		document, err := markdown.NewDocument(domain.Frontmatter{ID: "00030", Title: name, Status: status, Created: "2026-09-21"}, "body")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := markdown.WriteFile(filepath.Join(topic.Path, name+".md"), document); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("moved", domain.StatusForwarded)
+	write("done", domain.StatusComplete)
+
+	views, err := store.ListTopics(false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(views) != 1 || views[0].ComputedStatus != "complete" {
+		t.Fatalf("list view = %#v, want computed complete", views)
+	}
+	// List views stay lightweight but still carry the derived status.
+	if len(views[0].Files) != 0 {
+		t.Fatalf("list view unexpectedly reads files: %#v", views[0].Files)
+	}
+
+	write("live", domain.StatusBlocked)
+	view, err := store.ShowTopic(topic.ID, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if view.ComputedStatus != "blocked" || len(view.Files) != 3 {
+		t.Fatalf("show view = %#v, want computed blocked with files", view)
+	}
+}
+
 func TestShowTopicIncludesFilesAndRejectsMissing(t *testing.T) {
 	store := newTestStore(t)
 	topic, err := store.CreateTopic("Topic", "00014", "")

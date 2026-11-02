@@ -76,6 +76,72 @@ func TestListAndShowCommandsJSON(t *testing.T) {
 	}
 }
 
+func TestListAndShowExposeComputedTopicStatus(t *testing.T) {
+	root := t.TempDir()
+	t.Chdir(root)
+	if _, err := executeCommand(t, "init"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := executeCommand(t, "create", "Topic", "--id", "00001"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := executeCommand(t, "add", "Task", "--id", "00001"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := executeCommand(t, "status", "task.md", "progress"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := executeCommand(t, "create", "Empty", "--id", "00002"); err != nil {
+		t.Fatal(err)
+	}
+
+	humanList, err := executeCommand(t, "list")
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if !strings.Contains(humanList, "progress") {
+		t.Fatalf("human list missing computed status: %q", humanList)
+	}
+
+	jsonList, err := executeCommand(t, "list", "--json")
+	if err != nil {
+		t.Fatalf("list --json: %v", err)
+	}
+	var list struct {
+		Data []struct {
+			ID             string `json:"id"`
+			ComputedStatus string `json:"computed_status"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal([]byte(jsonList), &list); err != nil {
+		t.Fatalf("decode list: %v (%q)", err, jsonList)
+	}
+	if len(list.Data) != 2 || list.Data[0].ComputedStatus != "progress" || list.Data[1].ComputedStatus != "" {
+		t.Fatalf("list computed status = %#v", list.Data)
+	}
+
+	humanShow, err := executeCommand(t, "show", "00001")
+	if err != nil {
+		t.Fatalf("show: %v", err)
+	}
+	if !strings.Contains(humanShow, "status=progress") {
+		t.Fatalf("human show missing computed status: %q", humanShow)
+	}
+
+	jsonShow, err := executeCommand(t, "show", "00001", "--json")
+	if err != nil {
+		t.Fatalf("show --json: %v", err)
+	}
+	var show struct {
+		Data []struct {
+			ComputedStatus string `json:"computed_status"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal([]byte(jsonShow), &show); err != nil || len(show.Data) != 1 || show.Data[0].ComputedStatus != "progress" {
+		t.Fatalf("show computed status = %#v, %v", show.Data, err)
+	}
+}
+
 func TestShowDisplaysBothMirroredVersions(t *testing.T) {
 	root := t.TempDir()
 	t.Chdir(root)

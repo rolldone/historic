@@ -27,6 +27,10 @@ type TopicView struct {
 	Files       []FileView `json:"files"`
 	Body        string     `json:"body,omitempty"`
 	Active      bool       `json:"active"`
+
+	// ComputedStatus is the derived topic status aggregated from managed
+	// files. It is read-only and never persisted to Markdown.
+	ComputedStatus string `json:"computed_status,omitempty"`
 }
 
 // FileView describes a Markdown file inside a topic.
@@ -167,17 +171,22 @@ func (store TopicStore) readTopicView(path string, active, includeBody bool) (To
 		Extends: meta.Extends.String(),
 		Files:   []FileView{},
 	}
+	files, statuses, err := readFiles(path, store.Workspace.Root)
+	if err != nil {
+		return TopicView{}, err
+	}
+	view.ComputedStatus = domain.AggregateStatus(statuses).String()
 	if includeBody {
-		view.Files, err = readFiles(path, store.Workspace.Root)
-		if err != nil {
-			return TopicView{}, err
-		}
+		view.Files = files
 	}
 	return view, nil
 }
 
-func readFiles(topicPath, root string) ([]FileView, error) {
+// readFiles collects managed file views and their statuses. Non-Historic
+// Markdown assets are ignored, matching the indexer classification.
+func readFiles(topicPath, root string) ([]FileView, []domain.Status, error) {
 	files := make([]FileView, 0)
+	statuses := make([]domain.Status, 0)
 	err := filepath.WalkDir(topicPath, func(path string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
@@ -194,18 +203,27 @@ func readFiles(topicPath, root string) ([]FileView, error) {
 		}
 		document, err := markdown.ParseFile(path)
 		if err != nil {
-			return fmt.Errorf("read file %s: %w", filepath.ToSlash(path), err)
+			input, readErr := os.ReadFile(path)
+			if readErr != nil {
+				return fmt.Errorf("read file %s: %w", filepath.ToSlash(path), readErr)
+			}
+			if markdown.LooksLikeHistoricFile(input) {
+				return fmt.Errorf("read file %s: %w", filepath.ToSlash(path), err)
+			}
+			// Plain Markdown assets do not contribute to topic aggregation.
+			return nil
 		}
 		relative, err := filepath.Rel(root, path)
 		if err != nil {
 			return err
 		}
+		statuses = append(statuses, document.Frontmatter.Status)
 		files = append(files, FileView{Path: filepath.ToSlash(relative), Title: document.Frontmatter.Title, Description: document.Frontmatter.Description, Status: document.Frontmatter.Status.String(), ForwardedTo: document.Frontmatter.ForwardedTo.String()})
 		return nil
 	})
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return nil, err
+		return nil, nil, err
 	}
 	sort.Slice(files, func(i, j int) bool { return files[i].Path < files[j].Path })
-	return files, nil
+	return files, statuses, nil
 }

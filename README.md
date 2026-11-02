@@ -31,6 +31,8 @@ historic list
 historic show <topic-id>
 ```
 
+`historic list` and `historic show` also display a derived topic status (human output and `computed_status` in `--json`). The value is computed from managed member files and is never written to Markdown. Rule: no managed files -> empty; any open file -> `blocked` > `review` > `progress` > `planned` > `pending` > `draft` > `create`; otherwise `failed` wins, then all-`cancelled`, otherwise `complete`. `forwarded` and `archived` count as `complete`, and assets are ignored.
+
 Legacy five-digit IDs remain readable during migration. The explicit `--id` option is retained for legacy/admin workflows; normal creation should use automatic allocation.
 
 Add Markdown entries and Work Orders:
@@ -48,7 +50,7 @@ historic status 19-fts5-index.md complete --json
 historic status .historic/<topic-id>-<slug>/wos/20-advanced-query-filters.md review
 ```
 
-`historic status` changes only the target managed Markdown frontmatter, sets `updated`, rejects absolute/traversal paths, and rebuilds the SQLite/FTS index. It accepts `create`, `draft`, `pending`, `planned`, `progress`, `review`, `blocked`, `complete`, `failed`, `cancelled`, `archived`, and `forwarded`. Topic status commands such as `historic complete <id>` are not used: topics have no work status; update the member file path instead.
+`historic status` changes only the target managed Markdown frontmatter, sets `updated`, rejects absolute/traversal paths, and rebuilds the SQLite/FTS index. It accepts `create`, `draft`, `pending`, `planned`, `progress`, `review`, `blocked`, `complete`, `failed`, `cancelled`, `archived`, and `forwarded`. Topic status commands such as `historic complete <id>` are not used: topics have no authoritative persisted work status; update the member file path instead, and read the derived topic status from `list`/`show`/`find`.
 
 Status changes are supported on files in closed topics as well. Pass an explicit path such as `.historic/.database/<topic-id>-<slug>/wos/01-task.md`; a bare filename that exists in both an open and a closed copy is rejected as ambiguous. Each status change also synchronizes `_meta.yaml.files[]` in the same operation, so no manual `historic rebuild` is required. If that manifest write fails, the command fails with a partial-application error that points to `historic rebuild`.
 
@@ -98,7 +100,7 @@ historic upgrade --backup-dir /path/outside/.historic
 Modern TopicIDs are 13-digit Unix epoch milliseconds. Managed file IDs remain UUIDv7 and are independent from TopicIDs.
 
 
-Work status belongs to managed member files only. Topics have no work status. Storage remains independent:
+Work status belongs to managed member files only. That status is authoritative; topic status is a derived read model computed from those files and is never persisted to Markdown. Storage remains independent:
 
 - Open topic: `.historic/<topic-id>-<slug>/`
 - Closed topic: `.historic/.database/<topic-id>-<slug>/`
@@ -127,7 +129,7 @@ historic find "oauth" --open --json
 historic find "oauth" --closed --json
 ```
 
-`--active` and `--archived` are no longer supported. Human search output marks results as `[OPEN]` or `[CLOSED]`; JSON results include `status`, `storage`, and the actual `path`.
+`--active` and `--archived` are no longer supported. `--status` and `--status-not` match either a file's own status or a topic's derived `computed_status`; `--status active` is rejected because `active` is not a lifecycle status. Human search output marks results as `[OPEN]` or `[CLOSED]`; JSON results include `status`, `storage`, and the actual `path`.
 
 FTS results are ranked by relevance with ascending path as a deterministic tie-breaker. Use `--page` (default `1`) and `--page-size` (default `20`, maximum `100`) for deterministic `LIMIT/OFFSET` pagination. Human output includes a contextual snippet with yellow ANSI emphasis (`ESC[1;33m...ESC[0m`) around matched terms; JSON output contains plain data without terminal highlight codes and returns `data.items` plus `data.pagination`. Empty results are successful JSON responses with `ok: true`. Query terms are treated as literal terms, so punctuation and FTS operators do not execute shell commands or alter the source Markdown. Pagination reads freshness fields from SQLite and does not hash/stat the filesystem; changes between requests are eventual consistency.
 
@@ -140,7 +142,7 @@ historic rebuild
 historic rebuild --json
 ```
 
-`historic rebuild` processes both open and closed topics in one workflow. It recursively scans each topic, regenerates `_meta.yaml.files` and `_meta.yaml.assets`, computes aggregate status only in SQLite, and atomically replaces the schema-aware SQLite/FTS5 index. If `_meta.yaml` is missing, it recovers minimal metadata using the folder ID and folder slug title. Markdown remains the source of truth.
+`historic rebuild` processes both open and closed topics in one workflow. It recursively scans each topic, regenerates `_meta.yaml.files` and `_meta.yaml.assets`, recomputes the derived topic status with the same deterministic aggregation used by `list`/`show`/`find`, and atomically replaces the schema-aware SQLite/FTS5 index. If `_meta.yaml` is missing, it recovers minimal metadata using the folder ID and folder slug title. Markdown remains the source of truth.
 
 Legacy compatibility aliases are stored in `.historic/.topic-id-aliases.yaml` and must not be deleted without an explicit backup/purge procedure.
 

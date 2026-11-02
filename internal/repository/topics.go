@@ -15,6 +15,7 @@ import (
 	"historic/internal/config"
 	"historic/internal/domain"
 	"historic/internal/identifier"
+	"historic/internal/indexer"
 	"historic/internal/lifecycle"
 	"historic/internal/markdown"
 )
@@ -194,6 +195,9 @@ func (store TopicStore) AddEntry(topicID domain.ID, name string, force bool) (do
 			_ = os.Remove(entryPath)
 		}
 		return domain.Entry{}, fmt.Errorf("update topic metadata: %w", err)
+	}
+	if _, err := indexer.Rebuild(store.Workspace); err != nil {
+		return domain.Entry{}, fmt.Errorf("index rebuild failed after adding %s: %w; run \"historic rebuild\" to recover", store.Workspace.RelativePath(entryPath), err)
 	}
 	return domain.Entry{ID: fileID, Title: metadata.Title, Description: metadata.Description, Created: parseDate(created), Path: entryPath, Filename: relativeName, Content: document.Body}, nil
 }

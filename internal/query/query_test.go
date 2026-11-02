@@ -71,7 +71,7 @@ func TestQueryTopicsAggregatesManagedFilesExcludesAssetsAndKeepsEmptyTopics(t *t
 		t.Fatalf("topic order = %v", got)
 	}
 	mixedResult := results[0]
-	if mixedResult.TotalFiles != 3 || mixedResult.ActiveFiles != 1 || mixedResult.ResolvedFiles != 2 || mixedResult.CompleteFiles != 1 || mixedResult.CancelledFiles != 1 || mixedResult.ComputedStatus != "active" {
+	if mixedResult.TotalFiles != 3 || mixedResult.ActiveFiles != 1 || mixedResult.ResolvedFiles != 2 || mixedResult.CompleteFiles != 1 || mixedResult.CancelledFiles != 1 || mixedResult.ComputedStatus != "progress" {
 		t.Fatalf("mixed aggregate = %+v", mixedResult)
 	}
 	if results[1].TotalFiles != 0 || results[1].ComputedStatus != "" {
@@ -105,7 +105,7 @@ func TestQueryFiltersCombineAndFileResultsCarryTopicContext(t *testing.T) {
 	if len(files) != 1 || files[0].Path != "wos/target.md" {
 		t.Fatalf("filtered files = %+v", files)
 	}
-	if files[0].Topic.ID != "00001" || files[0].Topic.TotalFiles != 2 || files[0].Topic.ActiveFiles != 1 || files[0].Topic.ComputedStatus != "active" {
+	if files[0].Topic.ID != "00001" || files[0].Topic.TotalFiles != 2 || files[0].Topic.ActiveFiles != 1 || files[0].Topic.ComputedStatus != "progress" {
 		t.Fatalf("file topic context = %+v", files[0].Topic)
 	}
 	if got, err := QueryTopics(workspace, Options{MinFiles: 2, MaxFiles: 2}); err != nil || len(got) != 1 || got[0].ID != "00001" {
@@ -122,6 +122,44 @@ func TestQueryRejectsInvalidFilters(t *testing.T) {
 		if _, err := QueryTopics(workspace, options); err == nil {
 			t.Fatalf("invalid options accepted: %+v", options)
 		}
+	}
+}
+
+func TestQueryTreatsForwardedAsResolvedAndKeepsOpenPriority(t *testing.T) {
+	workspace, err := config.Initialize(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	forwardedTopic := filepath.Join(workspace.Histories, "00001-forwarded")
+	mixedTopic := filepath.Join(workspace.Histories, "00002-mixed")
+	for _, topic := range []string{forwardedTopic, mixedTopic} {
+		if err := os.MkdirAll(topic, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeQueryMetadata(t, filepath.Join(forwardedTopic, markdown.MetaFilename), domain.Frontmatter{ID: "00001", Title: "Forwarded", Status: domain.StatusCreate, Created: "2026-09-01"})
+	writeQueryDocument(t, filepath.Join(forwardedTopic, "moved.md"), domain.Frontmatter{ID: "00001", Title: "Moved", Status: domain.StatusForwarded, Created: "2026-09-02"}, "moved")
+	writeQueryDocument(t, filepath.Join(forwardedTopic, "done.md"), domain.Frontmatter{ID: "00001", Title: "Done", Status: domain.StatusComplete, Created: "2026-09-03"}, "done")
+
+	writeQueryMetadata(t, filepath.Join(mixedTopic, markdown.MetaFilename), domain.Frontmatter{ID: "00002", Title: "Mixed", Status: domain.StatusCreate, Created: "2026-09-01"})
+	writeQueryDocument(t, filepath.Join(mixedTopic, "moved.md"), domain.Frontmatter{ID: "00002", Title: "Moved", Status: domain.StatusForwarded, Created: "2026-09-02"}, "moved")
+	writeQueryDocument(t, filepath.Join(mixedTopic, "live.md"), domain.Frontmatter{ID: "00002", Title: "Live", Status: domain.StatusProgress, Created: "2026-09-03"}, "live")
+
+	if _, err := indexer.Rebuild(workspace); err != nil {
+		t.Fatal(err)
+	}
+	results, err := QueryTopics(workspace, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 2 {
+		t.Fatalf("topics = %+v", results)
+	}
+	if results[0].ID != "00001" || results[0].ComputedStatus != "complete" || results[0].ActiveFiles != 0 || results[0].ResolvedFiles != 2 {
+		t.Fatalf("forwarded aggregate = %+v", results[0])
+	}
+	if results[1].ID != "00002" || results[1].ComputedStatus != "progress" || results[1].ActiveFiles != 1 || results[1].ResolvedFiles != 1 {
+		t.Fatalf("mixed aggregate = %+v", results[1])
 	}
 }
 

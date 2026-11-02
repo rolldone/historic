@@ -329,6 +329,49 @@ func TestRebuildCanRecreateDeletedIndex(t *testing.T) {
 	}
 }
 
+func TestRebuildTreatsForwardedAsCompleteAndOpenPriorityWins(t *testing.T) {
+	workspace, err := config.Initialize(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	forwardedTopic := filepath.Join(workspace.Histories, "00001-forwarded")
+	openTopic := filepath.Join(workspace.Histories, "00002-open")
+	for _, topic := range []string{forwardedTopic, openTopic} {
+		if err := os.MkdirAll(topic, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeIndexerTopicMetadata(t, filepath.Join(forwardedTopic, markdown.MetaFilename), domain.Frontmatter{ID: "00001", Title: "Forwarded", Status: domain.StatusCreate, Created: "2026-09-21"})
+	writeIndexerDocument(t, filepath.Join(forwardedTopic, "moved.md"), domain.Frontmatter{ID: "00001", Title: "Moved", Status: domain.StatusForwarded, Created: "2026-09-21"}, "moved")
+	writeIndexerDocument(t, filepath.Join(forwardedTopic, "done.md"), domain.Frontmatter{ID: "00001", Title: "Done", Status: domain.StatusComplete, Created: "2026-09-21"}, "done")
+
+	writeIndexerTopicMetadata(t, filepath.Join(openTopic, markdown.MetaFilename), domain.Frontmatter{ID: "00002", Title: "Open", Status: domain.StatusCreate, Created: "2026-09-21"})
+	writeIndexerDocument(t, filepath.Join(openTopic, "review.md"), domain.Frontmatter{ID: "00002", Title: "Review", Status: domain.StatusReview, Created: "2026-09-21"}, "review")
+	writeIndexerDocument(t, filepath.Join(openTopic, "blocked.md"), domain.Frontmatter{ID: "00002", Title: "Blocked", Status: domain.StatusBlocked, Created: "2026-09-21"}, "blocked")
+
+	if _, err := Rebuild(workspace); err != nil {
+		t.Fatal(err)
+	}
+	database, err := sql.Open("sqlite", workspace.Index)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer database.Close()
+	var forwardedStatus, openStatus string
+	if err := database.QueryRow("SELECT computed_status FROM topics WHERE id = '00001'").Scan(&forwardedStatus); err != nil {
+		t.Fatal(err)
+	}
+	if err := database.QueryRow("SELECT computed_status FROM topics WHERE id = '00002'").Scan(&openStatus); err != nil {
+		t.Fatal(err)
+	}
+	if forwardedStatus != domain.StatusComplete.String() {
+		t.Fatalf("forwarded computed status = %q, want complete", forwardedStatus)
+	}
+	if openStatus != domain.StatusBlocked.String() {
+		t.Fatalf("open computed status = %q, want blocked", openStatus)
+	}
+}
+
 func TestRebuildReadModelClassifiesAssetsAndAggregatesStatus(t *testing.T) {
 	workspace, err := config.Initialize(t.TempDir())
 	if err != nil {

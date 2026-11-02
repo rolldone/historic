@@ -44,6 +44,8 @@ historic show <timestamp-topic-id>
 
 `historic create` allocates a monotonic Unix epoch-millisecond TopicID under an inter-process lock. During migration, legacy five-digit IDs can still be resolved. Use `historic add` to create notes or Work Orders. When multiple topics are active, provide an explicit `--id` for commands that need to select a topic.
 
+`historic list` and `historic show` display a derived topic status (human output and `computed_status` in `--json`). The value is a read model computed from managed member files and is never written to `_meta.yaml` or frontmatter. Aggregation is deterministic and uses priority, not arithmetic: no managed files -> empty; any open file -> `blocked` > `review` > `progress` > `planned` > `pending` > `draft` > `create`; otherwise `failed` wins, then all-`cancelled`, otherwise `complete`. `forwarded` and `archived` count as `complete`, and assets are ignored.
+
 `historic create "<title>" --extends <topic-id>` starts a continuation topic. The parent may be open or closed; its metadata is never modified, and no files, tags, or related entries are copied. The relation is stored one-way as `extends: "<topic-id>"` in the child `_meta.yaml`, is immutable, and is shown by `historic show <child-id>` (`data[].extends`). An unknown or malformed parent fails before any directory is created.
 
 ## Internal Git passthrough
@@ -64,7 +66,7 @@ historic git diff --stat
 ## Search and TUI
 
 - `historic find "query" [--json]` is the one-shot interface for AI, scripts, and automation; `historic find ""` browses recent topics. `--page` defaults to 1 and `--page-size` defaults to 20 with a maximum of 100; JSON uses `data.items` and `data.pagination` (`page`, `page_size`, `has_more`, nullable `next_page`).
-- `--status` accepts comma-separated inclusion statuses and `--status-not` accepts comma-separated exclusions. Overlapping statuses and unknown statuses are rejected.
+- `--status` accepts comma-separated inclusion statuses and `--status-not` accepts comma-separated exclusions. A status matches either a file's own status or a topic's derived `computed_status`. Overlapping statuses and unknown statuses are rejected; `active` is not a lifecycle status and `--status active` is rejected.
 - `--sort` accepts `relevance`, `updated`, `created`, or `title`; results use deterministic path tie-breakers.
 - File results expose SQLite-backed `created_at`, `updated_at`, `mtime`, `hash`, and `size` fields.
 - Search includes both open and closed storage by default.
@@ -92,11 +94,11 @@ historic status <path> forwarded
 ```
 
 - Work status belongs only to managed member frontmatter. Valid statuses: `create`, `draft`, `pending`, `planned`, `progress`, `review`, `blocked` (open) and `complete`, `failed`, `cancelled`, `archived`, `forwarded` (terminal).
-- Topics have no work-status field or topic status command.
+- Topics have no persisted work-status field and no topic status command. `computed_status` is a derived SQLite read model/cache computed from managed files with the shared aggregation rule; it is never authoritative and must not be written to Markdown. `forwarded` is treated like `complete` for aggregation, and `cancelled` wins only when every managed file is cancelled.
 - Status changes work on closed topics too. Pass an explicit `.historic/.database/...` path; a path that matches both an open and a closed copy is rejected as ambiguous.
 - Each status change also rewrites `_meta.yaml.files[]` (status and type) in the same operation, so no manual rebuild is needed. A manifest failure is reported as a partial-application error that points to `historic rebuild`.
 - Assigning a non-`forwarded` status clears `forwarded_to`; assigning `forwarded` keeps an existing destination but does not create one. Use `historic forward` to record a destination.
-- `computed_status` is an SQLite aggregate/cache value only.
+- `computed_status` is an SQLite derived aggregate/cache value only. Recompute it through normal write operations or `historic rebuild`; never write it into `_meta.yaml` or frontmatter.
 - `close` and `open` change storage only and never change member status.
 - `historic save [id] [--all] [--json]` mirrors open topics into `.historic/.database/` and leaves open workdirs intact. Without an ID it opens an interactive newest-first picker for exactly one open topic; with a topic ID it mirrors only that topic; `--all` explicitly mirrors every open topic. It does not accept `-m/--message` and creates no Git commit.
 - `close` mirrors an open topic to `.database` before removing the open workdir; `close` also creates no Git commit. Use `historic git commit -m "message"` for explicit commits.
