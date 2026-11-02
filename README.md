@@ -109,6 +109,20 @@ Use `historic status <member-path> <status>` for work status and `historic close
 
 To run a Git command against the internal repository, use `historic git <git-args...>`. For example, `historic git status` runs with `.historic/.database` as its working directory and forwards Git streams directly. Every subcommand is passed only when explicitly requested; Historic never automatically runs `push`, `pull`, `commit`, or `init`.
 
+## Repository separation and backup
+
+`.historic/` is **not** part of the project repository. The project `.gitignore` ignores the whole `.historic/` directory, and the project repository no longer tracks any file inside it. Historic's own version control is the internal repository at `.historic/.database/`, which is local-only and has **no remote** — never push it.
+
+Because open workdirs (`.historic/<topic-id>-<slug>/`) are no longer backed up by the project repository, snapshot them through the internal repository:
+
+```sh
+historic save --all                   # mirror every open topic into .historic/.database
+historic git add --all                # stage inside the internal repository
+historic git commit -m "snapshot"     # commit locally (no push)
+```
+
+`historic save` only mirrors bytes into the internal repository; it does not commit. This flow replaces the project repository as the backup mechanism for the Historic workspace. `historic close` also mirrors the topic but creates no commit, so run the `save`/`add`/`commit` flow for anything you want versioned.
+
 
 Read topics with explicit closed scope when needed:
 

@@ -17,6 +17,8 @@ Historic is a local-first work-memory CLI. Markdown is the source of truth. SQLi
 - `.histories/` is unsupported and has no compatibility layer. Migrate manually with `mv .histories .historic`.
 - If `.historic/` and `.histories/` both exist, reject the operation. Never merge or rename automatically.
 - The expected structure includes `.historic/.database/`, `.historic/.database/.git/`, and `.historic/.index.sqlite`.
+- `.historic/` is **not** part of the project repository. The project `.gitignore` ignores the whole `.historic/` directory, and the project repository tracks no file inside it.
+- The internal repository `.historic/.database/` is the only version control for Historic. It is local-only, has no remote, and must never be pushed.
 - Do not push the internal Git repository or add a remote unless the user explicitly requests that action.
 - Do not modify `PRD.md` unless explicitly requested.
 - Do not modify source-code files as part of routine lifecycle operations.
@@ -62,6 +64,19 @@ historic git diff --stat
 - The proxy does not run Git actions automatically. It forwards only the subcommand the user explicitly supplies, including `push`, `pull`, `commit`, and `init`; never append or infer such actions.
 - Do not add a remote, change Git configuration, or push unless explicitly requested by the user.
 - With no Git arguments, the command prints usage. This proxy is distinct from Historic's `historic log`, `historic diff`, `historic save`, and `historic restore` commands.
+
+## Backup flow (open workdirs)
+
+Open workdirs (`.historic/<topic-id>-<slug>/`) are no longer backed up by the project repository. Snapshot them through the internal repository:
+
+```sh
+historic save --all                   # mirror every open topic into .historic/.database
+historic git add --all                # stage inside the internal repository
+historic git commit -m "snapshot"     # commit locally (no push)
+```
+
+- `historic save` mirrors bytes only; it creates no commit. `historic close` also mirrors but creates no commit.
+- This flow replaces the project repository as the workspace backup mechanism. Never add a remote or push the internal repository.
 
 ## Search and TUI
 
