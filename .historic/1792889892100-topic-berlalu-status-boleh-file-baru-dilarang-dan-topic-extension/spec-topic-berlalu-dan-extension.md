@@ -1,9 +1,9 @@
 ---
 title: 'SPEC: Update Status Topic Berlalu, Topic Extension, Status review dan forwarded'
-description: "Topic berlalu boleh diubah status filenya; pekerjaan lanjutan dibuat sebagai topic baru yang meng-extend topic lama; status file review ditegaskan; status terminal forwarded menandai task yang dipindahkan ke topic lanjutan beserta tujuan forwarded_to."
-status: draft
+description: Topic berlalu boleh diubah status filenya; pekerjaan lanjutan dibuat sebagai topic baru yang meng-extend topic lama; status file review ditegaskan; status terminal forwarded menandai task yang dipindahkan ke topic lanjutan beserta tujuan forwarded_to.
+status: complete
 created: "2026-10-25"
-updated: "2026-10-28"
+updated: "2026-11-02"
 tags:
     - lifecycle
     - topic

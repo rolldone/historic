@@ -5,7 +5,7 @@ files:
     - id: 01a17091-c80c-7f07-88a9-e04ff0264fb6
       path: spec-topic-berlalu-dan-extension.md
       type: spec
-      status: draft
+      status: complete
     - id: 01a17096-2038-7e13-8358-089d7fb27a82
       path: wos/01-domain-error-and-status-contract.md
       type: task
