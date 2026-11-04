@@ -60,11 +60,12 @@ Continue work in a new topic that extends an existing one, and forward tasks tha
 
 ```sh
 historic create "Lanjutan Proyek" --extends 1791851149892 --json
+historic extend 1792889892200 1791851149892 --json
 historic forward wos/03-analisis-kuota.md --to <child-topic-id> --json
 historic forward wos/03-analisis-kuota.md --create "Lanjutan Proyek" --json
 ```
 
-`--extends` records a one-way `extends: "<topic-id>"` relation in the new topic's `_meta.yaml`; the parent topic (open or closed) is never modified and no files are copied. `historic forward` only writes `status: forwarded` plus `forwarded_to: "<topic-id>"` on the source file; the Markdown body is neither moved nor copied, and the target topic must extend the source topic. Forwarding requires an open source topic, so run `historic open` first for closed copies. Changing the file to any non-`forwarded` status clears `forwarded_to`.
+`--extends` records a one-way `extends: "<topic-id>"` relation in the new topic's `_meta.yaml`; the parent topic (open or closed) is never modified and no files are copied. If the topic already exists without that relation, `historic extend <topic-id> <parent-id>` adds it in place: the target may be open or closed, the relation stays immutable (a second extend or self-extend is rejected without touching the file), and the rebuilt read model makes the relation visible in `find`, `list`, `show`, and the TUI. `historic forward` only writes `status: forwarded` plus `forwarded_to: "<topic-id>"` on the source file; the Markdown body is neither moved nor copied, and the target topic must extend the source topic. Forwarding requires an open source topic, so run `historic open` first for closed copies. Changing the file to any non-`forwarded` status clears `forwarded_to`.
 
 Calendar dates (`created`, `updated`) are always written in **UTC** as `YYYY-MM-DD`, independent of the host timezone. `updated` never moves behind `created`, including for legacy documents that were written with a local-time date.
 

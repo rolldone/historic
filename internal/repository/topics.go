@@ -100,21 +100,75 @@ func (store TopicStore) CreateTopic(title string, requestedID string, extends st
 	return domain.Topic{ID: id, Title: title, Description: metadata.Description, Created: parseDate(created), Extends: parent, Path: topicPath, Slug: slug}, nil
 }
 
-// resolveExtends validates the optional parent topic reference before any
-// filesystem artifact is created.
+// resolveExtends validates the optional --extends parent topic reference
+// before any filesystem artifact is created.
 func (store TopicStore) resolveExtends(extends string) (domain.TopicID, error) {
-	value := strings.TrimSpace(extends)
-	if value == "" {
+	return store.resolveParent("--extends", extends)
+}
+
+// resolveParent parses and resolves a parent topic reference in open or closed
+// storage. The label names the caller-facing argument in error messages.
+func (store TopicStore) resolveParent(label string, value string) (domain.TopicID, error) {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
 		return "", nil
 	}
-	parent, err := domain.ParseTopicID(value)
+	parent, err := domain.ParseTopicID(trimmed)
 	if err != nil {
-		return "", fmt.Errorf("%w: --extends %q", domain.ErrInvalidID, extends)
+		return "", fmt.Errorf("%w: %s %q", domain.ErrInvalidID, label, value)
 	}
 	if _, _, err := lifecycle.TopicLocation(store.Workspace, domain.ID(parent)); err != nil {
-		return "", fmt.Errorf("resolve --extends topic %s: %w", parent, err)
+		return "", fmt.Errorf("resolve %s topic %s: %w", label, parent, err)
 	}
 	return parent, nil
+}
+
+// ExtendResult describes one successful extends relation added to an existing
+// topic.
+type ExtendResult struct {
+	ID      domain.TopicID
+	Extends domain.TopicID
+	Path    string
+	Storage domain.StorageState
+}
+
+// ExtendTopic adds an immutable one-way extends relation to an existing topic.
+// The target topic may be open or closed; the parent is validated against both
+// storage roots and is never modified. All validation happens before the
+// metadata write so rejected calls leave _meta.yaml byte-identical.
+func (store TopicStore) ExtendTopic(topicID domain.TopicID, parentValue string) (ExtendResult, error) {
+	if !topicID.Valid() {
+		return ExtendResult{}, fmt.Errorf("%w: %q", domain.ErrInvalidID, topicID)
+	}
+	parent, err := store.resolveParent("parent", parentValue)
+	if err != nil {
+		return ExtendResult{}, err
+	}
+	if parent == "" {
+		return ExtendResult{}, fmt.Errorf("%w: parent topic ID is required", domain.ErrInvalidID)
+	}
+	if parent == topicID {
+		return ExtendResult{}, fmt.Errorf("%w: topic %s cannot extend itself", domain.ErrConflict, topicID)
+	}
+	topicPath, storage, err := lifecycle.TopicLocation(store.Workspace, domain.ID(topicID))
+	if err != nil {
+		return ExtendResult{}, err
+	}
+	metadata, err := markdown.ReadTopicMetadata(topicPath)
+	if err != nil {
+		return ExtendResult{}, fmt.Errorf("read topic metadata: %w", err)
+	}
+	if metadata.Extends != "" {
+		return ExtendResult{}, fmt.Errorf("%w: topic %s already extends %s; extends is immutable", domain.ErrConflict, topicID, metadata.Extends)
+	}
+	metadata.Extends = parent
+	if err := markdown.WriteTopicMetadata(filepath.Join(topicPath, markdown.MetaFilename), metadata); err != nil {
+		return ExtendResult{}, fmt.Errorf("update topic metadata: %w", err)
+	}
+	if _, err := indexer.Rebuild(store.Workspace); err != nil {
+		return ExtendResult{}, fmt.Errorf("index rebuild failed after extending %s: %w; run \"historic rebuild\" to recover", topicID, err)
+	}
+	return ExtendResult{ID: topicID, Extends: parent, Path: store.Workspace.RelativePath(topicPath), Storage: storage}, nil
 }
 
 // AddEntry creates a Markdown entry in an active topic and keeps canonical

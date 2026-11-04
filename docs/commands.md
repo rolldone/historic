@@ -5,6 +5,7 @@
 ```sh
 historic init
 historic create "Topic Title" [--extends <topic-id>] [--json]
+historic extend <topic-id> <parent-id> [--json]
 historic add <name> [--id <topic-id>]
 historic list [--closed] [--sort updated|created|title|id] [--json]
 historic show <topic-id> [--closed] [--json]
@@ -12,6 +13,8 @@ historic version [--json]
 ```
 
 `historic create --extends <topic-id>` records a one-way `extends: "<topic-id>"` relation in the new topic's `_meta.yaml` and returns it as `data.extends` (empty string when absent). The parent topic may be open or closed; it is validated before any directory is created and its own metadata is never modified. Tags, related entries, and files are not copied. The relation is immutable and cannot be changed or removed by a later command. `--extends` may be given only once, and an unknown or malformed parent fails without creating a topic directory.
+
+`historic extend <topic-id> <parent-id>` adds the same one-way `extends: "<parent-id>"` relation to an existing topic, so a topic created without `--extends` no longer needs to be deleted and recreated. The target topic may be open or closed, and the parent may also be open or closed; the parent metadata is never modified and no files, tags, or related entries are copied. The relation is immutable: a second `extend` on a topic that already has `extends`, or a self-extend (`extend A A`), fails with a conflict and leaves `_meta.yaml` byte-identical. An unknown or malformed parent fails before any metadata is written. On success the read model is rebuilt, so `find`, `list`, `show`, and the TUI immediately expose the relation. JSON output keeps the `{ command, ok, data, error }` envelope and `data` contains `id`, `extends`, and `path`; errors are reported once and are not duplicated on stderr.
 
 `historic list` shows open topics by default; `historic list --closed` shows topics stored in `.historic/.database/`, including mirror snapshots created by `historic save`. Open and closed topics are independent listing scopes, so a closed-only listing also includes topics that still have an open copy. `historic show <topic-id>` lists every storage version of the topic (open first) with `updated_at` and `mtime` markers; `--closed` limits the output to closed versions. Both commands display the derived topic status (`-` when the topic has no managed files) and include `computed_status` in `--json`; the value is never written to Markdown.
 

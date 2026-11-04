@@ -42,6 +42,7 @@ func NewRootCommand() *cobra.Command {
 	root.AddCommand(newImportCommand())
 	root.AddCommand(newFileStatusCommand())
 	root.AddCommand(newForwardCommand())
+	root.AddCommand(newExtendCommand())
 	root.AddCommand(newSaveCommand())
 	root.AddCommand(newLogCommand())
 	root.AddCommand(newDiffCommand())

@@ -55,6 +55,8 @@ Both commands also show `progress_percent` — human `[progress NN%]` (or `[prog
 
 `historic create "<title>" --extends <topic-id>` starts a continuation topic. The parent may be open or closed; its metadata is never modified, and no files, tags, or related entries are copied. The relation is stored one-way as `extends: "<topic-id>"` in the child `_meta.yaml`, is immutable, and is shown by `historic show <child-id>` (`data[].extends`). An unknown or malformed parent fails before any directory is created.
 
+`historic extend <topic-id> <parent-id> [--json]` adds that relation to a topic that was created without `--extends`. Both the target and the parent may be open or closed; the parent is never modified, no content is copied, and the relation is immutable (a topic that already has `extends`, or a self-extend, is rejected with `_meta.yaml` byte-identical). The read model is rebuilt, so `find`, `list`, `show`, and the TUI show the relation immediately. JSON keeps `{ command, ok, data, error }` and `data` contains `id`, `extends`, and `path`; errors are emitted once and not duplicated on stderr.
+
 ## Internal Git passthrough
 
 Use `historic git <git-args...>` to run Git with `.historic/.database` as the working directory:
