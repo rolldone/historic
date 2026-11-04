@@ -92,12 +92,30 @@ historic save --all                   # mirror + auto-commit every open topic
 - `historic save` mirrors bytes and then auto-commits, so this one command is the snapshot. Use `historic git commit -m "..."` only for an explicitly labelled manual commit.
 - This flow replaces the project repository as the workspace backup mechanism. Never add a remote or push the internal repository.
 
+## Reading a managed file
+
+```sh
+historic read <path> [--head N] [--json]
+historic read wos/01-task.md --head 20
+historic read .historic/.database/<topic-id>-<slug>/wos/01-task.md
+```
+
+- `read` prints one managed Markdown file from open or closed storage to stdout.
+- Human output is the raw file (frontmatter and body) so Markdown stays byte-faithful; `--head N` prints only the first N lines (omitted or `0` = whole file, negative is rejected).
+- Path resolution follows `status`: an explicit `.historic/...` path works, a bare name or suffix must be unique, and a path matching both an open and a closed copy is rejected as ambiguous instead of guessing.
+- Only managed Markdown inside a topic is readable; assets, non-topic files, and paths outside `.historic` are rejected.
+- Strictly read-only: it never writes files, touches the index, or triggers auto-commit.
+- JSON returns `data.path`, `data.frontmatter` (`id`, `title`, `description`, `status`, `created`, `updated`, `tags`, `related`, `forwarded_to`), and `data.body`.
+
 ## Search and TUI
 
 - `historic find "query" [--json]` is the one-shot interface for AI, scripts, and automation; `historic find ""` browses recent topics. `--page` defaults to 1 and `--page-size` defaults to 20 with a maximum of 100; JSON uses `data.items` and `data.pagination` (`page`, `page_size`, `has_more`, nullable `next_page`).
 - `--status` accepts comma-separated inclusion statuses and `--status-not` accepts comma-separated exclusions. A status matches either a file's own status or a topic's derived `computed_status`. Overlapping statuses and unknown statuses are rejected; `active` is not a lifecycle status and `--status active` is rejected.
 - `--sort` accepts `relevance`, `updated`, `created`, or `title`; results use deterministic path tie-breakers.
 - File results expose SQLite-backed `created_at`, `updated_at`, `mtime`, `hash`, and `size` fields.
+- JSON items are additive-only. Alongside `type`, `topic_id`, `title`, `description`, `status`, `storage`, `tags`, `path`, `score`, `matched_in`, `snippet`, and `topic`, items expose `extends` and `forwarded_to` when set, plus `match_count` and up to three `match_previews` (plain-text context snippets from different locations, `[]` for topic rows). Topic rows include `topic.progress_percent`.
+- `historic find "query" --json --compact` emits a token-efficient projection: same envelope, pagination, and item order, but items keep only `type`, `topic_id`, `title`, `description`, `status`, `storage`, `tags`, `path`, `created_at`, `updated_at`, relations `extends`/`forwarded_to` when set, and `match_count` plus `match_previews` (the first preview equals full `snippet`). The nested `topic` and byte-level `hash`, `size`, `mtime`, `score`, `matched_in`, and `snippet` are dropped. `--compact` without `--json` is rejected.
+- Human `find` output is multi-line and labeled; it is not a stable scripting contract, so automation uses `--json`. Each result starts with a header `<topic-id> · <title>` and a right-aligned `[OPEN|CLOSED] · <status>`, then `path`, `time`, `reason` (full description), `match` (highlighted snippet; multiple occurrences add a hit count and best-line hint), `tag`, and `extends →`/`forwarded →` relations when present. Blank lines separate results.
 - Search includes both open and closed storage by default.
 - Use `--open` for `.historic/<id>-<slug>/` only and `--closed` for `.historic/.database/<id>-<slug>/` only. Combining them is rejected.
 - Legacy `--active` and `--archived` flags are not supported.
@@ -108,6 +126,7 @@ historic save --all                   # mirror + auto-commit every open topic
 - `historic search --json` is rejected; use `historic find --json`.
 - Query execution occurs on Enter. Empty query shows recent topics; `r` refreshes the active page. `n`/right arrow advances when `has_more`; `p`/left arrow goes back. Pagination uses the SQLite read model and does not hash/stat the filesystem. Offset drift between requests is eventual consistency in the MVP.
 - MVP supports status, scope (`open`, `closed`, `all`), and type (`all`, `topic`, `work-order`) filters, pagination, keyboard navigation, and read-only previews.
+- The preview pane is structured like human `find` output: title, `[STORAGE] · status`, `time`, `path`, `reason`, `match` (with hit count and best-line hint), `tag`, and `extends →`/`forwarded →` relations. It wraps to pane width and scrolls (`Ctrl+D`/`Ctrl+U` or `PageDown`/`PageUp`) when taller than the pane instead of overflowing.
 - Layout must respect terminal viewport height, keep the active result visible, and never render results beneath the footer. Long titles/paths and small terminals require safe truncation or compact layout.
 
 ## File and topic lifecycle
