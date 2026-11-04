@@ -113,12 +113,13 @@ type Result struct {
 	ID     string `json:"-"`
 	Active bool   `json:"-"`
 
-	// Display-only metadata. These fields never change the stable JSON
-	// contract; later Work Orders may promote them explicitly.
-	Extends     string `json:"-"`
-	ForwardedTo string `json:"-"`
-	MatchCount  int    `json:"-"`
-	MatchLine   int    `json:"-"`
+	// Relation and multi-match metadata. These are additive fields: existing
+	// names and semantics never change.
+	Extends       string   `json:"extends,omitempty"`
+	ForwardedTo   string   `json:"forwarded_to,omitempty"`
+	MatchCount    int      `json:"match_count"`
+	MatchLine     int      `json:"-"`
+	MatchPreviews []string `json:"match_previews"`
 }
 
 // TopicContext gives file matches enough surrounding topic information for an
@@ -173,6 +174,7 @@ func RecentTopicsPage(workspace config.Workspace, options Options) (SearchPage, 
 		}
 		result.Type, result.ID, result.Tags = "topic", result.TopicID, decodeStrings(tagsJSON)
 		result.CreatedAt, result.UpdatedAt = createdAt, updatedAt
+		result.MatchPreviews = []string{}
 		result.Topic = TopicContext{ID: result.TopicID, Title: result.Title, Description: result.Description, Status: result.Status, Storage: result.Storage, Path: result.Path, Tags: result.Tags}
 		result.Active = result.Storage == domain.StorageOpen.String()
 		results = append(results, result)
@@ -271,7 +273,10 @@ func FindPage(workspace config.Workspace, options Options) (SearchPage, error) {
 		content := ""
 		if result.Type == "historic_file" {
 			content = fallbackContent(database, result.ID)
-			result.MatchCount, result.MatchLine = locateMatches(content, options.Keyword)
+			result.MatchCount, result.MatchLine, result.MatchPreviews = matchSummary(content, options.Keyword)
+		}
+		if result.MatchPreviews == nil {
+			result.MatchPreviews = []string{}
 		}
 		result.MatchedIn = matchedFields(result.Type, result.Title, result.Description, result.Tags, result.Path, filename, content, options.Keyword)
 		result.Snippet = snippetText
@@ -688,12 +693,26 @@ func snippet(body, keyword string) string {
 // 1-based line number of the earliest occurrence. The result is display-only
 // metadata: it never changes ranking, filtering, or pagination.
 func locateMatches(content, keyword string) (int, int) {
+	count, line, _ := matchSummary(content, keyword)
+	return count, line
+}
+
+// maxMatchPreviews caps how many distinct context snippets JSON exposes for a
+// single file so agents can summarize several locations without a flood.
+const maxMatchPreviews = 3
+
+// matchSummary counts keyword occurrences, reports the 1-based line of the
+// earliest hit, and returns up to maxMatchPreviews context snippets taken from
+// different locations in the same content string.
+func matchSummary(content, keyword string) (int, int, []string) {
+	previews := []string{}
 	if strings.TrimSpace(content) == "" || strings.TrimSpace(keyword) == "" {
-		return 0, 0
+		return 0, 0, previews
 	}
 	lowerContent := strings.ToLower(content)
 	terms := keywordTerms(keyword)
 	total, first := 0, -1
+	positions := make([]int, 0, 8)
 	for _, term := range terms {
 		if term == "" {
 			continue
@@ -709,13 +728,39 @@ func locateMatches(content, keyword string) (int, int) {
 			if first < 0 || position < first {
 				first = position
 			}
+			positions = append(positions, position)
 			offset = position + len(term)
 		}
 	}
 	if first < 0 {
-		return 0, 0
+		return 0, 0, previews
 	}
-	return total, strings.Count(content[:first], "\n") + 1
+	line := strings.Count(content[:first], "\n") + 1
+	lastStart := -1
+	for _, position := range positions {
+		if len(previews) >= maxMatchPreviews {
+			break
+		}
+		start := position - 80
+		if start < 0 {
+			start = 0
+		}
+		// Skip overlapping windows so each preview shows a different location.
+		if lastStart >= 0 && start <= lastStart+40 {
+			continue
+		}
+		end := position + len(terms[0]) + 120
+		if end > len(content) {
+			end = len(content)
+		}
+		preview := strings.TrimSpace(content[start:end])
+		if preview == "" {
+			continue
+		}
+		previews = append(previews, preview)
+		lastStart = start
+	}
+	return total, line, previews
 }
 
 func keywordTerms(keyword string) []string {
