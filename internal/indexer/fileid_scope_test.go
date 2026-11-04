@@ -30,11 +30,11 @@ func seedTopicWithSharedFileID(t *testing.T, root, folder string, topicID domain
 		t.Fatal(err)
 	}
 	metadata := markdown.TopicMetadata{
-		ID:        topicID,
-		Title:     title,
-		Created:   "2026-10-01",
-		Files:     []markdown.ManifestFile{{ID: domain.FileID(sharedFileID), Path: "shared.md", Type: "file", Status: domain.StatusProgress}},
-		Assets:    []markdown.ManifestAsset{},
+		ID:      topicID,
+		Title:   title,
+		Created: "2026-10-01",
+		Files:   []markdown.ManifestFile{{ID: domain.FileID(sharedFileID), Path: "shared.md", Type: "file", Status: domain.StatusProgress}},
+		Assets:  []markdown.ManifestAsset{},
 	}
 	if err := markdown.WriteTopicMetadata(filepath.Join(path, markdown.MetaFilename), metadata); err != nil {
 		t.Fatal(err)
