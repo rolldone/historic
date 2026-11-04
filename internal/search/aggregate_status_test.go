@@ -77,6 +77,59 @@ func TestFindStatusMatchesFilesAndAggregatedTopics(t *testing.T) {
 	}
 }
 
+func TestFindTopicContextExposesProgressPercent(t *testing.T) {
+	workspace, err := config.Initialize(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	partial := filepath.Join(workspace.Histories, "00001-partial")
+	empty := filepath.Join(workspace.Histories, "00002-empty")
+	for _, topic := range []string{partial, empty} {
+		if err := os.MkdirAll(topic, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := markdown.WriteTopicMetadata(filepath.Join(partial, markdown.MetaFilename), markdown.TopicMetadata{ID: "00001", Title: "Partial", Created: "2026-09-18"}); err != nil {
+		t.Fatal(err)
+	}
+	writeAggregateDocument(t, filepath.Join(partial, "done.md"), domain.Frontmatter{ID: "00001", Title: "Done", Status: domain.StatusComplete, Created: "2026-09-18"}, "partial token")
+	writeAggregateDocument(t, filepath.Join(partial, "open.md"), domain.Frontmatter{ID: "00001", Title: "Open", Status: domain.StatusProgress, Created: "2026-09-18"}, "partial token")
+	if err := markdown.WriteTopicMetadata(filepath.Join(empty, markdown.MetaFilename), markdown.TopicMetadata{ID: "00002", Title: "Empty", Created: "2026-09-18"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := indexer.Rebuild(workspace); err != nil {
+		t.Fatal(err)
+	}
+
+	results, err := Find(workspace, Options{Keyword: "partial"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var topicResult *Result
+	for index := range results {
+		if results[index].Type == "topic" && results[index].TopicID == "00001" {
+			topicResult = &results[index]
+		}
+	}
+	if topicResult == nil || topicResult.Topic.ProgressPercent == nil || *topicResult.Topic.ProgressPercent != 50 {
+		t.Fatalf("topic context progress = %+v", topicResult)
+	}
+
+	recent, err := RecentTopics(workspace, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var emptyResult *Result
+	for index := range recent {
+		if recent[index].TopicID == "00002" {
+			emptyResult = &recent[index]
+		}
+	}
+	if emptyResult == nil || emptyResult.Topic.ProgressPercent != nil {
+		t.Fatalf("empty recent topic progress = %+v", emptyResult)
+	}
+}
+
 func TestFindRejectsSyntheticActiveStatus(t *testing.T) {
 	workspace, err := config.Initialize(t.TempDir())
 	if err != nil {

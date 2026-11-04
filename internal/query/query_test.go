@@ -74,10 +74,13 @@ func TestQueryTopicsAggregatesManagedFilesExcludesAssetsAndKeepsEmptyTopics(t *t
 	if mixedResult.TotalFiles != 3 || mixedResult.ActiveFiles != 1 || mixedResult.ResolvedFiles != 2 || mixedResult.CompleteFiles != 1 || mixedResult.CancelledFiles != 1 || mixedResult.ComputedStatus != "progress" {
 		t.Fatalf("mixed aggregate = %+v", mixedResult)
 	}
-	if results[1].TotalFiles != 0 || results[1].ComputedStatus != "" {
+	if mixedResult.ProgressPercent == nil || *mixedResult.ProgressPercent != 66 {
+		t.Fatalf("mixed progress = %v, want 66", mixedResult.ProgressPercent)
+	}
+	if results[1].TotalFiles != 0 || results[1].ComputedStatus != "" || results[1].ProgressPercent != nil {
 		t.Fatalf("empty aggregate = %+v", results[1])
 	}
-	if results[2].ComputedStatus != "complete" || results[2].Storage != "closed" {
+	if results[2].ComputedStatus != "complete" || results[2].Storage != "closed" || results[2].ProgressPercent == nil || *results[2].ProgressPercent != 100 {
 		t.Fatalf("complete aggregate = %+v", results[2])
 	}
 }
@@ -155,10 +158,10 @@ func TestQueryTreatsForwardedAsResolvedAndKeepsOpenPriority(t *testing.T) {
 	if len(results) != 2 {
 		t.Fatalf("topics = %+v", results)
 	}
-	if results[0].ID != "00001" || results[0].ComputedStatus != "complete" || results[0].ActiveFiles != 0 || results[0].ResolvedFiles != 2 {
+	if results[0].ID != "00001" || results[0].ComputedStatus != "complete" || results[0].ActiveFiles != 0 || results[0].ResolvedFiles != 2 || results[0].ProgressPercent == nil || *results[0].ProgressPercent != 100 {
 		t.Fatalf("forwarded aggregate = %+v", results[0])
 	}
-	if results[1].ID != "00002" || results[1].ComputedStatus != "progress" || results[1].ActiveFiles != 1 || results[1].ResolvedFiles != 1 {
+	if results[1].ID != "00002" || results[1].ComputedStatus != "progress" || results[1].ActiveFiles != 1 || results[1].ResolvedFiles != 1 || results[1].ProgressPercent == nil || *results[1].ProgressPercent != 50 {
 		t.Fatalf("mixed aggregate = %+v", results[1])
 	}
 }
@@ -191,7 +194,7 @@ func TestAggregateQuerySmokeHasStableJSONAndExcludesAssets(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	const expected = `[{"id":"00001","num_padded":"00001","title":"Smoke","slug":"smoke","path":".historic/00001-smoke","storage":"open","created_at":"2026-09-01","tags":[],"related":[],"total_files":1,"active_files":0,"resolved_files":1,"complete_files":1,"cancelled_files":0,"computed_status":"complete","last_file_updated_at":"2026-09-02"}]`
+	const expected = `[{"id":"00001","num_padded":"00001","title":"Smoke","slug":"smoke","path":".historic/00001-smoke","storage":"open","created_at":"2026-09-01","tags":[],"related":[],"total_files":1,"active_files":0,"resolved_files":1,"complete_files":1,"cancelled_files":0,"computed_status":"complete","progress_percent":100,"last_file_updated_at":"2026-09-02"}]`
 	if string(encoded) != expected {
 		t.Fatalf("aggregate JSON = %s, want %s", encoded, expected)
 	}

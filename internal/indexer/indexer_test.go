@@ -370,6 +370,16 @@ func TestRebuildTreatsForwardedAsCompleteAndOpenPriorityWins(t *testing.T) {
 	if openStatus != domain.StatusBlocked.String() {
 		t.Fatalf("open computed status = %q, want blocked", openStatus)
 	}
+	var forwardedProgress, openProgress int
+	if err := database.QueryRow("SELECT progress_percent FROM topics WHERE id = '00001'").Scan(&forwardedProgress); err != nil {
+		t.Fatal(err)
+	}
+	if err := database.QueryRow("SELECT progress_percent FROM topics WHERE id = '00002'").Scan(&openProgress); err != nil {
+		t.Fatal(err)
+	}
+	if forwardedProgress != 100 || openProgress != 0 {
+		t.Fatalf("progress forwarded=%d open=%d, want 100 and 0", forwardedProgress, openProgress)
+	}
 }
 
 func TestRebuildReadModelClassifiesAssetsAndAggregatesStatus(t *testing.T) {
@@ -404,6 +414,13 @@ func TestRebuildReadModelClassifiesAssetsAndAggregatesStatus(t *testing.T) {
 	}
 	if computed != domain.StatusProgress.String() {
 		t.Fatalf("computed status = %q, want progress", computed)
+	}
+	var progress int
+	if err := database.QueryRow("SELECT progress_percent FROM topics WHERE id = '00001'").Scan(&progress); err != nil {
+		t.Fatal(err)
+	}
+	if progress != 50 {
+		t.Fatalf("progress = %d, want 50", progress)
 	}
 	var managed, assets, nullAssets int
 	if err := database.QueryRow("SELECT COUNT(*) FROM files WHERE topic_id = '00001' AND type = 'historic_file'").Scan(&managed); err != nil {

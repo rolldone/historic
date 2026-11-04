@@ -51,6 +51,8 @@ historic show <timestamp-topic-id>
 
 `historic list` and `historic show` display a derived topic status (human output and `computed_status` in `--json`). The value is a read model computed from managed member files and is never written to `_meta.yaml` or frontmatter. Aggregation is deterministic and uses priority, not arithmetic: no managed files -> empty; any open file -> `blocked` > `review` > `progress` > `planned` > `pending` > `draft` > `create`; otherwise `failed` wins, then all-`cancelled`, otherwise `complete`. `forwarded` and `archived` count as `complete`, and assets are ignored.
 
+Both commands also show `progress_percent` — human `[progress NN%]` (or `[progress -]` when empty), JSON `progress_percent` integer or `null`. Formula: `floor(100 * close_count / managed_count)`, where close-like statuses (`complete`, `failed`, `cancelled`, `archived`, `forwarded`) count as finished, managed files only (assets ignored), and flat weight (one file = one point). It is derived-only, rebuilt by `historic rebuild`, and sits beside `computed_status` without changing it.
+
 `historic create "<title>" --extends <topic-id>` starts a continuation topic. The parent may be open or closed; its metadata is never modified, and no files, tags, or related entries are copied. The relation is stored one-way as `extends: "<topic-id>"` in the child `_meta.yaml`, is immutable, and is shown by `historic show <child-id>` (`data[].extends`). An unknown or malformed parent fails before any directory is created.
 
 ## Internal Git passthrough
@@ -125,7 +127,7 @@ historic status <path> forwarded
 - Status changes work on closed topics too. Pass an explicit `.historic/.database/...` path; a path that matches both an open and a closed copy is rejected as ambiguous.
 - Each status change also rewrites `_meta.yaml.files[]` (status and type) in the same operation, so no manual rebuild is needed. A manifest failure is reported as a partial-application error that points to `historic rebuild`.
 - Assigning a non-`forwarded` status clears `forwarded_to`; assigning `forwarded` keeps an existing destination but does not create one. Use `historic forward` to record a destination.
-- `computed_status` is an SQLite derived aggregate/cache value only. Recompute it through normal write operations or `historic rebuild`; never write it into `_meta.yaml` or frontmatter.
+- `computed_status` and `progress_percent` are SQLite derived aggregate/cache values only. Recompute them through normal write operations or `historic rebuild`; never write either into `_meta.yaml` or frontmatter. `progress_percent` is independent of `computed_status` and never replaces it for open/closed logic.
 - `close` and `open` change storage only and never change member status.
 - `historic save [id] [--all] [--json]` mirrors open topics into `.historic/.database/` and leaves open workdirs intact. Without an ID it opens an interactive newest-first picker for exactly one open topic; with a topic ID it mirrors only that topic; `--all` explicitly mirrors every open topic. It does not accept `-m/--message`; it auto-commits the mirror with a deterministic `auto:` message.
 - `close` mirrors an open topic to `.database` before removing the open workdir; `close` then auto-commits once, covering both the mirror and the workdir removal. Use `historic git commit -m "message"` only for an explicitly labelled manual commit.

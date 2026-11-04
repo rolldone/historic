@@ -83,6 +83,12 @@ INSERT INTO topics (id, storage, num_padded, title, slug, path, created_at) VALU
 	if count != 1 {
 		t.Fatalf("extends_id column count = %d", count)
 	}
+	if err := check.QueryRow("SELECT COUNT(*) FROM pragma_table_info('topics') WHERE name='progress_percent'").Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 1 {
+		t.Fatalf("progress_percent column count = %d", count)
+	}
 	var title string
 	var extends sql.NullString
 	if err := check.QueryRow("SELECT title, extends_id FROM topics WHERE id = '00009'").Scan(&title, &extends); err != nil {

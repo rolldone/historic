@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS topics (
     related TEXT NOT NULL DEFAULT '[]',
     extends_id TEXT,
     computed_status TEXT,
+    progress_percent INTEGER,
     PRIMARY KEY (id, storage)
 );
 CREATE TABLE IF NOT EXISTS files (

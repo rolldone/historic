@@ -33,6 +33,8 @@ historic show <topic-id>
 
 `historic list` and `historic show` also display a derived topic status (human output and `computed_status` in `--json`). The value is computed from managed member files and is never written to Markdown. Rule: no managed files -> empty; any open file -> `blocked` > `review` > `progress` > `planned` > `pending` > `draft` > `create`; otherwise `failed` wins, then all-`cancelled`, otherwise `complete`. `forwarded` and `archived` count as `complete`, and assets are ignored.
 
+Alongside the status, both commands expose `progress_percent` (human `[progress 67%]`, JSON `progress_percent`) as a separate derived read model. The formula is `floor(100 * close_count / managed_count)`, where `close_count` counts managed files whose status is close-like (`complete`, `failed`, `cancelled`, `archived`, `forwarded`) and `managed_count` counts all managed files; assets are ignored. Topics with no managed files report `null` (JSON) / `-` (human). The percentage never replaces `computed_status`: failed and cancelled files still show their status, while counting as finished for progress. `progress_percent` is cache-only, rebuilt by `historic rebuild`, and never written to Markdown or `_meta.yaml`.
+
 Legacy five-digit IDs remain readable during migration. The explicit `--id` option is retained for legacy/admin workflows; normal creation should use automatic allocation.
 
 Add Markdown entries and Work Orders:
@@ -196,7 +198,7 @@ Use `upgrade` for legacy five-digit topic folders, legacy FileID manifests, or a
 - A lock prevents concurrent upgrade/rebuild replacement.
 - Do not manually add SQLite columns or delete `.historic/.index.sqlite`.
 
-The installed binary owns the index schema it can write. Installing newer source without reinstalling the binary leaves an older `index_schema_version` in place, so `historic doctor` may report `rebuild required` and the new columns (`topics.extends_id`, `files.forwarded_to`) stay missing. Reinstall before re-testing schema-dependent behavior:
+The installed binary owns the index schema it can write. Installing newer source without reinstalling the binary leaves an older `index_schema_version` in place, so `historic doctor` may report `rebuild required` and the new columns (`topics.extends_id`, `topics.progress_percent`, `files.forwarded_to`) stay missing. Reinstall before re-testing schema-dependent behavior:
 
 ```sh
 ./build-global.sh   # rebuilds and installs ~/.local/bin/historic

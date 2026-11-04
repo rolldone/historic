@@ -31,6 +31,11 @@ type TopicView struct {
 	// ComputedStatus is the derived topic status aggregated from managed
 	// files. It is read-only and never persisted to Markdown.
 	ComputedStatus string `json:"computed_status,omitempty"`
+
+	// ProgressPercent is the derived topic progress from managed files. A nil
+	// value means the topic has no managed files and is serialized as null.
+	// It is read-only and never persisted to Markdown.
+	ProgressPercent *int `json:"progress_percent"`
 }
 
 // FileView describes a Markdown file inside a topic.
@@ -261,6 +266,7 @@ func (store TopicStore) readTopicView(path string, active, includeBody bool) (To
 		return TopicView{}, err
 	}
 	view.ComputedStatus = domain.AggregateStatus(statuses).String()
+	view.ProgressPercent = domain.ProgressPercent(statuses)
 	if includeBody {
 		view.Files = files
 	}

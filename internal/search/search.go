@@ -132,6 +132,10 @@ type TopicContext struct {
 	Storage     string   `json:"storage"`
 	Path        string   `json:"path"`
 	Tags        []string `json:"tags"`
+
+	// ProgressPercent is the derived topic progress from managed files. A nil
+	// value means the topic has no managed files and is serialized as null.
+	ProgressPercent *int `json:"progress_percent"`
 }
 
 func RecentTopics(workspace config.Workspace, options Options) ([]Result, error) {
@@ -158,7 +162,7 @@ func RecentTopicsPage(workspace config.Workspace, options Options) (SearchPage, 
 	}
 	defer database.Close()
 	where, args := topicPredicates(options)
-	rows, err := database.Query(`SELECT id, title, COALESCE(description, ''), COALESCE(computed_status, ''), storage, path, tags, created_at, COALESCE(updated_at, ''), COALESCE(extends_id, '')
+	rows, err := database.Query(`SELECT id, title, COALESCE(description, ''), COALESCE(computed_status, ''), storage, path, tags, created_at, COALESCE(updated_at, ''), COALESCE(extends_id, ''), progress_percent
 		FROM topics WHERE `+strings.Join(where, " AND ")+` ORDER BY `+recentOrder(options.Sort), args...)
 	if err != nil {
 		return SearchPage{}, fmt.Errorf("query recent topics: %w", err)
@@ -169,13 +173,14 @@ func RecentTopicsPage(workspace config.Workspace, options Options) (SearchPage, 
 		var result Result
 		var tagsJSON string
 		var createdAt, updatedAt string
-		if err := rows.Scan(&result.TopicID, &result.Title, &result.Description, &result.Status, &result.Storage, &result.Path, &tagsJSON, &createdAt, &updatedAt, &result.Extends); err != nil {
+		var progressPercent sql.NullInt64
+		if err := rows.Scan(&result.TopicID, &result.Title, &result.Description, &result.Status, &result.Storage, &result.Path, &tagsJSON, &createdAt, &updatedAt, &result.Extends, &progressPercent); err != nil {
 			return SearchPage{}, fmt.Errorf("read recent topic: %w", err)
 		}
 		result.Type, result.ID, result.Tags = "topic", result.TopicID, decodeStrings(tagsJSON)
 		result.CreatedAt, result.UpdatedAt = createdAt, updatedAt
 		result.MatchPreviews = []string{}
-		result.Topic = TopicContext{ID: result.TopicID, Title: result.Title, Description: result.Description, Status: result.Status, Storage: result.Storage, Path: result.Path, Tags: result.Tags}
+		result.Topic = TopicContext{ID: result.TopicID, Title: result.Title, Description: result.Description, Status: result.Status, Storage: result.Storage, Path: result.Path, Tags: result.Tags, ProgressPercent: nullIntPointer(progressPercent)}
 		result.Active = result.Storage == domain.StorageOpen.String()
 		results = append(results, result)
 	}
@@ -232,7 +237,7 @@ func FindPage(workspace config.Workspace, options Options) (SearchPage, error) {
 		CASE WHEN historic_fts.entity_type = 'topic' THEN '' ELSE f.mtime END,
 		CASE WHEN historic_fts.entity_type = 'topic' THEN '' ELSE f.hash END,
 		CASE WHEN historic_fts.entity_type = 'topic' THEN 0 ELSE f.size END,
-		COALESCE(t.title, ''), COALESCE(t.description, ''), COALESCE(t.computed_status, ''),
+		COALESCE(t.title, ''), COALESCE(t.description, ''), COALESCE(t.computed_status, ''), t.progress_percent,
 		COALESCE(t.storage, ''), COALESCE(t.path, ''), COALESCE(t.tags, '[]'),
 		COALESCE(t.extends_id, ''),
 		CASE WHEN historic_fts.entity_type = 'file' THEN COALESCE(f.forwarded_to, '') ELSE '' END
@@ -254,8 +259,9 @@ func FindPage(workspace config.Workspace, options Options) (SearchPage, error) {
 		var createdAt, updatedAt, mtime, hash string
 		var size int64
 		var topicTitle, topicDescription, topicStatus, topicStorage, topicPath string
+		var topicProgress sql.NullInt64
 		var rank float64
-		if err := rows.Scan(&result.Type, &result.ID, &result.TopicID, &result.Title, &result.Description, &result.Status, &result.Storage, &result.Path, &tagsJSON, &filename, &rank, &snippetText, &createdAt, &updatedAt, &mtime, &hash, &size, &topicTitle, &topicDescription, &topicStatus, &topicStorage, &topicPath, &topicTagsJSON, &result.Extends, &result.ForwardedTo); err != nil {
+		if err := rows.Scan(&result.Type, &result.ID, &result.TopicID, &result.Title, &result.Description, &result.Status, &result.Storage, &result.Path, &tagsJSON, &filename, &rank, &snippetText, &createdAt, &updatedAt, &mtime, &hash, &size, &topicTitle, &topicDescription, &topicStatus, &topicProgress, &topicStorage, &topicPath, &topicTagsJSON, &result.Extends, &result.ForwardedTo); err != nil {
 			return SearchPage{}, fmt.Errorf("read search result: %w", err)
 		}
 		logicalPath := filename
@@ -286,7 +292,7 @@ func FindPage(workspace config.Workspace, options Options) (SearchPage, error) {
 		if result.Snippet == "" {
 			result.Snippet = firstLine(result.Description)
 		}
-		result.Topic = TopicContext{ID: result.TopicID, Title: topicTitle, Description: topicDescription, Status: topicStatus, Storage: topicStorage, Path: topicPath, Tags: decodeStrings(topicTagsJSON)}
+		result.Topic = TopicContext{ID: result.TopicID, Title: topicTitle, Description: topicDescription, Status: topicStatus, Storage: topicStorage, Path: topicPath, Tags: decodeStrings(topicTagsJSON), ProgressPercent: nullIntPointer(topicProgress)}
 		if result.Type == "topic" {
 			result.Path = filepath.ToSlash(filepath.Join(result.Path, "_meta.yaml"))
 		} else {
@@ -344,6 +350,14 @@ func paginateSearchPage(results []Result, pagination Pagination) SearchPage {
 	nextPage := pagination.Page + 1
 	pagination.NextPage = &nextPage
 	return SearchPage{Items: results[offset:end], Pagination: pagination}
+}
+
+func nullIntPointer(value sql.NullInt64) *int {
+	if !value.Valid {
+		return nil
+	}
+	converted := int(value.Int64)
+	return &converted
 }
 
 func openIndex(workspace config.Workspace) (*sql.DB, error) {

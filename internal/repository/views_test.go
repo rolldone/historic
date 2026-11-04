@@ -236,8 +236,8 @@ func TestListTopicsComputesDerivedTopicStatus(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(views) != 1 || views[0].ComputedStatus != "complete" {
-		t.Fatalf("list view = %#v, want computed complete", views)
+	if len(views) != 1 || views[0].ComputedStatus != "complete" || views[0].ProgressPercent == nil || *views[0].ProgressPercent != 100 {
+		t.Fatalf("list view = %#v, want computed complete and progress 100", views)
 	}
 	// List views stay lightweight but still carry the derived status.
 	if len(views[0].Files) != 0 {
@@ -249,8 +249,8 @@ func TestListTopicsComputesDerivedTopicStatus(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if view.ComputedStatus != "blocked" || len(view.Files) != 3 {
-		t.Fatalf("show view = %#v, want computed blocked with files", view)
+	if view.ComputedStatus != "blocked" || len(view.Files) != 3 || view.ProgressPercent == nil || *view.ProgressPercent != 66 {
+		t.Fatalf("show view = %#v, want computed blocked, progress 66, and files", view)
 	}
 }
 

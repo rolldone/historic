@@ -75,19 +75,20 @@ type fileReadModel struct {
 }
 
 type topicReadModel struct {
-	ID             domain.ID
-	Title          string
-	Description    string
-	Slug           string
-	Path           string
-	Storage        domain.StorageState
-	CreatedAt      string
-	UpdatedAt      string
-	Tags           []string
-	Related        []domain.ID
-	Extends        domain.TopicID
-	ComputedStatus domain.Status
-	Content        string
+	ID              domain.ID
+	Title           string
+	Description     string
+	Slug            string
+	Path            string
+	Storage         domain.StorageState
+	CreatedAt       string
+	UpdatedAt       string
+	Tags            []string
+	Related         []domain.ID
+	Extends         domain.TopicID
+	ComputedStatus  domain.Status
+	ProgressPercent *int
+	Content         string
 }
 
 type scanResult struct {
@@ -213,8 +214,8 @@ func replaceReadModel(transaction *sql.Tx, topics []topicReadModel, files []file
 		return fmt.Errorf("clear topics read model: %w", err)
 	}
 	topicStatement, err := transaction.Prepare(`INSERT INTO topics
-		(id, num_padded, title, description, slug, path, storage, created_at, updated_at, tags, related, extends_id, computed_status)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+		(id, num_padded, title, description, slug, path, storage, created_at, updated_at, tags, related, extends_id, computed_status, progress_percent)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return fmt.Errorf("prepare topic read model insert: %w", err)
 	}
@@ -222,7 +223,11 @@ func replaceReadModel(transaction *sql.Tx, topics []topicReadModel, files []file
 	for _, topic := range topics {
 		tags, _ := json.Marshal(topic.Tags)
 		related, _ := json.Marshal(topic.Related)
-		if _, err := topicStatement.Exec(topic.ID.String(), topic.ID.String(), topic.Title, nullable(topic.Description), topic.Slug, topic.Path, topic.Storage.String(), topic.CreatedAt, nullable(topic.UpdatedAt), string(tags), string(related), nullable(topic.Extends.String()), nullable(topic.ComputedStatus.String())); err != nil {
+		var progress any
+		if topic.ProgressPercent != nil {
+			progress = *topic.ProgressPercent
+		}
+		if _, err := topicStatement.Exec(topic.ID.String(), topic.ID.String(), topic.Title, nullable(topic.Description), topic.Slug, topic.Path, topic.Storage.String(), topic.CreatedAt, nullable(topic.UpdatedAt), string(tags), string(related), nullable(topic.Extends.String()), nullable(topic.ComputedStatus.String()), progress); err != nil {
 			return fmt.Errorf("insert topic %s: %w", topic.ID, err)
 		}
 	}
@@ -466,6 +471,7 @@ func scanTopic(workspace config.Workspace, id domain.ID, candidate topicCandidat
 		files[index].Storage = candidate.storage
 	}
 	topic.ComputedStatus = domain.AggregateStatus(statuses)
+	topic.ProgressPercent = domain.ProgressPercent(statuses)
 	return topic, records, files, nil
 }
 

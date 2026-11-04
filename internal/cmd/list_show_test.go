@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -141,6 +142,132 @@ func TestListAndShowExposeComputedTopicStatus(t *testing.T) {
 		t.Fatalf("show computed status = %#v, %v", show.Data, err)
 	}
 }
+
+func TestListAndShowExposeProgressPercent(t *testing.T) {
+	root := t.TempDir()
+	t.Chdir(root)
+	if _, err := executeCommand(t, "init"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Topic 00001: 0% (one open file).
+	if _, err := executeCommand(t, "create", "Zero", "--id", "00001"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := executeCommand(t, "add", "open", "--id", "00001"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Topic 00002: 33% (one of three closed).
+	if _, err := executeCommand(t, "create", "Third", "--id", "00002"); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"t2-done", "t2-open-one", "t2-open-two"} {
+		if _, err := executeCommand(t, "add", name, "--id", "00002"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := executeCommand(t, "status", "t2-done.md", "complete"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Topic 00003: 66% (two of three closed; floor of 66.66).
+	if _, err := executeCommand(t, "create", "TwoThirds", "--id", "00003"); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"t3-done-one", "t3-done-two", "t3-open"} {
+		if _, err := executeCommand(t, "add", name, "--id", "00003"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, name := range []string{"t3-done-one.md", "t3-done-two.md"} {
+		if _, err := executeCommand(t, "status", name, "complete"); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Topic 00004: 100% (single closed file).
+	if _, err := executeCommand(t, "create", "Done", "--id", "00004"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := executeCommand(t, "add", "t4-done", "--id", "00004"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := executeCommand(t, "status", "t4-done.md", "complete"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Topic 00005: null (no managed files).
+	if _, err := executeCommand(t, "create", "Empty", "--id", "00005"); err != nil {
+		t.Fatal(err)
+	}
+
+	jsonList, err := executeCommand(t, "list", "--json", "--sort", "id")
+	if err != nil {
+		t.Fatalf("list --json: %v", err)
+	}
+	var list struct {
+		Data []struct {
+			ID              string `json:"id"`
+			ProgressPercent *int   `json:"progress_percent"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal([]byte(jsonList), &list); err != nil {
+		t.Fatalf("decode list: %v (%q)", err, jsonList)
+	}
+	want := map[string]*int{"00001": intPtr(0), "00002": intPtr(33), "00003": intPtr(66), "00004": intPtr(100), "00005": nil}
+	if len(list.Data) != len(want) {
+		t.Fatalf("list data = %#v", list.Data)
+	}
+	for _, item := range list.Data {
+		expected := want[item.ID]
+		if expected == nil {
+			if item.ProgressPercent != nil {
+				t.Fatalf("topic %s progress = %d, want null", item.ID, *item.ProgressPercent)
+			}
+			continue
+		}
+		if item.ProgressPercent == nil || *item.ProgressPercent != *expected {
+			got := "nil"
+			if item.ProgressPercent != nil {
+				got = fmt.Sprintf("%d", *item.ProgressPercent)
+			}
+			t.Fatalf("topic %s progress = %s, want %d", item.ID, got, *expected)
+		}
+	}
+	if !strings.Contains(jsonList, `"progress_percent":null`) {
+		t.Fatalf("empty topic did not serialize null progress: %q", jsonList)
+	}
+
+	humanList, err := executeCommand(t, "list", "--sort", "id")
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	for _, label := range []string{"[progress 0%]", "[progress 33%]", "[progress 66%]", "[progress 100%]", "[progress -]"} {
+		if !strings.Contains(humanList, label) {
+			t.Fatalf("human list missing %q: %q", label, humanList)
+		}
+	}
+
+	jsonShow, err := executeCommand(t, "show", "00003", "--json")
+	if err != nil {
+		t.Fatalf("show --json: %v", err)
+	}
+	var show struct {
+		Data []struct {
+			ProgressPercent *int `json:"progress_percent"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal([]byte(jsonShow), &show); err != nil || len(show.Data) != 1 || show.Data[0].ProgressPercent == nil || *show.Data[0].ProgressPercent != 66 {
+		t.Fatalf("show progress = %#v, %v", show.Data, err)
+	}
+	humanShow, err := executeCommand(t, "show", "00003")
+	if err != nil || !strings.Contains(humanShow, "[progress 66%]") {
+		t.Fatalf("human show progress = %q, %v", humanShow, err)
+	}
+}
+
+func intPtr(value int) *int { return &value }
 
 func TestShowDisplaysBothMirroredVersions(t *testing.T) {
 	root := t.TempDir()

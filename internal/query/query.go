@@ -73,6 +73,7 @@ type TopicSummary struct {
 	CompleteFiles     int      `json:"complete_files"`
 	CancelledFiles    int      `json:"cancelled_files"`
 	ComputedStatus    string   `json:"computed_status,omitempty"`
+	ProgressPercent   *int     `json:"progress_percent"`
 	LastFileUpdatedAt string   `json:"last_file_updated_at,omitempty"`
 }
 
@@ -185,7 +186,7 @@ func (service Service) QueryTopicsPage(options Options) (Page[TopicSummary], err
 	query := `WITH grouped AS (
 		SELECT
 			t.id, t.num_padded, t.title, t.description, t.slug, t.path, t.storage,
-			t.created_at, t.updated_at, t.tags, t.related, t.computed_status,
+			t.created_at, t.updated_at, t.tags, t.related, t.computed_status, t.progress_percent,
 			COUNT(CASE WHEN f.type = 'historic_file' THEN 1 END) AS total_files,
 			SUM(CASE WHEN f.type = 'historic_file' AND f.status IN (` + strings.Join(openPlaceholders, ",") + `) THEN 1 ELSE 0 END) AS active_files,
 			COUNT(CASE WHEN f.type = 'historic_file' AND f.status IN (` + strings.Join(closePlaceholders, ",") + `) THEN 1 END) AS resolved_files,
@@ -196,7 +197,7 @@ func (service Service) QueryTopicsPage(options Options) (Page[TopicSummary], err
 		LEFT JOIN files AS f ON f.topic_id = t.id AND f.storage = t.storage AND ` + joinPredicate + `
 		WHERE ` + strings.Join(topicWhere, " AND ") + `
 		GROUP BY t.id, t.num_padded, t.title, t.description, t.slug, t.path, t.storage,
-			t.created_at, t.updated_at, t.tags, t.related, t.computed_status
+			t.created_at, t.updated_at, t.tags, t.related, t.computed_status, t.progress_percent
 		HAVING COUNT(CASE WHEN f.type = 'historic_file' THEN 1 END) >= ?` + func() string {
 		if options.MaxFiles > 0 {
 			return " AND COUNT(CASE WHEN f.type = 'historic_file' THEN 1 END) <= ?"
@@ -206,7 +207,7 @@ func (service Service) QueryTopicsPage(options Options) (Page[TopicSummary], err
 	)
 	SELECT id, num_padded, title, description, slug, path, storage, created_at, updated_at,
 		tags, related, total_files, active_files, resolved_files, complete_files, cancelled_files,
-		computed_status,
+		computed_status, progress_percent,
 		last_file_updated_at
 	FROM grouped
 	ORDER BY ` + aggregateOrder(options.Sort) + ` LIMIT ? OFFSET ?`
@@ -221,13 +222,18 @@ func (service Service) QueryTopicsPage(options Options) (Page[TopicSummary], err
 	for rows.Next() {
 		var result TopicSummary
 		var description, updatedAt, computedStatus, lastFileUpdatedAt sql.NullString
+		var progressPercent sql.NullInt64
 		var tagsJSON, relatedJSON string
-		if err := rows.Scan(&result.ID, &result.NumPadded, &result.Title, &description, &result.Slug, &result.Path, &result.Storage, &result.CreatedAt, &updatedAt, &tagsJSON, &relatedJSON, &result.TotalFiles, &result.ActiveFiles, &result.ResolvedFiles, &result.CompleteFiles, &result.CancelledFiles, &computedStatus, &lastFileUpdatedAt); err != nil {
+		if err := rows.Scan(&result.ID, &result.NumPadded, &result.Title, &description, &result.Slug, &result.Path, &result.Storage, &result.CreatedAt, &updatedAt, &tagsJSON, &relatedJSON, &result.TotalFiles, &result.ActiveFiles, &result.ResolvedFiles, &result.CompleteFiles, &result.CancelledFiles, &computedStatus, &progressPercent, &lastFileUpdatedAt); err != nil {
 			return Page[TopicSummary]{}, fmt.Errorf("read topic aggregate: %w", err)
 		}
 		result.Description = description.String
 		result.UpdatedAt = updatedAt.String
 		result.ComputedStatus = computedStatus.String
+		if progressPercent.Valid {
+			value := int(progressPercent.Int64)
+			result.ProgressPercent = &value
+		}
 		result.LastFileUpdatedAt = lastFileUpdatedAt.String
 		result.Tags = decodeStrings(tagsJSON)
 		result.Related = decodeStrings(relatedJSON)

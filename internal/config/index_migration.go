@@ -141,3 +141,39 @@ func ensureFilesForwardedToColumn(database *sql.DB) error {
 	}
 	return nil
 }
+
+// ensureTopicsProgressPercentColumn backfills the nullable progress_percent
+// column on read model tables created before topic progress existed. Rebuild
+// remains the source of truth; this keeps an in-place index readable until then.
+func ensureTopicsProgressPercentColumn(database *sql.DB) error {
+	rows, err := database.Query("PRAGMA table_info(topics)")
+	if err != nil {
+		return fmt.Errorf("inspect topics columns: %w", err)
+	}
+	defer rows.Close()
+	found := false
+	tableExists := false
+	var cid int
+	var name, columnType string
+	var notNull, primaryKey int
+	var defaultValue any
+	for rows.Next() {
+		if err := rows.Scan(&cid, &name, &columnType, &notNull, &defaultValue, &primaryKey); err != nil {
+			return fmt.Errorf("read topics columns: %w", err)
+		}
+		tableExists = true
+		if name == "progress_percent" {
+			found = true
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("iterate topics columns: %w", err)
+	}
+	if !tableExists || found {
+		return nil
+	}
+	if _, err := database.Exec("ALTER TABLE topics ADD COLUMN progress_percent INTEGER"); err != nil {
+		return fmt.Errorf("add progress_percent column: %w", err)
+	}
+	return nil
+}
