@@ -122,6 +122,68 @@ type Result struct {
 	MatchPreviews []string `json:"match_previews"`
 }
 
+// CompactResult is the token-efficient JSON projection of Result used by
+// `find --json --compact` (SPEC §6.1). It keeps identity, relation context, and
+// match content while dropping nested topic duplication and byte-level facts.
+type CompactResult struct {
+	Type        string   `json:"type"`
+	TopicID     string   `json:"topic_id"`
+	Title       string   `json:"title"`
+	Description string   `json:"description"`
+	Status      string   `json:"status"`
+	Storage     string   `json:"storage"`
+	Tags        []string `json:"tags"`
+	Path        string   `json:"path"`
+	CreatedAt   string   `json:"created_at,omitempty"`
+	UpdatedAt   string   `json:"updated_at,omitempty"`
+
+	Extends       string   `json:"extends,omitempty"`
+	ForwardedTo   string   `json:"forwarded_to,omitempty"`
+	MatchCount    int      `json:"match_count"`
+	MatchPreviews []string `json:"match_previews"`
+}
+
+// CompactSearchPage is the compact projection of SearchPage. Envelope, item
+// ordering, and pagination metadata are identical to the full page; only item
+// shape differs.
+type CompactSearchPage struct {
+	Items      []CompactResult `json:"items"`
+	Pagination Pagination      `json:"pagination"`
+}
+
+// Compact projects a search page into its compact JSON form. It performs no
+// queries: every value comes from the already-scanned read model.
+func Compact(page SearchPage) CompactSearchPage {
+	items := make([]CompactResult, 0, len(page.Items))
+	for _, result := range page.Items {
+		tags := result.Tags
+		if tags == nil {
+			tags = []string{}
+		}
+		previews := result.MatchPreviews
+		if previews == nil {
+			previews = []string{}
+		}
+		items = append(items, CompactResult{
+			Type:          result.Type,
+			TopicID:       result.TopicID,
+			Title:         result.Title,
+			Description:   result.Description,
+			Status:        result.Status,
+			Storage:       result.Storage,
+			Tags:          tags,
+			Path:          result.Path,
+			CreatedAt:     result.CreatedAt,
+			UpdatedAt:     result.UpdatedAt,
+			Extends:       result.Extends,
+			ForwardedTo:   result.ForwardedTo,
+			MatchCount:    result.MatchCount,
+			MatchPreviews: previews,
+		})
+	}
+	return CompactSearchPage{Items: items, Pagination: page.Pagination}
+}
+
 // TopicContext gives file matches enough surrounding topic information for an
 // AI caller to use a result without issuing a second query.
 type TopicContext struct {

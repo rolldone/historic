@@ -16,12 +16,15 @@ func newFindCommand() *cobra.Command {
 	var status, statusNot, tag, folder, searchType, id, sortOption string
 	var createdAfter, createdBefore, updatedAfter, updatedBefore string
 	var page, pageSize int
-	var openOnly, closedOnly, jsonOutput bool
+	var openOnly, closedOnly, jsonOutput, compactJSON bool
 	command := &cobra.Command{
 		Use:   "find <keyword>",
 		Short: "Find text in the Historic FTS5 index",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if compactJSON && !jsonOutput {
+				return writeCommandError(cmd, "find", jsonOutput, fmt.Errorf("--compact requires --json; compact is a JSON-only output mode"))
+			}
 			workspace, err := commandWorkspace()
 			if err != nil {
 				return writeCommandError(cmd, "find", jsonOutput, err)
@@ -65,8 +68,12 @@ func newFindCommand() *cobra.Command {
 			if err != nil {
 				return writeCommandError(cmd, "find", jsonOutput, err)
 			}
-			response := findOutput{Command: "find", OK: true, Data: resultPage, Error: nil}
 			if jsonOutput {
+				if compactJSON {
+					compact := findCompactOutput{Command: "find", OK: true, Data: search.Compact(resultPage), Error: nil}
+					return json.NewEncoder(cmd.OutOrStdout()).Encode(compact)
+				}
+				response := findOutput{Command: "find", OK: true, Data: resultPage, Error: nil}
 				return json.NewEncoder(cmd.OutOrStdout()).Encode(response)
 			}
 			return writeFindHuman(cmd.OutOrStdout(), resultPage, args[0], display.TerminalWidth())
@@ -89,6 +96,7 @@ func newFindCommand() *cobra.Command {
 	command.Flags().BoolVar(&openOnly, "open", false, "search open topics only")
 	command.Flags().BoolVar(&closedOnly, "closed", false, "search closed topics only")
 	command.Flags().BoolVar(&jsonOutput, "json", false, "output stable JSON")
+	command.Flags().BoolVar(&compactJSON, "compact", false, "with --json, emit a token-efficient item shape")
 	_ = command.Flags().Bool("active", false, "deprecated; rejected, use --open")
 	_ = command.Flags().Bool("archived", false, "deprecated; rejected, use --closed")
 	return command
@@ -134,4 +142,11 @@ type findOutput struct {
 	OK      bool              `json:"ok"`
 	Data    search.SearchPage `json:"data"`
 	Error   any               `json:"error"`
+}
+
+type findCompactOutput struct {
+	Command string                   `json:"command"`
+	OK      bool                     `json:"ok"`
+	Data    search.CompactSearchPage `json:"data"`
+	Error   any                      `json:"error"`
 }
