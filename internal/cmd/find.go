@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"historic/internal/display"
 	"historic/internal/domain"
 	"historic/internal/search"
 
@@ -68,30 +69,7 @@ func newFindCommand() *cobra.Command {
 			if jsonOutput {
 				return json.NewEncoder(cmd.OutOrStdout()).Encode(response)
 			}
-			results := resultPage.Items
-			if len(results) == 0 {
-				_, err = fmt.Fprintln(cmd.OutOrStdout(), "No matches found.")
-				return err
-			}
-			for _, result := range results {
-				snippet := result.Snippet
-				if strings.TrimSpace(args[0]) == "" {
-					snippet = result.Title
-				}
-				line := fmt.Sprintf("%s  %-10s  [%s]  updated_at=%s mtime=%s  %s  %s\n", result.TopicID, result.Status, strings.ToUpper(result.Storage), result.UpdatedAt, result.Mtime, result.Path, search.HighlightHuman(snippet, args[0]))
-				if _, err = fmt.Fprint(cmd.OutOrStdout(), line); err != nil {
-					return err
-				}
-			}
-			pagination := resultPage.Pagination
-			if pagination.HasMore {
-				if _, err = fmt.Fprintf(cmd.OutOrStdout(), "Page %d · showing %d results · more results available\nUse --page %d --page-size %d\n", pagination.Page, len(results), pagination.Page+1, pagination.PageSize); err != nil {
-					return err
-				}
-			} else if _, err = fmt.Fprintf(cmd.OutOrStdout(), "Page %d · showing %d results · no more results\n", pagination.Page, len(results)); err != nil {
-				return err
-			}
-			return nil
+			return writeFindHuman(cmd.OutOrStdout(), resultPage, args[0], display.TerminalWidth())
 		},
 	}
 	command.Flags().StringVar(&status, "status", "", "filter by lifecycle status")

@@ -112,6 +112,13 @@ type Result struct {
 	// part of the stable AI JSON contract.
 	ID     string `json:"-"`
 	Active bool   `json:"-"`
+
+	// Display-only metadata. These fields never change the stable JSON
+	// contract; later Work Orders may promote them explicitly.
+	Extends     string `json:"-"`
+	ForwardedTo string `json:"-"`
+	MatchCount  int    `json:"-"`
+	MatchLine   int    `json:"-"`
 }
 
 // TopicContext gives file matches enough surrounding topic information for an
@@ -224,7 +231,9 @@ func FindPage(workspace config.Workspace, options Options) (SearchPage, error) {
 		CASE WHEN historic_fts.entity_type = 'topic' THEN '' ELSE f.hash END,
 		CASE WHEN historic_fts.entity_type = 'topic' THEN 0 ELSE f.size END,
 		COALESCE(t.title, ''), COALESCE(t.description, ''), COALESCE(t.computed_status, ''),
-		COALESCE(t.storage, ''), COALESCE(t.path, ''), COALESCE(t.tags, '[]')
+		COALESCE(t.storage, ''), COALESCE(t.path, ''), COALESCE(t.tags, '[]'),
+		COALESCE(t.extends_id, ''),
+		CASE WHEN historic_fts.entity_type = 'file' THEN COALESCE(f.forwarded_to, '') ELSE '' END
 		FROM historic_fts
 		LEFT JOIN files AS f ON historic_fts.entity_type = 'file' AND CAST(f.id AS TEXT) = historic_fts.entity_id AND f.storage = historic_fts.storage
 		LEFT JOIN topics AS t ON t.storage = historic_fts.storage AND t.id = CASE WHEN historic_fts.entity_type = 'topic' THEN historic_fts.entity_id ELSE f.topic_id END
@@ -244,7 +253,7 @@ func FindPage(workspace config.Workspace, options Options) (SearchPage, error) {
 		var size int64
 		var topicTitle, topicDescription, topicStatus, topicStorage, topicPath string
 		var rank float64
-		if err := rows.Scan(&result.Type, &result.ID, &result.TopicID, &result.Title, &result.Description, &result.Status, &result.Storage, &result.Path, &tagsJSON, &filename, &rank, &snippetText, &createdAt, &updatedAt, &mtime, &hash, &size, &topicTitle, &topicDescription, &topicStatus, &topicStorage, &topicPath, &topicTagsJSON); err != nil {
+		if err := rows.Scan(&result.Type, &result.ID, &result.TopicID, &result.Title, &result.Description, &result.Status, &result.Storage, &result.Path, &tagsJSON, &filename, &rank, &snippetText, &createdAt, &updatedAt, &mtime, &hash, &size, &topicTitle, &topicDescription, &topicStatus, &topicStorage, &topicPath, &topicTagsJSON, &result.Extends, &result.ForwardedTo); err != nil {
 			return SearchPage{}, fmt.Errorf("read search result: %w", err)
 		}
 		logicalPath := filename
@@ -262,6 +271,7 @@ func FindPage(workspace config.Workspace, options Options) (SearchPage, error) {
 		content := ""
 		if result.Type == "historic_file" {
 			content = fallbackContent(database, result.ID)
+			result.MatchCount, result.MatchLine = locateMatches(content, options.Keyword)
 		}
 		result.MatchedIn = matchedFields(result.Type, result.Title, result.Description, result.Tags, result.Path, filename, content, options.Keyword)
 		result.Snippet = snippetText
@@ -672,6 +682,52 @@ func snippet(body, keyword string) string {
 		return strings.TrimSpace(body[start:end])
 	}
 	return firstLine(body)
+}
+
+// locateMatches counts keyword occurrences in file content and reports the
+// 1-based line number of the earliest occurrence. The result is display-only
+// metadata: it never changes ranking, filtering, or pagination.
+func locateMatches(content, keyword string) (int, int) {
+	if strings.TrimSpace(content) == "" || strings.TrimSpace(keyword) == "" {
+		return 0, 0
+	}
+	lowerContent := strings.ToLower(content)
+	terms := keywordTerms(keyword)
+	total, first := 0, -1
+	for _, term := range terms {
+		if term == "" {
+			continue
+		}
+		offset := 0
+		for offset <= len(lowerContent)-len(term) {
+			found := strings.Index(lowerContent[offset:], term)
+			if found < 0 {
+				break
+			}
+			position := offset + found
+			total++
+			if first < 0 || position < first {
+				first = position
+			}
+			offset = position + len(term)
+		}
+	}
+	if first < 0 {
+		return 0, 0
+	}
+	return total, strings.Count(content[:first], "\n") + 1
+}
+
+func keywordTerms(keyword string) []string {
+	parts := strings.Fields(strings.ToLower(keyword))
+	terms := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimFunc(part, func(r rune) bool { return unicode.IsSpace(r) || unicode.IsPunct(r) })
+		if part != "" {
+			terms = append(terms, part)
+		}
+	}
+	return terms
 }
 
 // HighlightHuman adds terminal-safe emphasis to matching terms for human output.
