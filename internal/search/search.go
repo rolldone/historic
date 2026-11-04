@@ -157,7 +157,7 @@ func RecentTopicsPage(workspace config.Workspace, options Options) (SearchPage, 
 	}
 	defer database.Close()
 	where, args := topicPredicates(options)
-	rows, err := database.Query(`SELECT id, title, COALESCE(description, ''), COALESCE(computed_status, ''), storage, path, tags, created_at, COALESCE(updated_at, '')
+	rows, err := database.Query(`SELECT id, title, COALESCE(description, ''), COALESCE(computed_status, ''), storage, path, tags, created_at, COALESCE(updated_at, ''), COALESCE(extends_id, '')
 		FROM topics WHERE `+strings.Join(where, " AND ")+` ORDER BY `+recentOrder(options.Sort), args...)
 	if err != nil {
 		return SearchPage{}, fmt.Errorf("query recent topics: %w", err)
@@ -168,7 +168,7 @@ func RecentTopicsPage(workspace config.Workspace, options Options) (SearchPage, 
 		var result Result
 		var tagsJSON string
 		var createdAt, updatedAt string
-		if err := rows.Scan(&result.TopicID, &result.Title, &result.Description, &result.Status, &result.Storage, &result.Path, &tagsJSON, &createdAt, &updatedAt); err != nil {
+		if err := rows.Scan(&result.TopicID, &result.Title, &result.Description, &result.Status, &result.Storage, &result.Path, &tagsJSON, &createdAt, &updatedAt, &result.Extends); err != nil {
 			return SearchPage{}, fmt.Errorf("read recent topic: %w", err)
 		}
 		result.Type, result.ID, result.Tags = "topic", result.TopicID, decodeStrings(tagsJSON)

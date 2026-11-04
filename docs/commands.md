@@ -141,11 +141,14 @@ historic search
 - `/` focuses query; `f` focuses filters.
 - `↑`/`↓` or `j`/`k` navigates results.
 - `Enter` updates the preview.
+- `Ctrl+D`/`Ctrl+U` (or `PageDown`/`PageUp`) scroll the preview when it is taller than its pane.
 - `n`/`right arrow` changes to the next page when available; `p`/`left arrow` changes to the previous page; `r` refreshes the active page.
 - `Esc`, `q`, or `Ctrl+C` exits.
 - Filters include status, scope, and type.
 - `historic search --json` is rejected. Use `historic find --json` for automation.
 - Preview is read-only; no lifecycle mutation is performed.
+
+The preview pane is structured like `find` human output: title, `[STORAGE] · status`, `time`, `path`, the full `reason` (description), `match` with hit count and best-line hint, `tag`, and `extends →`/`forwarded →` relations. It wraps to the pane width and scrolls instead of overflowing.
 
 The TUI must respect terminal viewport height. Results must not render beneath the footer, and the active result must remain visible.
 

@@ -36,9 +36,11 @@ type model struct {
 	typeName   string
 	focus      focusMode
 	errorText  string
-	preview    string
-	width      int
-	height     int
+	// previewOffset scrolls the structured preview when it exceeds the
+	// viewport. It resets whenever the selection changes.
+	previewOffset int
+	width         int
+	height        int
 }
 
 type focusMode int
@@ -121,7 +123,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.pagination = message.page.Pagination
 		}
 		m.selected = 0
-		m.updatePreview()
+		m.previewOffset = 0
 	case refreshMsg:
 		return m, m.refresh()
 	}
@@ -187,33 +189,25 @@ func (m model) handleKey(message tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "up", "k":
 		if m.selected > 0 {
 			m.selected--
-			m.updatePreview()
+			m.previewOffset = 0
 		}
 	case "down", "j":
 		if m.selected+1 < len(m.currentPage()) {
 			m.selected++
-			m.updatePreview()
+			m.previewOffset = 0
+		}
+	case "ctrl+d", "pgdown":
+		m.previewOffset++
+	case "ctrl+u", "pgup":
+		if m.previewOffset > 0 {
+			m.previewOffset--
 		}
 	case "enter":
-		m.updatePreview()
+		m.previewOffset = 0
 	case "esc":
 		m.focus = focusResults
 	}
 	return m, nil
-}
-
-func (m *model) updatePreview() {
-	page := m.currentPage()
-	if len(page) == 0 || m.selected >= len(page) {
-		m.preview = ""
-		return
-	}
-	result := page[m.selected]
-	updated := result.UpdatedAt
-	if updated == "" {
-		updated = result.Mtime
-	}
-	m.preview = fmt.Sprintf("%s\nstatus: %s\nstorage: %s\nupdated_at: %s\nmtime: %s\npath: %s\n\n%s", result.Title, result.Status, result.Storage, updated, result.Mtime, result.Path, result.Snippet)
 }
 
 func (m model) pageData() search.SearchPage {
@@ -301,6 +295,15 @@ func (m model) View() string {
 			start = 0
 		}
 	}
+	previewHeight := visible - 1
+	if previewHeight < 1 {
+		previewHeight = 1
+	}
+	previewWidth := rightWidth
+	if width < 72 {
+		previewWidth = width
+	}
+	previewBlock := m.visiblePreview(previewWidth, previewHeight)
 	left := "Results\n"
 	for index := start; index < len(rows) && index < start+visible; index++ {
 		result := rows[index]
@@ -318,14 +321,14 @@ func (m model) View() string {
 	if len(rows) == 0 {
 		left += muted.Render("No matches") + "\n"
 	}
-	right := "Preview\n" + truncateLines(m.preview, rightWidth, visible)
+	right := "Preview\n" + strings.Join(previewBlock, "\n")
 	var body string
 	if width < 72 {
 		body = truncateLines(left, width, contentHeight) + "\n" + truncateLines(right, width, contentHeight)
 	} else {
 		body = lipgloss.JoinHorizontal(lipgloss.Top, lipgloss.NewStyle().Width(leftWidth).Render(left), lipgloss.NewStyle().Width(rightWidth).Render(right))
 	}
-	footerText := fmt.Sprintf("Page %d · showing %d results · %s | ↑↓ navigate  Enter preview  / query  f filter(s scope/v status/t type)  n/→ next  p/← previous  r refresh  q quit", m.page+1, len(m.currentPage()), paginationText)
+	footerText := fmt.Sprintf("Page %d · showing %d results · %s | ↑↓ nav  Ctrl+D/U scroll  / query  f filter  n/→ next  p/← prev  r refresh  q quit", m.page+1, len(m.currentPage()), paginationText)
 	if width < 72 {
 		footerText = fmt.Sprintf("↑↓ navigate · Page %d · %d results · %s", m.page+1, len(m.currentPage()), paginationText)
 	}
