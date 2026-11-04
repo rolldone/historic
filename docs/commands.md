@@ -109,6 +109,16 @@ historic forward <path> --create "<title>" [--json]
 - Repeating forward is idempotent and updates `forwarded_to` to the new valid destination.
 - JSON output returns `data.path`, `data.previous`, `data.current`, `data.forwarded_to`, and `data.created_topic` (empty unless `--create` was used).
 
+## Reading a file
+
+```sh
+historic read <path> [--head N] [--json]
+historic read .historic/.database/<topic-id>-<slug>/wos/01-task.md
+historic read wos/01-task.md --head 20
+```
+
+`read` prints one managed Markdown file from open or closed storage to stdout. Human output is the raw file (frontmatter and body) so Markdown stays the source of truth; `--head N` limits it to the first N lines. Path resolution follows `status`: an explicit `.historic/...` path works, a bare name or suffix must be unique, and a path matching an open and a closed copy is rejected as ambiguous instead of guessing. Only managed Markdown inside a topic is readable; assets and paths outside `.historic` are rejected. The command is strictly read-only: it never writes files, touches the index, or triggers auto-commit. JSON output returns `data.path`, `data.frontmatter`, and `data.body`.
+
 ## One-shot search
 
 ```sh
