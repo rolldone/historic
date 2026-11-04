@@ -215,7 +215,20 @@ func replaceReadModel(transaction *sql.Tx, topics []topicReadModel, files []file
 	}
 	topicStatement, err := transaction.Prepare(`INSERT INTO topics
 		(id, num_padded, title, description, slug, path, storage, created_at, updated_at, tags, related, extends_id, computed_status, progress_percent)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(id, storage) DO UPDATE SET
+			num_padded = excluded.num_padded,
+			title = excluded.title,
+			description = excluded.description,
+			slug = excluded.slug,
+			path = excluded.path,
+			created_at = excluded.created_at,
+			updated_at = excluded.updated_at,
+			tags = excluded.tags,
+			related = excluded.related,
+			extends_id = excluded.extends_id,
+			computed_status = excluded.computed_status,
+			progress_percent = excluded.progress_percent`)
 	if err != nil {
 		return fmt.Errorf("prepare topic read model insert: %w", err)
 	}
@@ -231,9 +244,30 @@ func replaceReadModel(transaction *sql.Tx, topics []topicReadModel, files []file
 			return fmt.Errorf("insert topic %s: %w", topic.ID, err)
 		}
 	}
+	// FileID is scoped per topic (PRIMARY KEY (topic_id, id, storage)): the
+	// same FileID may legitimately appear in several topics. Rebuilding or
+	// saving twice must upsert, never fail with a UNIQUE violation.
 	fileStatement, err := transaction.Prepare(`INSERT INTO files
 		(id, storage, topic_id, type, path, filename, title, description, status, tags, related, forwarded_to, content, asset_kind, created_at, updated_at, mtime, hash, size, word_count)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(topic_id, id, storage) DO UPDATE SET
+			type = excluded.type,
+			path = excluded.path,
+			filename = excluded.filename,
+			title = excluded.title,
+			description = excluded.description,
+			status = excluded.status,
+			tags = excluded.tags,
+			related = excluded.related,
+			forwarded_to = excluded.forwarded_to,
+			content = excluded.content,
+			asset_kind = excluded.asset_kind,
+			created_at = excluded.created_at,
+			updated_at = excluded.updated_at,
+			mtime = excluded.mtime,
+			hash = excluded.hash,
+			size = excluded.size,
+			word_count = excluded.word_count`)
 	if err != nil {
 		return fmt.Errorf("prepare file read model insert: %w", err)
 	}

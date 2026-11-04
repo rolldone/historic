@@ -304,7 +304,10 @@ func FindPage(workspace config.Workspace, options Options) (SearchPage, error) {
 		COALESCE(t.extends_id, ''),
 		CASE WHEN historic_fts.entity_type = 'file' THEN COALESCE(f.forwarded_to, '') ELSE '' END
 		FROM historic_fts
-		LEFT JOIN files AS f ON historic_fts.entity_type = 'file' AND CAST(f.id AS TEXT) = historic_fts.entity_id AND f.storage = historic_fts.storage
+		-- A FileID may exist in more than one topic, so the file join must also
+		-- match the indexed path; matching on id+storage alone would fan out into
+		-- a cross product across topics.
+		LEFT JOIN files AS f ON historic_fts.entity_type = 'file' AND CAST(f.id AS TEXT) = historic_fts.entity_id AND f.storage = historic_fts.storage AND f.path = historic_fts.path
 		LEFT JOIN topics AS t ON t.storage = historic_fts.storage AND t.id = CASE WHEN historic_fts.entity_type = 'topic' THEN historic_fts.entity_id ELSE f.topic_id END
 		WHERE ` + strings.Join(where, " AND ") + `
 		ORDER BY ` + resultOrder(options.Sort)
@@ -340,7 +343,7 @@ func FindPage(workspace config.Workspace, options Options) (SearchPage, error) {
 		result.CreatedAt, result.UpdatedAt, result.Mtime, result.Hash, result.Size = createdAt, updatedAt, mtime, hash, size
 		content := ""
 		if result.Type == "historic_file" {
-			content = fallbackContent(database, result.ID)
+			content = fallbackContent(database, result.ID, result.TopicID)
 			result.MatchCount, result.MatchLine, result.MatchPreviews = matchSummary(content, options.Keyword)
 		}
 		if result.MatchPreviews == nil {
@@ -661,9 +664,11 @@ func resultPredicates(options Options) ([]string, []any) {
 	return where, args
 }
 
-func fallbackContent(database *sql.DB, id string) string {
+// fallbackContent reads the indexed body for one file. The lookup is scoped to
+// the topic because the same FileID may legitimately exist in several topics.
+func fallbackContent(database *sql.DB, id, topicID string) string {
 	var content string
-	if err := database.QueryRow("SELECT content FROM files WHERE id = ?", id).Scan(&content); err != nil {
+	if err := database.QueryRow("SELECT content FROM files WHERE id = ? AND topic_id = ? ORDER BY CASE WHEN storage = 'open' THEN 0 ELSE 1 END LIMIT 1", id, topicID).Scan(&content); err != nil {
 		return ""
 	}
 	return content

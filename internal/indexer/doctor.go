@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
+	"strings"
 
 	"historic/internal/config"
 )
@@ -28,6 +30,21 @@ type Diagnosis struct {
 	StoredVersionName   string
 	StoredVersionCode   int
 	CompatibilityAction string
+	// DuplicateFileIDs lists FileIDs that appear in more than one topic within
+	// the same storage. Since index schema 8 those are legal (FileID is scoped
+	// per topic); on an old index they signal a stale/conflicting read model.
+	DuplicateFileIDs []DuplicateFileID
+}
+
+type DuplicateFileID struct {
+	FileID  string                 `json:"file_id"`
+	Storage string                 `json:"storage"`
+	Topics  []DuplicateFileIDTopic `json:"topics"`
+}
+
+type DuplicateFileIDTopic struct {
+	TopicID string `json:"topic_id"`
+	Path    string `json:"path"`
 }
 
 func Diagnose(workspace config.Workspace, binaryVersion string) Diagnosis {
@@ -39,6 +56,7 @@ func Diagnose(workspace config.Workspace, binaryVersion string) Diagnosis {
 		diagnosis.Recommendation = "run historic init in a valid workspace"
 		return diagnosis
 	}
+	diagnosis.DuplicateFileIDs = DetectDuplicateFileIDs(workspace)
 	if hasLegacyTopicFolders(workspace) {
 		diagnosis.Status = "upgrade required"
 		diagnosis.CompatibilityAction = string(config.ActionMigrateWorkspace)
@@ -106,7 +124,65 @@ func Diagnose(workspace config.Workspace, binaryVersion string) Diagnosis {
 			diagnosis.Recommendation = "no action required"
 		}
 	}
+	if len(diagnosis.DuplicateFileIDs) > 0 && diagnosis.Status == "compatible" {
+		diagnosis.Recommendation = "no action required; duplicate FileIDs across topics are expected and scoped per topic (run historic rebuild if results look stale)"
+	}
 	return diagnosis
+}
+
+// DetectDuplicateFileIDs reports FileIDs recorded in more than one topic within
+// the same storage. It reads Markdown manifests only and never mutates the
+// workspace or the index. After index schema 8 this condition is legal: it is
+// reported for visibility, not as an error.
+func DetectDuplicateFileIDs(workspace config.Workspace) []DuplicateFileID {
+	scanned, err := scan(workspace)
+	if err != nil {
+		return nil
+	}
+	topicPaths := make(map[string]string, len(scanned.topics))
+	for _, topic := range scanned.topics {
+		topicPaths[topic.ID.String()+"\x00"+topic.Storage.String()] = topic.Path
+	}
+	type entry struct {
+		topicID string
+		path    string
+	}
+	grouped := make(map[string][]entry)
+	order := make([]string, 0)
+	seenTopic := make(map[string]map[string]struct{})
+	for _, file := range scanned.files {
+		if file.FileID.String() == "" || file.Type != "historic_file" {
+			continue
+		}
+		key := file.Storage.String() + "\x00" + file.FileID.String()
+		topicID := file.TopicID.String()
+		if seenTopic[key] == nil {
+			seenTopic[key] = make(map[string]struct{})
+		}
+		if _, exists := seenTopic[key][topicID]; exists {
+			continue
+		}
+		seenTopic[key][topicID] = struct{}{}
+		if len(grouped[key]) == 0 {
+			order = append(order, key)
+		}
+		grouped[key] = append(grouped[key], entry{topicID: topicID, path: topicPaths[topicID+"\x00"+file.Storage.String()]})
+	}
+	duplicates := make([]DuplicateFileID, 0)
+	for _, key := range order {
+		entries := grouped[key]
+		if len(entries) < 2 {
+			continue
+		}
+		sort.Slice(entries, func(i, j int) bool { return entries[i].topicID < entries[j].topicID })
+		storage, fileID, _ := strings.Cut(key, "\x00")
+		topics := make([]DuplicateFileIDTopic, 0, len(entries))
+		for _, item := range entries {
+			topics = append(topics, DuplicateFileIDTopic{TopicID: item.topicID, Path: item.path})
+		}
+		duplicates = append(duplicates, DuplicateFileID{FileID: fileID, Storage: storage, Topics: topics})
+	}
+	return duplicates
 }
 
 func hasLegacyTopicFolders(workspace config.Workspace) bool {

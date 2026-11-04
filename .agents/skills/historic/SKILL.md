@@ -206,6 +206,8 @@ historic version [--json]
 `historic upgrade` is the supported one-command legacy workspace orchestrator. It scans legacy five-digit topic folders and manifests, creates an immutable backup outside `.historic`, migrates FileID and TopicID data, writes aliases, rebuilds SQLite/FTS, and reports an idempotent result. Use `migrate-topic-ids` or `migrate-file-ids` for focused admin migrations.
 
 - `doctor` is read-only and never renames legacy folders. It reports binary/version compatibility and recommends `historic upgrade` when legacy topic folders are detected.
+- `doctor` also reports duplicate FileIDs (`duplicate_file_ids` in `--json`, one `Duplicate FileIDs: n` line plus entries, or `Duplicate FileIDs: none`). Since index schema 8 a FileID is scoped per topic, so the same FileID in several topics is legal, not an error; the report is informational and never triggers a write.
+- Index schema 8 keys `files` by `PRIMARY KEY (topic_id, id, storage)`. A schema 7 index is stale after upgrade: `doctor` says `rebuild required`, and `historic rebuild` recreates it from Markdown. Save/rebuild use idempotent upserts, so repeating `historic save <id>` is a no-op and a duplicate FileID never fails with SQLite 1555.
 - `--no-file-ids` and `--no-topic-ids` are admin/recovery flags; their warnings explain which migration was skipped.
 - `--dry-run` must not write topic folders, metadata, aliases, backups, or indexes. `--backup-dir` must be outside `.historic`.
 - Topic aliases are retained in `.historic/.topic-id-aliases.yaml` during compatibility migration.

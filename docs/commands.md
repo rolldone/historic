@@ -83,6 +83,8 @@ historic open [id] [--json]
 historic import <id> [--json]
 ```
 
+`save <id>` is idempotent: mirroring the same topic twice writes identical bytes, so the second call is a no-op and its auto-commit reports `no-changes`. A FileID recorded in more than one topic no longer aborts the operation; each topic is saved individually and reported on its own line.
+
 `save` and `close` without an ID open an interactive picker for open topics, sorted by newest `updated_at` (falling back to `_meta.yaml` mtime); type to filter, use Up/Down and Enter to select, or Esc/q to cancel. `save <id>` mirrors one topic while retaining its open workdir; `save --all` explicitly mirrors all open topics. `close <id>` mirrors then closes one topic; `close --all` explicitly closes all open topics and reports partial failures. `open` without an ID opens the same picker scoped to closed topics; `open <id>` remains available. JSON mode without an ID returns an error instead of starting an interactive picker. `--all` cannot be combined with an ID and is supported only by save and close.
 
 `close`, `open`, and `import` change storage only and preserve member frontmatter statuses and topic contents. A partial failure in `close --all` continues processing and exits non-zero; `--json` returns one envelope with per-topic results and totals. Save never changes storage. `save` and `close` auto-commit the internal repository (see Auto-commit below); use `historic git commit -m "message"` only when you want an explicitly labelled manual commit.
@@ -182,6 +184,8 @@ historic rebuild [--json]
 
 Possible diagnosis statuses are `compatible`, `upgrade required`, `rebuild required`, `binary too old`, and `workspace invalid`.
 
+`doctor` also reports duplicate FileIDs: a FileID recorded in more than one topic within the same storage. Since index schema 8 a FileID is scoped per topic, so this is a **legal** state (legacy topic-ID migration preserves FileIDs), not an error. The report lists `file_id`, `storage`, and the topics that contain it (`duplicate_file_ids` in `--json`, `Duplicate FileIDs: none` when clean). Detection is read-only; nothing is rewritten or rebuilt automatically.
+
 ## Lifecycle and versioning
 
 ```sh
@@ -247,3 +251,5 @@ Every JSON-capable command uses the envelope:
 `historic rebuild` is the unified workflow for all open and closed topics. It recursively scans every topic file, regenerates the `_meta.yaml` files/assets manifest, recomputes the derived topic status using the same deterministic aggregation as `list`/`show`/`find`, rebuilds storage-aware SQLite/FTS5, validates the temporary index, and atomically replaces the prior index. If `_meta.yaml` is missing, it is minimally recovered from the folder ID/slug; recovery is rolled back if rebuild fails.
 
 The SQLite index schema is owned by the installed binary. Rebuild writes the schema of whichever binary is running, so after pulling source changes that alter the schema you must reinstall before validating (`./build-global.sh`, then `historic version` and `historic rebuild --json`). A stale binary keeps the previous `index_schema_version` and cannot create newer columns such as `topics.extends_id`, `topics.progress_percent`, or `files.forwarded_to`; `historic doctor` then reports `rebuild required`.
+
+Index schema 8 scopes FileIDs per topic: the `files` table is keyed by `PRIMARY KEY (topic_id, id, storage)`, so the same FileID may be indexed under several topics without overwriting any of them, and `find`/`show` keep showing each topic's row. Rebuild and save write with `INSERT ... ON CONFLICT(topic_id, id, storage) DO UPDATE`, so re-indexing is an idempotent upsert rather than a fatal `UNIQUE constraint failed: files.id, files.storage (1555)`. Upgrading a workspace from schema 7 is a full index rebuild: `historic doctor` reports `rebuild required`, then `historic rebuild` recreates the index from Markdown (the source of truth, so no index data migration is needed).

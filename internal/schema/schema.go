@@ -57,11 +57,14 @@ CREATE TABLE IF NOT EXISTS files (
     hash TEXT NOT NULL,
     size INTEGER NOT NULL DEFAULT 0,
     word_count INTEGER NOT NULL DEFAULT 0,
-    PRIMARY KEY (id, storage),
+    PRIMARY KEY (topic_id, id, storage),
     FOREIGN KEY (topic_id, storage) REFERENCES topics(id, storage) ON DELETE CASCADE,
     UNIQUE (topic_id, storage, path),
     CHECK (type = 'historic_file' OR status IS NULL)
 );
+-- A FileID is scoped per topic: the same FileID may legitimately live in more
+-- than one topic (legacy topic-ID migration preserves FileIDs). Indexing it
+-- twice must be an idempotent upsert, never a fatal UNIQUE violation.
 CREATE INDEX IF NOT EXISTS idx_topics_num_padded ON topics(num_padded);
 CREATE INDEX IF NOT EXISTS idx_topics_storage ON topics(storage);
 CREATE INDEX IF NOT EXISTS idx_topics_slug ON topics(slug);
