@@ -202,6 +202,12 @@ func (store TopicStore) AddEntry(topicID domain.ID, name string, force bool) (do
 	if err != nil {
 		return domain.Entry{}, fmt.Errorf("read topic metadata: %w", err)
 	}
+	// created and updated are stamped from the same date read so a brand-new
+	// entry always arrives with updated == created (today, UTC). That matches
+	// the freshness bump semantics used by save/rebuild (which would otherwise
+	// have nothing to detect for a file written and indexed in one step) and
+	// keeps the frontmatter self-consistent instead of relying on sort-time
+	// fallback from created.
 	created := dateToday()
 	fileID := domain.FileID("")
 	for _, file := range meta.Files {
@@ -216,7 +222,7 @@ func (store TopicStore) AddEntry(topicID domain.ID, name string, force bool) (do
 			return domain.Entry{}, fmt.Errorf("generate managed file ID: %w", err)
 		}
 	}
-	metadata := domain.Frontmatter{Title: entryTitle(relativeName), Description: "", Status: domain.StatusCreate, Created: created}
+	metadata := domain.Frontmatter{Title: entryTitle(relativeName), Description: "", Status: domain.StatusCreate, Created: created, Updated: created}
 	document, err := markdown.NewDocument(metadata, "# "+metadata.Title+"\n")
 	if err != nil {
 		return domain.Entry{}, fmt.Errorf("create entry metadata: %w", err)

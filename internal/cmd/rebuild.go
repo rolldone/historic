@@ -11,10 +11,11 @@ import (
 )
 
 func newRebuildCommand() *cobra.Command {
-	var jsonOutput bool
+	var jsonOutput, noBump bool
 	command := &cobra.Command{
 		Use:   "rebuild",
 		Short: "Rebuild the SQLite index from Markdown",
+		Long:  "Reconcile every topic manifest and rebuild the SQLite index from Markdown. Use --no-bump to skip advancing the frontmatter updated date of content-changed files.",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			workspace, err := commandWorkspaceForRecovery()
@@ -24,7 +25,10 @@ func newRebuildCommand() *cobra.Command {
 			if err := config.ValidateRebuildWorkspace(workspace); err != nil {
 				return writeCommandError(cmd, "rebuild", jsonOutput, err)
 			}
-			bump := lifecycle.BumpAllChangedFiles(workspace)
+			var bump lifecycle.BumpResult
+			if !noBump {
+				bump = lifecycle.BumpAllChangedFiles(workspace)
+			}
 			change, err := lifecycle.RebuildMetadata(workspace)
 			if err != nil {
 				return writeCommandError(cmd, "rebuild", jsonOutput, fmt.Errorf("unified rebuild failed; run historic doctor for diagnosis: %w", err))
@@ -37,13 +41,14 @@ func newRebuildCommand() *cobra.Command {
 			if _, err = fmt.Fprintf(cmd.OutOrStdout(), "Rebuilt index with %d records at %s\n", response.Data.Records, response.Data.Index); err != nil {
 				return err
 			}
-			if err = writeBumpHuman(cmd, bump); err != nil {
+			if err = writeBumpHuman(cmd, bump, noBump); err != nil {
 				return err
 			}
 			return writeAutoCommitHuman(cmd, &commit)
 		},
 	}
 	command.Flags().BoolVar(&jsonOutput, "json", false, "output stable JSON")
+	command.Flags().BoolVar(&noBump, "no-bump", false, "skip advancing the frontmatter updated date of content-changed files")
 	return command
 }
 

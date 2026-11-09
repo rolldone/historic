@@ -29,7 +29,7 @@ Historic is a local-first work-memory CLI. Markdown is the source of truth. SQLi
 - Legacy five-digit topic IDs remain readable during compatibility and migration.
 - Managed file IDs remain lowercase canonical UUIDv7 values; do not mix TopicID and FileID.
 - User-facing paths should be relative to the project root and use `.historic/`.
-- Calendar dates (`created`, `updated`) are always UTC `YYYY-MM-DD`, regardless of host timezone. `updated` is never earlier than `created`, including for legacy documents.
+- Calendar dates (`created`, `updated`) are always UTC `YYYY-MM-DD`, regardless of host timezone. `updated` is never earlier than `created`, including for legacy documents. `historic add` stamps a new entry with `created == updated == today` in one date read (and `--force` re-stamps both), so a fresh file never relies on the `created` fallback.
 - Markdown is the source of truth. Run `historic rebuild --json` after recovery or manual index-affecting filesystem changes.
 - JSON-capable commands preserve `{ "command", "ok", "data", "error" }`.
 - JSON errors must not be duplicated on stderr.
@@ -151,7 +151,8 @@ historic status <path> forwarded
 - Assigning a non-`forwarded` status clears `forwarded_to`; assigning `forwarded` keeps an existing destination but does not create one. Use `historic forward` to record a destination.
 - `computed_status` and `progress_percent` are SQLite derived aggregate/cache values only. Recompute them through normal write operations or `historic rebuild`; never write either into `_meta.yaml` or frontmatter. `progress_percent` is independent of `computed_status` and never replaces it for open/closed logic.
 - `close` and `open` change storage only and never change member status.
-- `historic save [id] [--all] [--json]` mirrors open topics into `.historic/.database/` and leaves open workdirs intact. Without an ID it opens an interactive newest-first picker for exactly one open topic; with a topic ID it mirrors only that topic; `--all` explicitly mirrors every open topic. It does not accept `-m/--message`; it auto-commits the mirror with a deterministic `auto:` message.
+- `historic save [id] [--all] [--no-bump] [--json]` mirrors open topics into `.historic/.database/` and leaves open workdirs intact. Without an ID it opens an interactive newest-first picker for exactly one open topic; with a topic ID it mirrors only that topic; `--all` explicitly mirrors every open topic. It does not accept `-m/--message`; it auto-commits the mirror with a deterministic `auto:` message.
+- `--no-bump` (on `save` and `rebuild` only, never on `add`) skips the content-change date rewrite for that operation. The mirror, auto-commit, and index rebuild still run; JSON keeps `bumped_files: 0` and human output prints `bump updated: skipped (--no-bump)`. The skipped change is **absorbed**, not queued: the rebuild makes the current content the new `files.hash` baseline, so a later run without the flag reports `0` bumps and leaves `updated` unchanged. Use it for mechanical edits (whitespace, reformatting, mass renames) that must not mark a topic as freshly active.
 - `close` mirrors an open topic to `.database` before removing the open workdir; `close` then auto-commits once, covering both the mirror and the workdir removal. Use `historic git commit -m "message"` only for an explicitly labelled manual commit.
 - `historic open [id] [--json]` reopens a closed topic. Without an ID it opens an interactive newest-first picker scoped to closed topics. `--json` without an ID returns an error instead of starting a picker; `--all` is not supported for open.
 - A topic may have both open and closed copies. Open remains authoritative for writes; `find`, `show`, and TUI display versions separately. Compare frontmatter `updated_at` and file `mtime` to identify the newer copy.
@@ -161,7 +162,7 @@ historic close 00001
 historic close --all [--json]
 historic open [id] [--json]
 historic import 00001
-historic save [id] [--all] [--json]
+historic save [id] [--all] [--no-bump] [--json]
 ```
 
 - `historic list` shows open topics by default; `historic list --closed` lists topics in `.historic/.database/`, including mirror snapshots that still have an open copy. The `--closed` flag does not mean “include closed.” Default ordering is newest-first (`updated_at`, falling back to `created_at`); use `--sort updated|created|title|id` to change it, where `id` reproduces the legacy ID-ascending order.
@@ -200,7 +201,7 @@ historic doctor [--json]
 historic upgrade [--dry-run] [--json] [--backup-dir <path>] [--no-file-ids] [--no-topic-ids]
 historic migrate-topic-ids [--dry-run] [--json] [--id <legacy-id>]
 historic migrate-file-ids [--dry-run] [--json] [--id <topic-id>] [--open|--closed]
-historic rebuild [--json]
+historic rebuild [--no-bump] [--json]
 historic version [--json]
 ```
 

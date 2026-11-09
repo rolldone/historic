@@ -138,6 +138,10 @@ The default `list`/`find`/`recent` ordering is driven by `updated_at`. To keep t
 
 Unchanged files are left byte-identical (so repeated `save`/`rebuild` runs are idempotent), assets/`_meta.yaml`/non-Historic Markdown are ignored, the closed mirror is never edited directly, and files without an indexed baseline are skipped rather than guessed. A file that cannot be rewritten is a non-fatal warning. `save`/`rebuild` `--json` adds an additive `bumped_files` count, and human output prints `bump updated: N file`.
 
+`historic save --no-bump` / `historic rebuild --no-bump` skips only the date rewrite: the mirror, the automatic commit, and the index rebuild still run, and human output says `bump updated: skipped (--no-bump)`. Because the operation still rebuilds the index, the current content becomes the new baseline, so a skipped change is absorbed — a later run without the flag reports `0` bumps and leaves `updated` alone. Use it for mechanical edits (whitespace, reformatting) that should not mark a topic as freshly active.
+
+`historic add` needs no such pass: the new file is written and indexed in one step, so it simply arrives with `updated` equal to `created` (today, UTC). `--force` re-stamps both.
+
 
 Read topics with explicit closed scope when needed:
 

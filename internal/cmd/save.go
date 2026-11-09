@@ -12,11 +12,11 @@ import (
 )
 
 func newSaveCommand() *cobra.Command {
-	var jsonOutput, all bool
+	var jsonOutput, all, noBump bool
 	command := &cobra.Command{
 		Use:   "save [id]",
 		Short: "Mirror one or all open topics to closed storage",
-		Long:  "Without an ID, interactively select one open topic. Use --all to mirror every open topic.",
+		Long:  "Without an ID, interactively select one open topic. Use --all to mirror every open topic. Use --no-bump to mirror without advancing the frontmatter updated date of content-changed files.",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if all && len(args) > 0 {
@@ -32,7 +32,7 @@ func newSaveCommand() *cobra.Command {
 			var saveErr error
 			var commit *lifecycle.AutoCommitResult
 			if len(args) == 1 {
-				if id, idErr := domain.ParseTopicIdentity(args[0]); idErr == nil {
+				if id, idErr := domain.ParseTopicIdentity(args[0]); idErr == nil && !noBump {
 					bump = lifecycle.BumpChangedFiles(workspace, []domain.ID{id})
 				}
 				result, saveErr = mirrorOne(service, args[0])
@@ -43,7 +43,9 @@ func newSaveCommand() *cobra.Command {
 					}
 				}
 			} else if all {
-				bump = lifecycle.BumpAllChangedFiles(workspace)
+				if !noBump {
+					bump = lifecycle.BumpAllChangedFiles(workspace)
+				}
 				result, saveErr = service.MirrorAllOpen()
 				if saveErr == nil {
 					change := lifecycle.AutoCommitAll(workspace, "save")
@@ -59,7 +61,7 @@ func newSaveCommand() *cobra.Command {
 				if selected == nil {
 					return nil
 				}
-				if id, idErr := domain.ParseTopicIdentity(selected.ID); idErr == nil {
+				if id, idErr := domain.ParseTopicIdentity(selected.ID); idErr == nil && !noBump {
 					bump = lifecycle.BumpChangedFiles(workspace, []domain.ID{id})
 				}
 				result, saveErr = mirrorOne(service, selected.ID)
@@ -85,7 +87,7 @@ func newSaveCommand() *cobra.Command {
 				}
 			} else if err := writeMirrorAllHuman(cmd, result); err != nil {
 				return err
-			} else if err := writeBumpHuman(cmd, bump); err != nil {
+			} else if err := writeBumpHuman(cmd, bump, noBump); err != nil {
 				return err
 			} else if err := writeAutoCommitHuman(cmd, commit); err != nil {
 				return err
@@ -98,6 +100,7 @@ func newSaveCommand() *cobra.Command {
 	}
 	command.Flags().BoolVar(&jsonOutput, "json", false, "output stable JSON")
 	command.Flags().BoolVar(&all, "all", false, "mirror all open topics")
+	command.Flags().BoolVar(&noBump, "no-bump", false, "skip advancing the frontmatter updated date of content-changed files")
 	return command
 }
 

@@ -39,8 +39,15 @@ type saveResponseData struct {
 }
 
 // writeBumpHuman prints the content-change bump summary and any non-fatal
-// warnings. It stays silent when nothing was bumped and there were no warnings.
-func writeBumpHuman(cmd *cobra.Command, result lifecycle.BumpResult) error {
+// warnings. It stays silent when nothing was bumped and there were no warnings,
+// except when the pass was explicitly skipped, where one line explains why no
+// bump line follows.
+func writeBumpHuman(cmd *cobra.Command, result lifecycle.BumpResult, skipped bool) error {
+	if skipped {
+		if _, err := fmt.Fprintln(cmd.OutOrStdout(), "bump updated: skipped (--no-bump)"); err != nil {
+			return err
+		}
+	}
 	if result.Count() > 0 {
 		if _, err := fmt.Fprintf(cmd.OutOrStdout(), "bump updated: %d file\n", result.Count()); err != nil {
 			return err

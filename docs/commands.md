@@ -33,7 +33,7 @@ updated_at DESC (fallback created_at DESC)
 
 `historic version` prints `VersionName`, `VersionCode`, `WorkspaceFormatVersion`, and `IndexSchemaVersion`. JSON output includes all four values as a stable envelope.
 
-`historic add` canonicalizes the basename before writing it: whitespace, `_`, and repeated `-` separators become a single lowercase `-`, and `.md` is added exactly once. Directory prefixes are preserved. A `wos/` entry receives the next available `NN-` Work Order number; an existing `NN-` prefix is preserved. Absolute paths, traversal, hidden paths, and names without usable characters are rejected. User-facing JSON paths always use `/` separators.
+`historic add` canonicalizes the basename before writing it: whitespace, `_`, and repeated `-` separators become a single lowercase `-`, and `.md` is added exactly once. Directory prefixes are preserved. A `wos/` entry receives the next available `NN-` Work Order number; an existing `NN-` prefix is preserved. Absolute paths, traversal, hidden paths, and names without usable characters are rejected. User-facing JSON paths always use `/` separators. A new entry is stamped with `created` and `updated` set to the same UTC date (today), so a brand-new file never has `updated` missing or older than `created`; `--force` overwrites an existing file and re-stamps both dates to today.
 
 Topic IDs for new topics are 13-digit positive Unix epoch milliseconds. Topic folders use `<topic-id>-<slug>`, for example `1758537600123-search-read-model`. Allocation is monotonic and serialized across processes. Legacy five-digit IDs remain readable during migration and may be resolved through the alias map. Managed file IDs are independent lowercase canonical UUIDv7 values.
 
@@ -77,7 +77,7 @@ Work status belongs only to managed member Markdown files. That status is author
 
 ```sh
 historic status <member-path> <status> [--json]
-historic save [id] [--all] [--json]
+historic save [id] [--all] [--no-bump] [--json]
 historic close [id] [--all] [--json]
 historic open [id] [--json]
 historic import <id> [--json]
@@ -88,6 +88,8 @@ historic import <id> [--json]
 `save` and `close` without an ID open an interactive picker for open topics, sorted by newest `updated_at` (falling back to `_meta.yaml` mtime); type to filter, use Up/Down and Enter to select, or Esc/q to cancel. `save <id>` mirrors one topic while retaining its open workdir; `save --all` explicitly mirrors all open topics. `close <id>` mirrors then closes one topic; `close --all` explicitly closes all open topics and reports partial failures. `open` without an ID opens the same picker scoped to closed topics; `open <id>` remains available. JSON mode without an ID returns an error instead of starting an interactive picker. `--all` cannot be combined with an ID and is supported only by save and close.
 
 `close`, `open`, and `import` change storage only and preserve member frontmatter statuses and topic contents. A partial failure in `close --all` continues processing and exits non-zero; `--json` returns one envelope with per-topic results and totals. Save never changes storage. `save` and `close` auto-commit the internal repository (see Auto-commit below); use `historic git commit -m "message"` only when you want an explicitly labelled manual commit.
+
+`--no-bump` opts out of the content-change bump for that single operation (see *Auto-bump `updated` on content change* below). The mirror, the automatic commit, and the index rebuild still run; only the `updated` rewrite is skipped. Because the operation still rebuilds the index, the current content becomes the new hash baseline, so the skipped change is **absorbed** rather than postponed: a later `save`/`rebuild` without the flag reports `bumped_files: 0` and keeps the old `updated`. Use it for cosmetic or mechanical edits (whitespace, reformatting, mass renames) that should not mark a topic as freshly active. It is available on `save` and `rebuild` only, not on `add`.
 
 ## File status
 
@@ -223,6 +225,10 @@ The pass is safe by construction:
 
 Both `save` and `rebuild` add an additive `bumped_files` integer to their JSON `data` (the number of files whose `updated` was advanced); human output prints `bump updated: N file` when `N > 0` and `bump warning (tidak fatal): ...` for partial failures.
 
+Passing `--no-bump` skips the whole pass for that operation. The JSON contract is unchanged (`bumped_files` stays `0`) and human output prints `bump updated: skipped (--no-bump)` instead, so the reason for a missing bump is visible. Note that a skipped change is absorbed, not queued (see the `--no-bump` note above).
+
+`historic add` does not need this pass at all: the new file is written and indexed in one step, so there is no baseline to differ from. A new entry simply arrives with `updated` equal to `created`.
+
 ## Auto-commit
 
 Operations that change the closed mirror `.historic/.database` run `git add --all` and `git commit` in the internal repository. Auto-commit is local-only: no push, no remote, no branch/tag/checkout, and no workdir/`.git`-tracked files.
@@ -255,6 +261,7 @@ or `{"committed": false, "reason": "no-changes"}`. Human output adds one line su
 
 ```sh
 historic rebuild
+historic rebuild --no-bump
 historic rebuild --json
 ```
 
