@@ -84,7 +84,7 @@ func newFindCommand() *cobra.Command {
 	command.Flags().StringVar(&tag, "tag", "", "filter by topic or file tag; repeat as comma-separated values")
 	command.Flags().StringVar(&folder, "folder", "", "filter by topic-relative folder")
 	command.Flags().StringVar(&searchType, "type", "", "filter by topic or file type")
-	command.Flags().StringVar(&sortOption, "sort", "", "sort by relevance, updated, created, or title")
+	command.Flags().StringVar(&sortOption, "sort", "", "sort by relevance, updated, created, title, or id")
 	command.Flags().StringVar(&id, "topic", "", "filter by five-digit topic ID")
 	command.Flags().StringVar(&id, "id", "", "filter by five-digit topic ID")
 	command.Flags().StringVar(&createdAfter, "created-after", "", "filter created date from YYYY-MM-DD")

@@ -18,6 +18,19 @@ import (
 
 const DefaultLimit = 20
 
+// Sort modes cycled by the `s` keybinding in the results view. Relevance is
+// the default and maps to an empty search sort option, which preserves the
+// pre-existing behaviour (FTS rank for queries, activity order for recent
+// topics).
+const (
+	SortRelevance = "relevance"
+	SortUpdated   = "updated"
+	SortCreated   = "created"
+	SortTitle     = "title"
+)
+
+var sortModes = []string{SortRelevance, SortUpdated, SortCreated, SortTitle}
+
 type Options struct {
 	Input  io.Reader
 	Output io.Writer
@@ -34,6 +47,7 @@ type model struct {
 	status     domain.Status
 	scope      string
 	typeName   string
+	sortMode   string
 	focus      focusMode
 	errorText  string
 	// previewOffset scrolls the structured preview when it exceeds the
@@ -78,14 +92,14 @@ func newModel(workspace config.Workspace) model {
 	input.Placeholder = "type a query, or leave empty for recent topics"
 	input.CharLimit = 200
 	input.Width = 48
-	return model{workspace: workspace, input: input, limit: DefaultLimit, scope: "all", focus: focusResults}
+	return model{workspace: workspace, input: input, limit: DefaultLimit, scope: "all", sortMode: SortRelevance, focus: focusResults}
 }
 
 func (m model) Init() tea.Cmd { return m.refresh() }
 
 func (m model) refresh() tea.Cmd {
 	keyword := strings.TrimSpace(m.input.Value())
-	options := search.Options{Keyword: keyword, Page: m.page + 1, PageSize: m.limit, OpenOnly: m.scope == "active", ClosedOnly: m.scope == "archived", Status: m.status}
+	options := search.Options{Keyword: keyword, Page: m.page + 1, PageSize: m.limit, OpenOnly: m.scope == "active", ClosedOnly: m.scope == "archived", Status: m.status, Sort: m.sortOption()}
 	if m.typeName == "work-order" {
 		options.Type = "task"
 	}
@@ -172,6 +186,11 @@ func (m model) handleKey(message tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "f":
 		m.focus = focusFilter
 		return m, nil
+	case "s":
+		m.cycleSort()
+		m.selected = 0
+		m.previewOffset = 0
+		return m, m.refresh()
 	case "r":
 		return m, m.refresh()
 	case "n", "right":
@@ -265,7 +284,7 @@ func (m model) View() string {
 	if pageData.Pagination.HasMore {
 		paginationText = "More available"
 	}
-	header := accent.Render("Historic Search") + "\n" + truncate(fmt.Sprintf("Query: %s | status=%s scope=%s type=%s page-size=%d", m.input.View(), statusName(m.status), m.scope, m.typeNameOrAll(), m.limit), width)
+	header := accent.Render("Historic Search") + "\n" + truncate(fmt.Sprintf("Query: %s | status=%s scope=%s type=%s sort=%s page-size=%d", m.input.View(), statusName(m.status), m.scope, m.typeNameOrAll(), m.sortName(), m.limit), width)
 	if m.focus == focusFilter {
 		header += "\n" + muted.Render("Filter focus: s scope; v status; t type; Esc/f closes")
 	}
@@ -328,9 +347,9 @@ func (m model) View() string {
 	} else {
 		body = lipgloss.JoinHorizontal(lipgloss.Top, lipgloss.NewStyle().Width(leftWidth).Render(left), lipgloss.NewStyle().Width(rightWidth).Render(right))
 	}
-	footerText := fmt.Sprintf("Page %d · showing %d results · %s | ↑↓ nav  Ctrl+D/U scroll  / query  f filter  n/→ next  p/← prev  r refresh  q quit", m.page+1, len(m.currentPage()), paginationText)
+	footerText := fmt.Sprintf("Page %d · showing %d results · %s | sort=%s | ↑↓ nav  Ctrl+D/U scroll  / query  f filter  s sort  n/→ next  p/← prev  r refresh  q quit", m.page+1, len(m.currentPage()), paginationText, m.sortName())
 	if width < 72 {
-		footerText = fmt.Sprintf("↑↓ navigate · Page %d · %d results · %s", m.page+1, len(m.currentPage()), paginationText)
+		footerText = fmt.Sprintf("↑↓ navigate · Page %d · %d results · %s · sort=%s", m.page+1, len(m.currentPage()), paginationText, m.sortName())
 	}
 	footer := muted.Render(truncate(footerText, width))
 	return truncateLines(header, width, headerLines) + "\n" + truncateLines(body, width, contentHeight) + "\n" + footer
@@ -420,6 +439,45 @@ func (m *model) cycleStatus() {
 		}
 	}
 	m.status = ""
+}
+
+// cycleSort advances the TUI sort mode: relevance → updated → created → title.
+func (m *model) cycleSort() {
+	current := m.sortName()
+	for index, mode := range sortModes {
+		if current == mode {
+			m.sortMode = sortModes[(index+1)%len(sortModes)]
+			return
+		}
+	}
+	m.sortMode = SortRelevance
+}
+
+// sortName normalizes the stored mode so an empty value reads as the default.
+func (m *model) sortName() string {
+	if m.sortMode == "" {
+		return SortRelevance
+	}
+	return m.sortMode
+}
+
+// sortOption maps a TUI sort mode onto the search layer's sort option.
+// Relevance is expressed as an empty option, which keeps the default FTS rank
+// ordering for queries and the activity ordering for recent topics.
+func (m *model) sortOption() string {
+	switch m.sortName() {
+	case SortUpdated, SortCreated, SortTitle:
+		return m.sortName()
+	default:
+		return ""
+	}
+}
+
+// CycleSortForTest exposes the sort cycle to unit tests.
+func CycleSortForTest(current string) string {
+	model := model{sortMode: current}
+	model.cycleSort()
+	return model.sortName()
 }
 
 func isTerminal(value io.Reader) bool {

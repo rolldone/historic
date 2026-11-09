@@ -444,7 +444,14 @@ func openIndex(workspace config.Workspace) (*sql.DB, error) {
 
 func resultOrder(sortOption string) string {
 	storageRank := "CASE WHEN COALESCE(t.storage, f.storage) = 'open' THEN 0 ELSE 1 END ASC, "
+	topicRank := "COALESCE(CASE WHEN historic_fts.entity_type = 'topic' THEN t.id ELSE f.topic_id END, '')"
+	resultPath := "CASE WHEN historic_fts.entity_type = 'topic' THEN t.path ELSE t.path || '/' || f.path END"
 	switch sortOption {
+	case "id":
+		// Legacy ID ascending with parity for list --sort id: owning topic ID
+		// ascending, then open storage first, then path ascending. The entity
+		// filename breaks ties between several files of one topic.
+		return topicRank + " ASC, " + storageRank + resultPath + " ASC, CASE WHEN historic_fts.entity_type = 'topic' THEN '' ELSE f.filename END ASC"
 	case "updated":
 		return "COALESCE(CASE WHEN historic_fts.entity_type = 'topic' THEN t.updated_at ELSE f.updated_at END, CASE WHEN historic_fts.entity_type = 'topic' THEN t.created_at ELSE f.created_at END) DESC, CASE WHEN historic_fts.entity_type = 'topic' THEN t.created_at ELSE f.mtime END DESC, " + storageRank + "CASE WHEN historic_fts.entity_type = 'topic' THEN t.path ELSE f.path END ASC"
 	case "created":
@@ -459,6 +466,10 @@ func resultOrder(sortOption string) string {
 func recentOrder(sortOption string) string {
 	storageRank := "CASE WHEN storage = 'open' THEN 0 ELSE 1 END ASC, "
 	switch sortOption {
+	case "id":
+		// Legacy ID ascending, matching list --sort id (ID ASC, open-first,
+		// then path ascending).
+		return "id ASC, " + storageRank + "path ASC"
 	case "title":
 		return "title ASC, " + storageRank + "path ASC"
 	case "created":
@@ -501,8 +512,8 @@ func validateOptions(options Options, requireKeyword bool) error {
 	if options.Type != "" && !validType(options.Type) {
 		return fmt.Errorf("invalid type %q; use topic, historic_file, asset, or file", options.Type)
 	}
-	if options.Sort != "" && options.Sort != "relevance" && options.Sort != "updated" && options.Sort != "created" && options.Sort != "title" {
-		return fmt.Errorf("invalid sort %q; use relevance, updated, created, or title", options.Sort)
+	if options.Sort != "" && options.Sort != "relevance" && options.Sort != "updated" && options.Sort != "created" && options.Sort != "title" && options.Sort != "id" {
+		return fmt.Errorf("invalid sort %q; use relevance, updated, created, title, or id", options.Sort)
 	}
 	if options.ID != "" && !options.ID.Valid() {
 		return fmt.Errorf("invalid topic ID %q; use exactly five digits", options.ID)
