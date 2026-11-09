@@ -132,6 +132,12 @@ auto: rebuild ? (3 path berubah)
 
 If there is nothing to commit the step is skipped (`no-changes`); if the internal repository does not exist it is skipped (`no-repository`). A failed commit (for example a missing Git identity) is reported as a non-fatal warning and the operation still succeeds. Use `historic git commit -m "..."` when you want an explicitly labelled manual commit instead. This flow replaces the project repository as the backup mechanism for the Historic workspace.
 
+### Freshness (`updated`) on content change
+
+The default `list`/`find`/`recent` ordering is driven by `updated_at`. To keep that ordering honest when a file's **content** changes without going through `historic status`, both `historic save` and `historic rebuild` run a content-change bump pass first: for each managed Markdown file in an **open** topic, the on-disk SHA-256 is compared with the digest stored in the index (`files.hash`), and when it differs the frontmatter `updated` is set to today's UTC date (never earlier than `created`). The rewrite happens before the mirror and the automatic commit, so the snapshot and commit already carry the new date.
+
+Unchanged files are left byte-identical (so repeated `save`/`rebuild` runs are idempotent), assets/`_meta.yaml`/non-Historic Markdown are ignored, the closed mirror is never edited directly, and files without an indexed baseline are skipped rather than guessed. A file that cannot be rewritten is a non-fatal warning. `save`/`rebuild` `--json` adds an additive `bumped_files` count, and human output prints `bump updated: N file`.
+
 
 Read topics with explicit closed scope when needed:
 

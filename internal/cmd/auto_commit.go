@@ -31,10 +31,27 @@ func writeAutoCommitHuman(cmd *cobra.Command, result *lifecycle.AutoCommitResult
 }
 
 // saveResponseData keeps the existing mirror fields flat and adds the nullable
-// commit field required for auto-commit reporting.
+// commit field required for auto-commit reporting plus the additive bump count.
 type saveResponseData struct {
 	lifecycle.MirrorAllResult
-	Commit *lifecycle.AutoCommitResult `json:"commit"`
+	BumpedFiles int                         `json:"bumped_files"`
+	Commit      *lifecycle.AutoCommitResult `json:"commit"`
+}
+
+// writeBumpHuman prints the content-change bump summary and any non-fatal
+// warnings. It stays silent when nothing was bumped and there were no warnings.
+func writeBumpHuman(cmd *cobra.Command, result lifecycle.BumpResult) error {
+	if result.Count() > 0 {
+		if _, err := fmt.Fprintf(cmd.OutOrStdout(), "bump updated: %d file\n", result.Count()); err != nil {
+			return err
+		}
+	}
+	for _, warning := range result.Warnings {
+		if _, err := fmt.Fprintf(cmd.OutOrStdout(), "bump warning (tidak fatal): %s\n", warning); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // closeAllResponseData keeps the existing close-all fields flat and adds the

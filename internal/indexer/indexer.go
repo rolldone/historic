@@ -582,6 +582,13 @@ func hashFile(path string) string {
 	return hex.EncodeToString(hash[:])
 }
 
+// HashFile returns the lowercase hex SHA-256 digest of a file's raw bytes, or
+// an empty string when the file cannot be read. It is the same digest the
+// indexer stores in files.hash, exported so lifecycle passes can compare an
+// on-disk file against the indexed read model without duplicating the hashing
+// scheme.
+func HashFile(path string) string { return hashFile(path) }
+
 func nullable(value string) any {
 	if value == "" {
 		return nil

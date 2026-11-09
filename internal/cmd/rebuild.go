@@ -24,16 +24,20 @@ func newRebuildCommand() *cobra.Command {
 			if err := config.ValidateRebuildWorkspace(workspace); err != nil {
 				return writeCommandError(cmd, "rebuild", jsonOutput, err)
 			}
+			bump := lifecycle.BumpAllChangedFiles(workspace)
 			change, err := lifecycle.RebuildMetadata(workspace)
 			if err != nil {
 				return writeCommandError(cmd, "rebuild", jsonOutput, fmt.Errorf("unified rebuild failed; run historic doctor for diagnosis: %w", err))
 			}
 			commit := lifecycle.AutoCommitRecovery(workspace, "rebuild")
-			response := rebuildOutput{Command: "rebuild", OK: true, Data: rebuildData{Topics: change.Topics, Updated: change.Updated, Errors: change.Errors, Records: change.Records, Index: workspace.RelativePath(workspace.Index), Commit: &commit}, Error: nil}
+			response := rebuildOutput{Command: "rebuild", OK: true, Data: rebuildData{Topics: change.Topics, Updated: change.Updated, Errors: change.Errors, Records: change.Records, Index: workspace.RelativePath(workspace.Index), BumpedFiles: bump.Count(), Commit: &commit}, Error: nil}
 			if jsonOutput {
 				return json.NewEncoder(cmd.OutOrStdout()).Encode(response)
 			}
 			if _, err = fmt.Fprintf(cmd.OutOrStdout(), "Rebuilt index with %d records at %s\n", response.Data.Records, response.Data.Index); err != nil {
+				return err
+			}
+			if err = writeBumpHuman(cmd, bump); err != nil {
 				return err
 			}
 			return writeAutoCommitHuman(cmd, &commit)
@@ -51,10 +55,11 @@ type rebuildOutput struct {
 }
 
 type rebuildData struct {
-	Topics  int                         `json:"topics"`
-	Updated int                         `json:"updated"`
-	Errors  int                         `json:"errors"`
-	Records int                         `json:"records"`
-	Index   string                      `json:"index"`
-	Commit  *lifecycle.AutoCommitResult `json:"commit"`
+	Topics      int                         `json:"topics"`
+	Updated     int                         `json:"updated"`
+	Errors      int                         `json:"errors"`
+	Records     int                         `json:"records"`
+	Index       string                      `json:"index"`
+	BumpedFiles int                         `json:"bumped_files"`
+	Commit      *lifecycle.AutoCommitResult `json:"commit"`
 }

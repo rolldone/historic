@@ -207,6 +207,20 @@ All Git subcommands and flags are passed through as requested, including `push`,
 
 Snapshots are local-only and include both open and closed topic storage under `.historic`. `save` refreshes the closed snapshot while leaving the open topic intact; `close` mirrors then removes the open workdir. Both are filesystem operations plus one automatic internal commit; storage movement never changes work status. The open copy is authoritative for writes. Search/show can display both versions; compare `updated_at` (frontmatter) and file `mtime` to identify which snapshot is newer.
 
+### Auto-bump `updated` on content change
+
+`save` (single, `--all`, and the interactive picker) and `rebuild` run a **content-change bump** pass before mirroring/committing. For every managed Markdown file in an **open** topic, the current SHA-256 digest (the same value stored in `files.hash`) is compared with the indexed baseline; when the content changed, `updated` is set to the current UTC date via `laterDate(created, today)` before the mirror and the automatic commit run, so the committed snapshot already reflects the bump.
+
+The pass is safe by construction:
+
+- Files whose digest matches the index are never rewritten, so repeated `save`/`rebuild` runs are idempotent and byte-identical.
+- `updated` never moves behind `created` (the `laterDate` floor) and is never decreased, so a manual future date is preserved.
+- Assets, `_meta.yaml`, and Markdown without Historic frontmatter are ignored, and the closed mirror `.database` is never edited in place (it is refreshed by `save`/`mirror` only).
+- Files with no indexed baseline (new files, a missing/stale index) are skipped rather than guessed, so the pass cannot rewrite files it has not seen.
+- A file that cannot be rewritten becomes a non-fatal warning; the operation still succeeds.
+
+Both `save` and `rebuild` add an additive `bumped_files` integer to their JSON `data` (the number of files whose `updated` was advanced); human output prints `bump updated: N file` when `N > 0` and `bump warning (tidak fatal): ...` for partial failures.
+
 ## Auto-commit
 
 Operations that change the closed mirror `.historic/.database` run `git add --all` and `git commit` in the internal repository. Auto-commit is local-only: no push, no remote, no branch/tag/checkout, and no workdir/`.git`-tracked files.
@@ -248,7 +262,7 @@ Every JSON-capable command uses the envelope:
 {"command":"...","ok":true,"data":{},"error":null}
 ```
 
-`historic rebuild` is the unified workflow for all open and closed topics. It recursively scans every topic file, regenerates the `_meta.yaml` files/assets manifest, recomputes the derived topic status using the same deterministic aggregation as `list`/`show`/`find`, rebuilds storage-aware SQLite/FTS5, validates the temporary index, and atomically replaces the prior index. If `_meta.yaml` is missing, it is minimally recovered from the folder ID/slug; recovery is rolled back if rebuild fails.
+`historic rebuild` is the unified workflow for all open and closed topics. It recursively scans every topic file, regenerates the `_meta.yaml` files/assets manifest, recomputes the derived topic status using the same deterministic aggregation as `list`/`show`/`find`, rebuilds storage-aware SQLite/FTS5, validates the temporary index, and atomically replaces the prior index. It first runs the auto-bump pass described under *Lifecycle and versioning*, so a file edited outside Historic (for example in an editor) gets its `updated` date advanced to today before the index is rebuilt. If `_meta.yaml` is missing, it is minimally recovered from the folder ID/slug; recovery is rolled back if rebuild fails.
 
 The SQLite index schema is owned by the installed binary. Rebuild writes the schema of whichever binary is running, so after pulling source changes that alter the schema you must reinstall before validating (`./build-global.sh`, then `historic version` and `historic rebuild --json`). A stale binary keeps the previous `index_schema_version` and cannot create newer columns such as `topics.extends_id`, `topics.progress_percent`, or `files.forwarded_to`; `historic doctor` then reports `rebuild required`.
 

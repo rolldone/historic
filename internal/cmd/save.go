@@ -28,9 +28,13 @@ func newSaveCommand() *cobra.Command {
 			}
 			service := lifecycle.NewService(workspace)
 			var result lifecycle.MirrorAllResult
+			var bump lifecycle.BumpResult
 			var saveErr error
 			var commit *lifecycle.AutoCommitResult
 			if len(args) == 1 {
+				if id, idErr := domain.ParseTopicIdentity(args[0]); idErr == nil {
+					bump = lifecycle.BumpChangedFiles(workspace, []domain.ID{id})
+				}
 				result, saveErr = mirrorOne(service, args[0])
 				if saveErr == nil {
 					if id, idErr := domain.ParseTopicIdentity(args[0]); idErr == nil {
@@ -39,6 +43,7 @@ func newSaveCommand() *cobra.Command {
 					}
 				}
 			} else if all {
+				bump = lifecycle.BumpAllChangedFiles(workspace)
 				result, saveErr = service.MirrorAllOpen()
 				if saveErr == nil {
 					change := lifecycle.AutoCommitAll(workspace, "save")
@@ -54,6 +59,9 @@ func newSaveCommand() *cobra.Command {
 				if selected == nil {
 					return nil
 				}
+				if id, idErr := domain.ParseTopicIdentity(selected.ID); idErr == nil {
+					bump = lifecycle.BumpChangedFiles(workspace, []domain.ID{id})
+				}
 				result, saveErr = mirrorOne(service, selected.ID)
 				if saveErr == nil {
 					if id, idErr := domain.ParseTopicIdentity(selected.ID); idErr == nil {
@@ -67,7 +75,7 @@ func newSaveCommand() *cobra.Command {
 				OK      bool             `json:"ok"`
 				Data    saveResponseData `json:"data"`
 				Error   any              `json:"error"`
-			}{Command: "save", OK: saveErr == nil, Data: saveResponseData{MirrorAllResult: result, Commit: commit}}
+			}{Command: "save", OK: saveErr == nil, Data: saveResponseData{MirrorAllResult: result, BumpedFiles: bump.Count(), Commit: commit}}
 			if saveErr != nil {
 				response.Error = saveErr.Error()
 			}
@@ -76,6 +84,8 @@ func newSaveCommand() *cobra.Command {
 					return err
 				}
 			} else if err := writeMirrorAllHuman(cmd, result); err != nil {
+				return err
+			} else if err := writeBumpHuman(cmd, bump); err != nil {
 				return err
 			} else if err := writeAutoCommitHuman(cmd, commit); err != nil {
 				return err
