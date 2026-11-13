@@ -417,14 +417,14 @@ func scanTopic(workspace config.Workspace, id domain.ID, candidate topicCandidat
 	if meta.ID != id {
 		return topicReadModel{}, nil, nil, fmt.Errorf("%w: metadata ID %s does not match folder ID %s at %s", domain.ErrConflict, meta.ID, id, workspace.RelativePath(candidate.path))
 	}
-	manifestByPath := make(map[string]domain.FileID, len(meta.Files))
+	manifestByPath := make(map[string]markdown.ManifestFile, len(meta.Files))
 	for _, file := range meta.Files {
-		manifestByPath[file.Path] = file.ID
+		manifestByPath[file.Path] = file
 	}
 	topic := topicReadModel{
 		ID: id, Title: meta.Title, Description: meta.Description, Slug: candidate.slug,
 		Path: workspace.RelativePath(candidate.path), Storage: candidate.storage,
-		CreatedAt: meta.Created, UpdatedAt: meta.Updated, Tags: meta.Tags, Related: meta.Related,
+		CreatedAt: meta.Created, UpdatedAt: effectiveTopicUpdatedAt(meta), Tags: meta.Tags, Related: meta.Related,
 		Extends: meta.Extends,
 	}
 	info, statErr := os.Stat(metaPath)
@@ -434,7 +434,7 @@ func scanTopic(workspace config.Workspace, id domain.ID, candidate topicCandidat
 	records := []Record{{
 		Num: id.Number(), NumPadded: id.String(), Type: "meta", Title: meta.Title, Description: meta.Description,
 		Status: "", Tags: meta.Tags, Related: meta.Related, CreatedAt: meta.Created,
-		UpdatedAt: meta.Updated, Storage: candidate.storage,
+		UpdatedAt: effectiveTopicUpdatedAt(meta), Storage: candidate.storage,
 		Path:     filepath.ToSlash(filepath.Join(workspace.RelativePath(candidate.path), markdown.MetaFilename)),
 		FolderID: id, FolderSlug: candidate.slug, Filename: markdown.MetaFilename,
 		Mtime: info.ModTime().UTC().Format(time.RFC3339Nano), Hash: hashFile(metaPath),
@@ -467,7 +467,8 @@ func scanTopic(workspace config.Workspace, id domain.ID, candidate topicCandidat
 			}
 			document, parseErr := markdown.Parse(path, input)
 			if parseErr == nil {
-				fileID := manifestByPath[relative]
+				manifest := manifestByPath[relative]
+				fileID := manifest.ID
 				if fileID == "" {
 					fileID, err = identifier.Default.New()
 					if err != nil {
@@ -484,9 +485,10 @@ func scanTopic(workspace config.Workspace, id domain.ID, candidate topicCandidat
 				record.FolderSlug = candidate.slug
 				record.Subfolder = filepath.ToSlash(filepath.Dir(relative))
 				record.Filename = filepath.Base(path)
+				record.UpdatedAt = effectiveFileUpdatedAt(manifest.UpdatedAt, document.Frontmatter.Updated)
 				records = append(records, record)
 				statuses = append(statuses, document.Frontmatter.Status)
-				files = append(files, fileReadModelFromDocument(id, relative, path, stat, document, "historic_file", fileID))
+				files = append(files, fileReadModelFromDocument(id, relative, path, stat, document, "historic_file", fileID, manifest.UpdatedAt))
 				return nil
 			}
 			if markdown.LooksLikeHistoricFile(input) {
@@ -509,8 +511,27 @@ func scanTopic(workspace config.Workspace, id domain.ID, candidate topicCandidat
 	return topic, records, files, nil
 }
 
-func fileReadModelFromDocument(id domain.ID, relative, path string, info os.FileInfo, document markdown.Document, fileType string, fileID domain.FileID) fileReadModel {
-	return fileReadModel{FileID: fileID, TopicID: id, Type: fileType, Path: relative, Filename: filepath.Base(path), Title: document.Frontmatter.Title, Description: document.Frontmatter.Description, Status: document.Frontmatter.Status, Tags: document.Frontmatter.Tags, Related: document.Frontmatter.Related, ForwardedTo: document.Frontmatter.ForwardedTo, Content: document.Body, CreatedAt: document.Frontmatter.Created, UpdatedAt: document.Frontmatter.Updated, Mtime: info.ModTime().UTC().Format(time.RFC3339Nano), Hash: hashFile(path), Size: info.Size(), WordCount: wordCount(document.Body)}
+func fileReadModelFromDocument(id domain.ID, relative, path string, info os.FileInfo, document markdown.Document, fileType string, fileID domain.FileID, stamp string) fileReadModel {
+	return fileReadModel{FileID: fileID, TopicID: id, Type: fileType, Path: relative, Filename: filepath.Base(path), Title: document.Frontmatter.Title, Description: document.Frontmatter.Description, Status: document.Frontmatter.Status, Tags: document.Frontmatter.Tags, Related: document.Frontmatter.Related, ForwardedTo: document.Frontmatter.ForwardedTo, Content: document.Body, CreatedAt: document.Frontmatter.Created, UpdatedAt: effectiveFileUpdatedAt(stamp, document.Frontmatter.Updated), Mtime: info.ModTime().UTC().Format(time.RFC3339Nano), Hash: hashFile(path), Size: info.Size(), WordCount: wordCount(document.Body)}
+}
+
+// effectiveTopicUpdatedAt prefers the high-resolution manifest stamp and falls
+// back to the calendar `updated` date so legacy topics keep their old ordering.
+func effectiveTopicUpdatedAt(meta markdown.TopicMetadata) string {
+	if strings.TrimSpace(meta.UpdatedAt) != "" {
+		return meta.UpdatedAt
+	}
+	return meta.Updated
+}
+
+// effectiveFileUpdatedAt prefers the per-file manifest stamp and falls back to
+// the file's calendar `updated` date. The stamp is what makes a single edited
+// file move ahead of its topic siblings on the same day.
+func effectiveFileUpdatedAt(stamp, dailyUpdated string) string {
+	if strings.TrimSpace(stamp) != "" {
+		return stamp
+	}
+	return dailyUpdated
 }
 
 func fileReadModelFromAsset(id domain.ID, relative, path string, info os.FileInfo) fileReadModel {

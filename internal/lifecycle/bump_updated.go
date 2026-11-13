@@ -52,7 +52,6 @@ func BumpChangedFiles(workspace config.Workspace, ids []domain.ID) BumpResult {
 		result.Warnings = append(result.Warnings, fmt.Sprintf("bump updated: skipped (index baseline unavailable): %v", err))
 		return result
 	}
-	today := fileStatusNow().UTC().Format("2006-01-02")
 	unique := make([]domain.ID, 0, len(ids))
 	seen := make(map[domain.ID]struct{}, len(ids))
 	for _, id := range ids {
@@ -72,7 +71,7 @@ func BumpChangedFiles(workspace config.Workspace, ids []domain.ID) BumpResult {
 		if storage != domain.StorageOpen {
 			continue
 		}
-		bumpTopicFiles(workspace, id, path, today, baseline, &result)
+		bumpTopicFiles(workspace, id, path, baseline, &result)
 	}
 	if result.Count() == 0 {
 		return result
@@ -150,7 +149,7 @@ func bumpBaselineKey(topicID, path string) string {
 // bumpTopicFiles walks one open topic and advances `updated` on managed files
 // whose content changed. Walk errors and unreadable entries degrade to
 // warnings so one bad file cannot fail the whole pass.
-func bumpTopicFiles(workspace config.Workspace, id domain.ID, topicPath, today string, baseline map[string]string, result *BumpResult) {
+func bumpTopicFiles(workspace config.Workspace, id domain.ID, topicPath string, baseline map[string]string, result *BumpResult) {
 	walkErr := filepath.WalkDir(topicPath, func(path string, entry os.DirEntry, err error) error {
 		if err != nil {
 			result.Warnings = append(result.Warnings, fmt.Sprintf("bump updated: %s: %v", workspace.RelativePath(path), err))
@@ -182,7 +181,7 @@ func bumpTopicFiles(workspace config.Workspace, id domain.ID, topicPath, today s
 		if current == "" || current == stored {
 			return nil
 		}
-		if bumpErr := bumpFileDate(workspace, path, today, result); bumpErr != nil {
+		if bumpErr := bumpFileStamp(workspace, topicPath, path, result); bumpErr != nil {
 			result.Warnings = append(result.Warnings, fmt.Sprintf("bump updated: %s: %v", workspace.RelativePath(path), bumpErr))
 		}
 		return nil
@@ -192,11 +191,11 @@ func bumpTopicFiles(workspace config.Workspace, id domain.ID, topicPath, today s
 	}
 }
 
-// bumpFileDate rewrites one file's `updated` frontmatter field. It writes only
-// when the value actually advances, keeping the pass idempotent (a repeated run
-// with unchanged content performs no write) and never moving `updated`
-// backwards. Non-Historic Markdown is left untouched.
-func bumpFileDate(workspace config.Workspace, path, today string, result *BumpResult) error {
+// bumpFileStamp advances both the file's calendar `updated` date and the
+// high-resolution per-file and topic stamps recorded in _meta.yaml. The stamp is
+// what lets a single edited file move ahead of its siblings in `find --sort
+// updated` even when they share a calendar day.
+func bumpFileStamp(workspace config.Workspace, topicPath string, path string, result *BumpResult) error {
 	input, err := os.ReadFile(path)
 	if err != nil {
 		return err
@@ -209,12 +208,18 @@ func bumpFileDate(workspace config.Workspace, path, today string, result *BumpRe
 		// A plain asset or non-Historic Markdown file: nothing to bump.
 		return nil
 	}
-	next := laterDate(document.Frontmatter.Created, today)
-	if next == "" || next <= document.Frontmatter.Updated {
-		return nil
+	today := fileStatusNow().UTC().Format("2006-01-02")
+	if next := laterDate(document.Frontmatter.Created, today); next != "" && next > document.Frontmatter.Updated {
+		document.Frontmatter.Updated = next
+		if err := markdown.WriteFile(path, document); err != nil {
+			return err
+		}
 	}
-	document.Frontmatter.Updated = next
-	if err := markdown.WriteFile(path, document); err != nil {
+	relative, err := filepath.Rel(topicPath, path)
+	if err != nil {
+		return err
+	}
+	if _, err := StampTopicFiles(workspace, topicPath, []string{filepath.ToSlash(relative)}, stampClock()); err != nil {
 		return err
 	}
 	result.BumpedFiles = append(result.BumpedFiles, workspace.RelativePath(path))

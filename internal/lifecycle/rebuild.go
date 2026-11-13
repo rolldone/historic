@@ -48,6 +48,13 @@ func RebuildMetadata(workspace config.Workspace) (RebuildChange, error) {
 				_ = markdown.RestoreTopicMetadata(path, content)
 			}
 		}
+		// Backfill empty freshness stamps from the identities encoded in the
+		// topic and file IDs before reconciling the manifest. Legacy five-digit
+		// topics keep an empty stamp and fall back to the calendar date.
+		if _, backfillErr := BackfillTopicStamps(workspace); backfillErr != nil {
+			rollback()
+			return nil, fmt.Errorf("backfill freshness stamps: %w", backfillErr)
+		}
 		for _, path := range paths {
 			change, syncErr := syncMetaTopic(workspace, workspace.RelativePath(path), false)
 			if syncErr != nil {

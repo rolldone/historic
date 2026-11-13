@@ -177,3 +177,76 @@ func ensureTopicsProgressPercentColumn(database *sql.DB) error {
 	}
 	return nil
 }
+
+// ensureTopicsUpdatedAtColumn backfills the nullable updated_at text column on
+// the topics read model. The column already exists as a calendar date for older
+// workspaces; it now stores the high-resolution RFC3339 stamp derived from
+// _meta.yaml.updated_at, so only table creation order matters here.
+func ensureTopicsUpdatedAtColumn(database *sql.DB) error {
+	rows, err := database.Query("PRAGMA table_info(topics)")
+	if err != nil {
+		return fmt.Errorf("inspect topics columns: %w", err)
+	}
+	defer rows.Close()
+	found := false
+	tableExists := false
+	var cid int
+	var name, columnType string
+	var notNull, primaryKey int
+	var defaultValue any
+	for rows.Next() {
+		if err := rows.Scan(&cid, &name, &columnType, &notNull, &defaultValue, &primaryKey); err != nil {
+			return fmt.Errorf("read topics columns: %w", err)
+		}
+		tableExists = true
+		if name == "updated_at" {
+			found = true
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("iterate topics columns: %w", err)
+	}
+	if !tableExists || found {
+		return nil
+	}
+	if _, err := database.Exec("ALTER TABLE topics ADD COLUMN updated_at TEXT"); err != nil {
+		return fmt.Errorf("add topics.updated_at column: %w", err)
+	}
+	return nil
+}
+
+// ensureFilesUpdatedAtColumn backfills the nullable updated_at text column on
+// the files read model. Rebuild fills it from the per-file manifest stamp; the
+// column is what lets `find --sort updated` order individual files by edit time.
+func ensureFilesUpdatedAtColumn(database *sql.DB) error {
+	rows, err := database.Query("PRAGMA table_info(files)")
+	if err != nil {
+		return fmt.Errorf("inspect files columns: %w", err)
+	}
+	defer rows.Close()
+	found := false
+	tableExists := false
+	var cid int
+	var name, columnType string
+	var notNull, primaryKey int
+	var defaultValue any
+	for rows.Next() {
+		if err := rows.Scan(&cid, &name, &columnType, &notNull, &defaultValue, &primaryKey); err != nil {
+			return fmt.Errorf("read files columns: %w", err)
+		}
+		tableExists = true
+		if name == "updated_at" {
+			found = true
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("iterate files columns: %w", err)
+	}
+	if !tableExists || found {
+		return nil
+	}
+	if _, err := database.Exec("ALTER TABLE files ADD COLUMN updated_at TEXT"); err != nil {
+		return fmt.Errorf("add files.updated_at column: %w", err)
+	}
+	return nil
+}

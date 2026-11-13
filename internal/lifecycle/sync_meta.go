@@ -104,8 +104,10 @@ func recoverTopicMetadata(topic string, id domain.ID) (markdown.TopicMetadata, e
 
 func scanTopicFiles(topic string, id domain.ID, previous []markdown.ManifestFile) ([]markdown.ManifestFile, []markdown.ManifestAsset, error) {
 	previousByPath := make(map[string]domain.FileID, len(previous))
+	previousStampByPath := make(map[string]string, len(previous))
 	for _, file := range previous {
 		previousByPath[file.Path] = file.ID
+		previousStampByPath[file.Path] = file.UpdatedAt
 	}
 	managed := make([]markdown.ManifestFile, 0)
 	assets := make([]markdown.ManifestAsset, 0)
@@ -132,14 +134,26 @@ func scanTopicFiles(topic string, id domain.ID, previous []markdown.ManifestFile
 			document, parseErr := markdown.Parse(path, input)
 			if parseErr == nil {
 				fileID := previousByPath[relative]
-				if fileID == "" {
+				freshID := fileID == ""
+				if freshID {
 					var generateErr error
 					fileID, generateErr = identifier.Default.New()
 					if generateErr != nil {
 						return generateErr
 					}
 				}
-				managed = append(managed, markdown.ManifestFile{ID: fileID, Path: relative, Type: markdown.FileType(relative), Status: document.Frontmatter.Status, ForwardedTo: document.Frontmatter.ForwardedTo})
+				// Preserve an existing stamp so reconciling the manifest never
+				// reorders files. A file whose ID was just minted cannot use its
+				// UUIDv7 instant: that reads "now" and would falsely claim the
+				// file was edited during this rebuild. Use the file's own
+				// documented date instead (an empty result means "no stamp", so
+				// ordering falls back to the calendar `updated` date). A real
+				// edit is stamped later by the hash-diff bump, status, or add.
+				stamp := previousStampByPath[relative]
+				if stamp == "" && freshID {
+					stamp = documentedStamp(document.Frontmatter)
+				}
+				managed = append(managed, markdown.ManifestFile{ID: fileID, Path: relative, Type: markdown.FileType(relative), Status: document.Frontmatter.Status, UpdatedAt: stamp, ForwardedTo: document.Frontmatter.ForwardedTo})
 				return nil
 			}
 			if markdown.LooksLikeHistoricFile(input) {

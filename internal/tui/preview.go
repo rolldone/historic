@@ -70,9 +70,9 @@ func resultStatus(result search.Result) string {
 
 func previewTimeLine(result search.Result) string {
 	parts := make([]string, 0, 2)
-	if date := strings.TrimSpace(result.UpdatedAt); date != "" {
+	if date := display.FormatUpdatedStamp(result.UpdatedAt); date != "" {
 		parts = append(parts, "updated "+date)
-	} else if date := strings.TrimSpace(result.CreatedAt); date != "" {
+	} else if date := display.FormatUpdatedStamp(result.CreatedAt); date != "" {
 		parts = append(parts, "updated "+date)
 	}
 	if mtime := previewShortTime(result.Mtime); mtime != "" {

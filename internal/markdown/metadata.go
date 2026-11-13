@@ -22,24 +22,32 @@ const (
 // TopicMetadata is the canonical, non-Markdown metadata for a topic.
 // Managed Markdown frontmatter remains authoritative for member status.
 type TopicMetadata struct {
-	ID          domain.ID       `yaml:"id"`
-	Title       string          `yaml:"title"`
-	Description string          `yaml:"description,omitempty"`
-	Created     string          `yaml:"created"`
-	Updated     string          `yaml:"updated,omitempty"`
-	Tags        []string        `yaml:"tags,omitempty"`
-	Related     []domain.ID     `yaml:"related,omitempty"`
-	Extends     domain.TopicID  `yaml:"extends,omitempty"`
-	Files       []ManifestFile  `yaml:"files"`
-	Assets      []ManifestAsset `yaml:"assets"`
+	ID          domain.ID `yaml:"id"`
+	Title       string    `yaml:"title"`
+	Description string    `yaml:"description,omitempty"`
+	Created     string    `yaml:"created"`
+	Updated     string    `yaml:"updated,omitempty"`
+	// UpdatedAt is the high-resolution (RFC3339 UTC, second precision)
+	// freshness stamp for the whole topic. It travels with the mirror so a
+	// pulled copy keeps the exact edit instant, unlike a local-only index.
+	UpdatedAt string          `yaml:"updated_at,omitempty"`
+	Tags      []string        `yaml:"tags,omitempty"`
+	Related   []domain.ID     `yaml:"related,omitempty"`
+	Extends   domain.TopicID  `yaml:"extends,omitempty"`
+	Files     []ManifestFile  `yaml:"files"`
+	Assets    []ManifestAsset `yaml:"assets"`
 }
 
 // ManifestFile describes a managed Markdown file discovered below a topic.
 type ManifestFile struct {
-	ID          domain.FileID  `yaml:"id"`
-	Path        string         `yaml:"path"`
-	Type        string         `yaml:"type"`
-	Status      domain.Status  `yaml:"status"`
+	ID     domain.FileID `yaml:"id"`
+	Path   string        `yaml:"path"`
+	Type   string        `yaml:"type"`
+	Status domain.Status `yaml:"status"`
+	// UpdatedAt is the high-resolution freshness stamp for this file. It only
+	// advances when this file itself changes, which is what makes per-file
+	// ordering (the core of issue #2) detect a single edited file.
+	UpdatedAt   string         `yaml:"updated_at,omitempty"`
 	ForwardedTo domain.TopicID `yaml:"forwarded_to,omitempty"`
 }
 
@@ -84,6 +92,9 @@ func ValidateTopicMetadata(metadata TopicMetadata) error {
 		if _, err := time.Parse(dateLayout, metadata.Updated); err != nil {
 			return fmt.Errorf("%w: field %q must use YYYY-MM-DD", ErrInvalidFrontmatter, "updated")
 		}
+	}
+	if !ValidTimestamp(metadata.UpdatedAt) {
+		return fmt.Errorf("%w: field %q must be an RFC3339 UTC timestamp with second precision", ErrInvalidFrontmatter, "updated_at")
 	}
 	for index, related := range metadata.Related {
 		if !validRelatedReference(string(related)) {
@@ -135,6 +146,9 @@ func validateManifestFiles(files []ManifestFile) error {
 		if !file.Status.IsValid() {
 			return fmt.Errorf("field %q item %d has invalid status %q", "files", index, file.Status)
 		}
+		if !ValidTimestamp(file.UpdatedAt) {
+			return fmt.Errorf("field %q item %d has an invalid updated_at timestamp", "files", index)
+		}
 		if file.ForwardedTo != "" && !file.ForwardedTo.Valid() {
 			return fmt.Errorf("field %q item %d has invalid forwarded_to %q", "files", index, file.ForwardedTo)
 		}
@@ -181,6 +195,9 @@ func ValidateTopicMetadataLenient(metadata TopicMetadata) error {
 			return fmt.Errorf("%w: field %q must use YYYY-MM-DD", ErrInvalidFrontmatter, "updated")
 		}
 	}
+	if !ValidTimestamp(metadata.UpdatedAt) {
+		return fmt.Errorf("%w: field %q must be an RFC3339 UTC timestamp with second precision", ErrInvalidFrontmatter, "updated_at")
+	}
 	for index, related := range metadata.Related {
 		if !validRelatedReference(string(related)) {
 			return fmt.Errorf("%w: field %q item %d must be a topic ID or relative path", ErrInvalidFrontmatter, "related", index)
@@ -209,6 +226,9 @@ func validateManifestFilesLenient(files []ManifestFile) error {
 		}
 		if !file.Status.IsValid() {
 			return fmt.Errorf("field %q item %d has invalid status %q", "files", index, file.Status)
+		}
+		if !ValidTimestamp(file.UpdatedAt) {
+			return fmt.Errorf("field %q item %d has an invalid updated_at timestamp", "files", index)
 		}
 		if file.ForwardedTo != "" && !file.ForwardedTo.Valid() {
 			return fmt.Errorf("field %q item %d has invalid forwarded_to %q", "files", index, file.ForwardedTo)

@@ -209,10 +209,13 @@ func (store TopicStore) AddEntry(topicID domain.ID, name string, force bool) (do
 	// keeps the frontmatter self-consistent instead of relying on sort-time
 	// fallback from created.
 	created := dateToday()
+	now := timeNow()
 	fileID := domain.FileID("")
+	existingStamp := ""
 	for _, file := range meta.Files {
 		if file.Path == relativeName {
 			fileID = file.ID
+			existingStamp = file.UpdatedAt
 			break
 		}
 	}
@@ -222,6 +225,11 @@ func (store TopicStore) AddEntry(topicID domain.ID, name string, force bool) (do
 			return domain.Entry{}, fmt.Errorf("generate managed file ID: %w", err)
 		}
 	}
+	// Stamp the freshly written file and the owning topic at high resolution so
+	// this entry sorts ahead of untouched siblings on the same calendar day. The
+	// stamp is monotonic, so an overwrite (--force) never moves it backwards.
+	fileStamp := lifecycle.AdvanceStamp(existingStamp, now)
+	meta.UpdatedAt = lifecycle.AdvanceStamp(meta.UpdatedAt, now)
 	metadata := domain.Frontmatter{Title: entryTitle(relativeName), Description: "", Status: domain.StatusCreate, Created: created, Updated: created}
 	document, err := markdown.NewDocument(metadata, "# "+metadata.Title+"\n")
 	if err != nil {
@@ -238,7 +246,7 @@ func (store TopicStore) AddEntry(topicID domain.ID, name string, force bool) (do
 			if strings.HasPrefix(relativeName, "wos/") {
 				fileType = "task"
 			}
-			updatedMeta[index] = markdown.ManifestFile{ID: fileID, Path: relativeName, Type: fileType, Status: metadata.Status}
+			updatedMeta[index] = markdown.ManifestFile{ID: fileID, Path: relativeName, Type: fileType, Status: metadata.Status, UpdatedAt: fileStamp}
 			found = true
 			break
 		}
@@ -248,7 +256,7 @@ func (store TopicStore) AddEntry(topicID domain.ID, name string, force bool) (do
 		if strings.HasPrefix(relativeName, "wos/") {
 			fileType = "task"
 		}
-		updatedMeta = append(updatedMeta, markdown.ManifestFile{ID: fileID, Path: relativeName, Type: fileType, Status: metadata.Status})
+		updatedMeta = append(updatedMeta, markdown.ManifestFile{ID: fileID, Path: relativeName, Type: fileType, Status: metadata.Status, UpdatedAt: fileStamp})
 	}
 	if _, err := markdown.WriteTopicMetadataManifest(filepath.Join(topicPath, markdown.MetaFilename), meta, updatedMeta, meta.Assets); err != nil {
 		if !force {

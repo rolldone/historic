@@ -106,9 +106,9 @@ func findPath(path string, width int) string {
 }
 
 func findTimeLine(result search.Result) string {
-	date := strings.TrimSpace(result.UpdatedAt)
+	date := display.FormatUpdatedStamp(result.UpdatedAt)
 	if date == "" {
-		date = strings.TrimSpace(result.CreatedAt)
+		date = display.FormatUpdatedStamp(result.CreatedAt)
 	}
 	parts := make([]string, 0, 2)
 	if date != "" {

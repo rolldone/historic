@@ -171,6 +171,12 @@ func initializeIndex(path string) error {
 	if err := ensureTopicsProgressPercentColumn(database); err != nil {
 		return fmt.Errorf("migrate index schema %s: %w", path, err)
 	}
+	if err := ensureTopicsUpdatedAtColumn(database); err != nil {
+		return fmt.Errorf("migrate index schema %s: %w", path, err)
+	}
+	if err := ensureFilesUpdatedAtColumn(database); err != nil {
+		return fmt.Errorf("migrate index schema %s: %w", path, err)
+	}
 	const indexSchema = `
 CREATE TABLE IF NOT EXISTS historic_metadata (key TEXT PRIMARY KEY, value INTEGER NOT NULL);
 INSERT INTO historic_metadata(key, value) VALUES ('workspace_format_version', 2) ON CONFLICT(key) DO NOTHING;
@@ -178,7 +184,7 @@ CREATE TABLE IF NOT EXISTS historic_meta (key TEXT PRIMARY KEY, value TEXT NOT N
 INSERT INTO historic_meta(key, value) VALUES ('app_version_name', '0.3.0') ON CONFLICT(key) DO NOTHING;
 INSERT INTO historic_meta(key, value) VALUES ('app_version_code', '3') ON CONFLICT(key) DO NOTHING;
 INSERT INTO historic_meta(key, value) VALUES ('workspace_format_version', '2') ON CONFLICT(key) DO NOTHING;
-	INSERT INTO historic_meta(key, value) VALUES ('index_schema_version', '8') ON CONFLICT(key) DO NOTHING;
+	INSERT INTO historic_meta(key, value) VALUES ('index_schema_version', '9') ON CONFLICT(key) DO NOTHING;
 INSERT INTO historic_meta(key, value) VALUES ('built_at', '') ON CONFLICT(key) DO NOTHING;
 INSERT INTO historic_meta(key, value) VALUES ('binary_commit', '') ON CONFLICT(key) DO NOTHING;
 CREATE TABLE IF NOT EXISTS index_records (

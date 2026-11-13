@@ -7,6 +7,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/term"
@@ -39,6 +40,26 @@ func clampWidth(width int) int {
 		return MinWidth
 	}
 	return width
+}
+
+// FormatUpdatedStamp renders a freshness value for human output. A canonical
+// RFC3339 UTC stamp at exactly midnight carries no time-of-day information —
+// that is what a file documented only with `updated: 2026-11-02` receives — so
+// it is shown as a bare date. A stamp with a real time of day keeps full
+// precision, which is what makes a same-day edit visible in the listing.
+func FormatUpdatedStamp(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	parsed, err := time.Parse(time.RFC3339, value)
+	if err != nil {
+		return value
+	}
+	if parsed.Hour() == 0 && parsed.Minute() == 0 && parsed.Second() == 0 {
+		return parsed.Format("2006-01-02")
+	}
+	return value
 }
 
 // Width returns the printable cell width of value, ignoring ANSI escapes.
