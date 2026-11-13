@@ -69,6 +69,8 @@ func changeFileStatus(workspace config.Workspace, inputPath string, next domain.
 		return FileChange{}, fmt.Errorf("file status unsupported: target must be a Markdown file")
 	}
 	previous := document.Frontmatter.Status
+	previousForwarded := document.Frontmatter.ForwardedTo
+	previousUpdated := document.Frontmatter.Updated
 	now := fileStatusNow()
 	updated := laterDate(document.Frontmatter.Created, now.UTC().Format("2006-01-02"))
 	document.Frontmatter.Status = next
@@ -80,11 +82,16 @@ func changeFileStatus(workspace config.Workspace, inputPath string, next domain.
 	case forwardedTo != "":
 		document.Frontmatter.ForwardedTo = forwardedTo
 	}
+	// A repeated identical status is a no-op: the frontmatter and the freshness
+	// stamps must not move so the manifest stays byte-identical.
+	contentChanged := previous != document.Frontmatter.Status ||
+		previousForwarded != document.Frontmatter.ForwardedTo ||
+		previousUpdated != document.Frontmatter.Updated
 	if err := markdown.WriteFile(path, document); err != nil {
 		return FileChange{}, fmt.Errorf("update file status: %w", err)
 	}
 	relative := workspace.RelativePath(path)
-	manifestErr := syncFileStatusManifest(workspace, path, now)
+	manifestErr := syncFileStatusManifest(workspace, path, now, contentChanged)
 	_, rebuildErr := indexer.Rebuild(workspace)
 	switch {
 	case manifestErr != nil && rebuildErr != nil:
@@ -103,16 +110,19 @@ func changeFileStatus(workspace config.Workspace, inputPath string, next domain.
 
 // syncFileStatusManifest reconciles the owning topic's _meta.yaml.files entry
 // so a status change is reflected without requiring a manual rebuild, then
-// advances the per-file and topic freshness stamps. Folding both writes here
-// keeps a single failure surface: a read-only topic reports one manifest-sync
-// error instead of two competing ones.
-func syncFileStatusManifest(workspace config.Workspace, filePath string, at time.Time) error {
+// advances the per-file and topic freshness stamps when advanceStamp is set.
+// Folding both writes here keeps a single failure surface: a read-only topic
+// reports one manifest-sync error instead of two competing ones.
+func syncFileStatusManifest(workspace config.Workspace, filePath string, at time.Time, advanceStamp bool) error {
 	topic, err := topicRootForFile(workspace, filePath)
 	if err != nil {
 		return err
 	}
 	if _, err := syncMetaTopic(workspace, workspace.RelativePath(topic), false); err != nil {
 		return err
+	}
+	if !advanceStamp {
+		return nil
 	}
 	relative, err := filepath.Rel(topic, filePath)
 	if err != nil {
