@@ -44,6 +44,10 @@ func (m model) previewLines(width int) []string {
 	lines = append(lines, previewMutedStyle.Render(display.Truncate(statusLine, width)))
 	if caption := domain.CopyRegionCaption(result.NewerCopy); caption != "" {
 		lines = append(lines, previewWarningStyle.Render(display.Truncate(display.WarningIcon+" "+caption, width)))
+	} else if result.Mirrored {
+		// The pair collapsed into one row because both copies share a stamp.
+		// Say so, otherwise the single row would hide that a mirror exists.
+		lines = append(lines, previewMutedStyle.Render(display.Truncate("mirrored · identical copy in database", width)))
 	}
 
 	lines = previewLabeled(lines, "time", previewTimeLine(result), width)

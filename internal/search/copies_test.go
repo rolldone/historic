@@ -132,7 +132,7 @@ func TestFindMarksNewerLocallyWhenTheOpenCopyHasTheNewerStamp(t *testing.T) {
 	}
 }
 
-func TestFindShowsNoNoticeWhenBothCopiesShareTheSameStamp(t *testing.T) {
+func TestFindPageCollapsesIdenticalCopiesIntoOneRow(t *testing.T) {
 	workspace, err := config.Initialize(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -143,10 +143,54 @@ func TestFindShowsNoNoticeWhenBothCopiesShareTheSameStamp(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	for _, result := range findRows(t, workspace, Options{Keyword: "dedupe-token"}) {
+	// The raw read model keeps one row per storage copy; only the listing
+	// surface folds them, so callers that verify storage contents still see both.
+	raw, err := Find(workspace, Options{Keyword: "dedupe-token"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(raw) != 4 {
+		t.Fatalf("raw results = %#v, want both copies of the topic and its file", raw)
+	}
+
+	results := findRows(t, workspace, Options{Keyword: "dedupe-token"})
+	if len(results) != 2 {
+		t.Fatalf("results = %#v, want one row per logical entity", results)
+	}
+	for _, result := range results {
+		if result.Storage != domain.StorageOpen.String() {
+			t.Fatalf("result %s/%s = %+v, want the open copy", result.Storage, result.Type, result)
+		}
 		if result.NewerCopy != "" {
 			t.Fatalf("result %s/%s notice = %q, want none", result.Storage, result.Type, result.NewerCopy)
 		}
+		if !result.Mirrored {
+			t.Fatalf("result %s/%s = %+v, want mirrored flagged", result.Storage, result.Type, result)
+		}
+	}
+}
+
+func TestRecentTopicsPageCollapsesIdenticalCopies(t *testing.T) {
+	workspace, err := config.Initialize(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	stamp := "2026-11-13T08:53:54Z"
+	writeDualTopic(t, workspace, "00001", "dual", "Dual Topic", "2026-10-01", mustFileID(t, 0), stamp, stamp)
+	if _, err := indexer.Rebuild(workspace); err != nil {
+		t.Fatal(err)
+	}
+
+	page, err := RecentTopicsPage(workspace, Options{Page: 1, PageSize: 20})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Items) != 1 {
+		t.Fatalf("recent topics = %#v, want a single collapsed row", page.Items)
+	}
+	item := page.Items[0]
+	if item.Storage != domain.StorageOpen.String() || item.NewerCopy != "" || !item.Mirrored {
+		t.Fatalf("recent topic = %+v, want the open mirrored row", item)
 	}
 }
 

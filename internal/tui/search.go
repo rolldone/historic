@@ -325,8 +325,9 @@ func (m model) View() string {
 	}
 	previewBlock := m.visiblePreview(previewWidth, previewHeight)
 	left := "Results\n"
-	// A mirrored topic appears twice on purpose; the pair is separated by a
-	// rule and the newer side carries the warning notice.
+	// A mirrored topic appears twice only while its copies differ; an identical
+	// pair already collapsed to the open row, so the rule always marks a real
+	// divergence and the newer side carries the warning notice.
 	copies := make(map[string]int, len(rows))
 	for _, result := range rows {
 		copies[search.CopyKey(result)]++

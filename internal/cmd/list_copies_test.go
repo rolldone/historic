@@ -127,14 +127,17 @@ func TestListMarksNewerLocallyWhenTheOpenCopyIsNewer(t *testing.T) {
 	}
 }
 
-func TestListShowsNoNoticeWhenCopiesShareAStamp(t *testing.T) {
+func TestListCollapsesIdenticalCopiesIntoSingleRow(t *testing.T) {
 	root := t.TempDir()
 	t.Chdir(root)
+	t.Setenv("COLUMNS", "80")
 	if _, err := executeCommand(t, "init"); err != nil {
 		t.Fatal(err)
 	}
-	stamp := "2026-11-13T10:45:30Z"
-	writeMirroredTopicFixture(t, root, "1793629449341", "Topic", stamp, stamp)
+	// AC-10: the saved pair carries the same stamp on both sides, which is the
+	// real-world case that produced an uninformative duplicate.
+	stamp := "2026-11-13T08:53:54Z"
+	writeMirroredTopicFixture(t, root, "1794304312863", "Artyplanet Infra", stamp, stamp)
 
 	output, err := executeCommand(t, "list")
 	if err != nil {
@@ -143,9 +146,82 @@ func TestListShowsNoNoticeWhenCopiesShareAStamp(t *testing.T) {
 	if strings.Contains(output, "[newer") {
 		t.Fatalf("identical stamps must not produce a notice:\n%s", output)
 	}
-	// Two rows still appear: the duplicate itself is the signal.
-	if countListRows(output, "1793629449341") != 2 {
-		t.Fatalf("want both copies listed:\n%s", output)
+	if strings.Contains(output, displayDividerToken) {
+		t.Fatalf("a single row needs no divider:\n%s", output)
+	}
+	if countListRows(output, "1794304312863") != 1 {
+		t.Fatalf("want exactly one row for an identical pair:\n%s", output)
+	}
+	if !strings.Contains(output, "open") {
+		t.Fatalf("the surviving row must be the open copy:\n%s", output)
+	}
+}
+
+func TestListCollapsesCopiesThatOnlyShareADailyFallbackDate(t *testing.T) {
+	root := t.TempDir()
+	t.Chdir(root)
+	t.Setenv("COLUMNS", "80")
+	if _, err := executeCommand(t, "init"); err != nil {
+		t.Fatal(err)
+	}
+	// Pre-v9 rows carry no stamp: both sides fall back to the same calendar
+	// date, which is still "identical" for the purposes of the listing.
+	for _, base := range []string{filepath.Join(root, ".historic"), filepath.Join(root, ".historic", ".database")} {
+		topic := filepath.Join(base, "1794304312864-legacy")
+		if err := os.MkdirAll(topic, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		content := "id: \"1794304312864\"\ntitle: Legacy\ncreated: 2026-10-01\nupdated: 2026-11-10\n"
+		if err := os.WriteFile(filepath.Join(topic, "_meta.yaml"), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	output, err := executeCommand(t, "list")
+	if err != nil {
+		t.Fatalf("list: %v (%s)", err, output)
+	}
+	if countListRows(output, "1794304312864") != 1 {
+		t.Fatalf("identical fallback dates must collapse to one row:\n%s", output)
+	}
+}
+
+func TestListJSONFlagsTheCollapsedMirroredRow(t *testing.T) {
+	root := t.TempDir()
+	t.Chdir(root)
+	if _, err := executeCommand(t, "init"); err != nil {
+		t.Fatal(err)
+	}
+	stamp := "2026-11-13T08:53:54Z"
+	writeMirroredTopicFixture(t, root, "1794304312863", "Artyplanet Infra", stamp, stamp)
+
+	output, err := executeCommand(t, "list", "--json")
+	if err != nil {
+		t.Fatalf("list --json: %v (%s)", err, output)
+	}
+	var response struct {
+		OK   bool `json:"ok"`
+		Data []struct {
+			ID        string `json:"id"`
+			Storage   string `json:"storage"`
+			UpdatedAt string `json:"updated_at"`
+			Mirrored  bool   `json:"mirrored"`
+			NewerCopy string `json:"newer_copy"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal([]byte(output), &response); err != nil {
+		t.Fatalf("decode: %v (%q)", err, output)
+	}
+	if !response.OK || len(response.Data) != 1 {
+		t.Fatalf("list JSON = %#v, want a single collapsed row", response)
+	}
+	row := response.Data[0]
+	// Every pre-existing field keeps its name and value; mirrored is additive.
+	if row.ID != "1794304312863" || row.Storage != "open" || row.UpdatedAt != stamp || row.NewerCopy != "" {
+		t.Fatalf("list JSON row = %+v, want the open copy", row)
+	}
+	if !row.Mirrored {
+		t.Fatalf("list JSON row = %+v, want mirrored flagged", row)
 	}
 }
 
@@ -211,6 +287,63 @@ func TestShowPrintsStampAndNoticePerCopy(t *testing.T) {
 	}
 	if strings.Count(output, "[newer in database]") != 1 {
 		t.Fatalf("show notice count is wrong:\n%s", output)
+	}
+}
+
+func TestFindRecentCollapsesIdenticalCopiesIntoOneBlock(t *testing.T) {
+	root := t.TempDir()
+	t.Chdir(root)
+	t.Setenv("COLUMNS", "120")
+	if _, err := executeCommand(t, "init"); err != nil {
+		t.Fatal(err)
+	}
+	stamp := "2026-11-13T08:53:54Z"
+	writeMirroredTopicFixture(t, root, "1794304312863", "Artyplanet Infra", stamp, stamp)
+	if _, err := executeCommand(t, "rebuild"); err != nil {
+		t.Fatal(err)
+	}
+
+	output, err := executeCommand(t, "find", "")
+	if err != nil {
+		t.Fatalf("find: %v (%s)", err, output)
+	}
+	if strings.Contains(output, displayDividerToken) {
+		t.Fatalf("identical copies must not be separated by a divider:\n%s", output)
+	}
+	if got := strings.Count(output, "1794304312863 ·"); got != 1 {
+		t.Fatalf("want exactly one block for an identical pair, got %d:\n%s", got, output)
+	}
+	if !strings.Contains(output, "[OPEN]") {
+		t.Fatalf("the surviving block must be the open copy:\n%s", output)
+	}
+}
+
+func TestFindRecentSeparatesDivergedCopiesWithDividerAndNotice(t *testing.T) {
+	root := t.TempDir()
+	t.Chdir(root)
+	t.Setenv("COLUMNS", "120")
+	if _, err := executeCommand(t, "init"); err != nil {
+		t.Fatal(err)
+	}
+	// AC-9 regression: different stamps keep both rows, the divider, and the
+	// notice on the newer row only.
+	writeMirroredTopicFixture(t, root, "1793629449341", "Historic WebApp Platform", "2026-11-13T10:45:30Z", "2026-11-13T16:02:11Z")
+	if _, err := executeCommand(t, "rebuild"); err != nil {
+		t.Fatal(err)
+	}
+
+	output, err := executeCommand(t, "find", "")
+	if err != nil {
+		t.Fatalf("find: %v (%s)", err, output)
+	}
+	if got := strings.Count(output, "1793629449341 ·"); got != 2 {
+		t.Fatalf("diverged copies must both be listed, got %d:\n%s", got, output)
+	}
+	if !strings.Contains(output, displayDividerToken) {
+		t.Fatalf("diverged copies must be separated by a divider:\n%s", output)
+	}
+	if got := strings.Count(output, "newer in database"); got != 1 {
+		t.Fatalf("the newer copy must carry the notice exactly once, got %d:\n%s", got, output)
 	}
 }
 

@@ -110,9 +110,15 @@ type Result struct {
 	// no counterpart or when both copies carry the same stamp, and it is a
 	// plain field so programmatic consumers never parse presentation text.
 	NewerCopy string `json:"newer_copy,omitempty"`
-	Mtime     string `json:"mtime,omitempty"`
-	Hash      string `json:"hash,omitempty"`
-	Size      int64  `json:"size,omitempty"`
+
+	// Mirrored marks the single row that stands in for a mirrored pair whose
+	// copies carry the same stamp: the pair is listed once (the open copy) and
+	// this flag records that a second, identical copy exists. Additive.
+	Mirrored bool `json:"mirrored,omitempty"`
+
+	Mtime string `json:"mtime,omitempty"`
+	Hash  string `json:"hash,omitempty"`
+	Size  int64  `json:"size,omitempty"`
 
 	// Legacy fields retained for TUI and package compatibility. They are not
 	// part of the stable AI JSON contract.
@@ -142,6 +148,10 @@ type CompactResult struct {
 	Path        string   `json:"path"`
 	CreatedAt   string   `json:"created_at,omitempty"`
 	UpdatedAt   string   `json:"updated_at,omitempty"`
+
+	// Mirrored mirrors Result.Mirrored: this row stands in for an identical
+	// mirrored pair. Additive and omitted unless true.
+	Mirrored bool `json:"mirrored,omitempty"`
 
 	Extends       string   `json:"extends,omitempty"`
 	ForwardedTo   string   `json:"forwarded_to,omitempty"`
@@ -181,6 +191,7 @@ func Compact(page SearchPage) CompactSearchPage {
 			Path:          result.Path,
 			CreatedAt:     result.CreatedAt,
 			UpdatedAt:     result.UpdatedAt,
+			Mirrored:      result.Mirrored,
 			Extends:       result.Extends,
 			ForwardedTo:   result.ForwardedTo,
 			MatchCount:    result.MatchCount,
@@ -206,16 +217,27 @@ type TopicContext struct {
 	ProgressPercent *int `json:"progress_percent"`
 }
 
+// RecentTopics returns every read-model row of the recent-topic listing, one per
+// storage copy, without folding identical mirrored pairs. Listing surfaces call
+// RecentTopicsPage, which collapses them.
 func RecentTopics(workspace config.Workspace, options Options) ([]Result, error) {
-	page, err := RecentTopicsPage(workspace, options)
+	page, err := recentTopicsPage(workspace, options, false)
 	if err != nil {
 		return nil, err
 	}
 	return page.Items, nil
 }
 
-// RecentTopicsPage returns a paginated recent-topic result from the shared read model.
+// RecentTopicsPage returns a paginated recent-topic result from the shared read
+// model, with mirrored pairs that share a stamp folded into one row.
 func RecentTopicsPage(workspace config.Workspace, options Options) (SearchPage, error) {
+	return recentTopicsPage(workspace, options, true)
+}
+
+// recentTopicsPage is the shared implementation. collapseCopies is false for the
+// raw read-model accessor and true for the listing surface, so pagination is
+// computed from the rows the caller actually receives.
+func recentTopicsPage(workspace config.Workspace, options Options, collapseCopies bool) (SearchPage, error) {
 	pagination, err := NormalizePagination(options.Page, options.PageSize)
 	if err != nil {
 		return SearchPage{}, err
@@ -255,24 +277,38 @@ func RecentTopicsPage(workspace config.Workspace, options Options) (SearchPage, 
 	if err := rows.Err(); err != nil {
 		return SearchPage{}, err
 	}
-	// Both storage copies keep their own row: seeing one topic twice is the
-	// visible signal that a mirror exists. Each row learns which copy is
-	// strictly newer so the listing can say so.
+	// Copies that share a stamp are not worth a second row, so the listing folds
+	// them into the open copy. Copies that diverge keep both rows: the duplicate
+	// is then the visible signal that a mirror moved ahead, and each row learns
+	// which one is strictly newer.
+	if collapseCopies {
+		results = CollapseIdenticalCopies(results)
+	}
 	annotateResultCopies(results)
 	return paginateSearchPage(results, pagination), nil
 }
 
-// Find searches topics and files using the shared read model and weighted FTS5.
+// Find returns every read-model row matching the query, one per storage copy,
+// without folding identical mirrored pairs. Listing surfaces call FindPage,
+// which collapses them.
 func Find(workspace config.Workspace, options Options) ([]Result, error) {
-	page, err := FindPage(workspace, options)
+	page, err := findPage(workspace, options, false)
 	if err != nil {
 		return nil, err
 	}
 	return page.Items, nil
 }
 
-// FindPage searches topics and files using the shared read model and weighted FTS5.
+// FindPage searches topics and files using the shared read model and weighted
+// FTS5, with mirrored pairs that share a stamp folded into one row.
 func FindPage(workspace config.Workspace, options Options) (SearchPage, error) {
+	return findPage(workspace, options, true)
+}
+
+// findPage is the shared implementation. collapseCopies is false for the raw
+// read-model accessor and true for the listing surface, so pagination is
+// computed from the rows the caller actually receives.
+func findPage(workspace config.Workspace, options Options, collapseCopies bool) (SearchPage, error) {
 	pagination, err := NormalizePagination(options.Page, options.PageSize)
 	if err != nil {
 		return SearchPage{}, err
@@ -338,9 +374,9 @@ func FindPage(workspace config.Workspace, options Options) (SearchPage, error) {
 		if err := rows.Scan(&result.Type, &result.ID, &result.TopicID, &result.Title, &result.Description, &result.Status, &result.Storage, &result.Path, &tagsJSON, &filename, &rank, &snippetText, &createdAt, &updatedAt, &mtime, &hash, &size, &topicTitle, &topicDescription, &topicStatus, &topicProgress, &topicStorage, &topicPath, &topicTagsJSON, &result.Extends, &result.ForwardedTo); err != nil {
 			return SearchPage{}, fmt.Errorf("read search result: %w", err)
 		}
-		// Mirrored copies are intentionally not collapsed: the open and closed
-		// rows of one topic are two results, and annotateResultCopies marks the
-		// one whose stamp is strictly newer.
+		// The read model returns one row per storage copy; whether an identical
+		// pair is folded into a single row is decided after the scan, so callers
+		// that ask for raw rows still see both copies.
 		result.Tags = decodeStrings(tagsJSON)
 		result.Score = -rank
 		result.CreatedAt, result.UpdatedAt, result.Mtime, result.Hash, result.Size = createdAt, updatedAt, mtime, hash, size
@@ -372,6 +408,12 @@ func FindPage(workspace config.Workspace, options Options) (SearchPage, error) {
 	if err := rows.Err(); err != nil {
 		return SearchPage{}, fmt.Errorf("iterate search results: %w", err)
 	}
+	// A mirrored pair is listed once (the open copy) while its stamps match; two
+	// rows appear only when the copies diverged, which is the signal worth
+	// showing. annotateResultCopies then names the newer side.
+	if collapseCopies {
+		results = CollapseIdenticalCopies(results)
+	}
 	annotateResultCopies(results)
 	return paginateSearchPage(results, pagination), nil
 }
@@ -390,10 +432,10 @@ func CopyKey(result Result) string {
 	return "file\x00" + result.TopicID + "\x00" + result.Path
 }
 
-// annotateResultCopies marks the newer copy of every mirrored pair. Both copies
-// keep their row — the deliberate duplicate is the signal that a mirror exists
-// — and the notice tells the reader which side a per-file guard will treat as
-// authoritative.
+// annotateResultCopies marks the newer copy of every mirrored pair that keeps
+// both rows — the copies whose stamps differ. Identical copies never reach this
+// point on a listing surface because CollapseIdenticalCopies already folded them
+// into one row, so the notice always names a real divergence.
 func annotateResultCopies(results []Result) {
 	groups := make(map[string][]int, len(results))
 	for index := range results {

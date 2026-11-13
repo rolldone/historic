@@ -34,8 +34,9 @@ func writeFindHuman(out io.Writer, page search.SearchPage, keyword string, width
 	for _, result := range results {
 		blocks = append(blocks, renderFindResult(out, result, keyword, width))
 	}
-	// A mirrored row is shown twice on purpose, so the pair is set apart by a
-	// thin rule above its first block rather than collapsed into one result.
+	// A mirrored row is shown twice only while the copies differ; an identical
+	// pair already collapsed to the open copy, so the rule above a duplicated key
+	// always marks a real divergence.
 	copies := make(map[string]int, len(results))
 	for _, result := range results {
 		copies[search.CopyKey(result)]++

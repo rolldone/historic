@@ -31,10 +31,11 @@ func newListCommand() *cobra.Command {
 			if err != nil {
 				return writeCommandError(cmd, "list", jsonOutput, err)
 			}
-			views, err := repository.NewTopicStore(workspace).ListTopicsSorted(closedOnly, sortKey)
+			stored, err := repository.NewTopicStore(workspace).ListTopicsSorted(closedOnly, sortKey)
 			if err != nil {
 				return writeCommandError(cmd, "list", jsonOutput, err)
 			}
+			views := collapseListCopies(stored)
 			result := topicListOutput{Command: "list", OK: true, Data: views, Error: nil}
 			if jsonOutput {
 				return json.NewEncoder(cmd.OutOrStdout()).Encode(result)
@@ -50,15 +51,16 @@ func newListCommand() *cobra.Command {
 			}
 			grouped := make(map[string]bool, len(views))
 			for _, view := range views {
-				// A mirrored topic is listed twice on purpose, so the pair is set
-				// apart by a thin rule instead of being collapsed into one row.
+				// Two rows survive only when the copies carry different stamps,
+				// so a repeated ID here always marks a real divergence worth
+				// separating with a thin rule.
 				if copies[view.ID] > 1 && !grouped[view.ID] {
 					grouped[view.ID] = true
 					if _, err = fmt.Fprintln(out, display.Divider(display.TerminalWidth())); err != nil {
 						return err
 					}
 				}
-				line := fmt.Sprintf("%s  %-6s  %-9s  %s  %s  %s  updated_at=%s", view.ID, view.Storage, displayTopicStatus(view.ComputedStatus), displayProgressPercent(view.ProgressPercent), view.Title, view.Path, displayTopicStamp(view))
+				line := fmt.Sprintf("%s  %-6s  %-9s  %s  %s  %s  updated_at=%s", view.ID, view.Storage, displayTopicStatus(view.ComputedStatus), displayProgressPercent(view.ProgressPercent), view.Title, view.Path, displayTopicStamp(view.TopicView))
 				if notice := display.NewerCopyNotice(out, domain.CopyRegionCaption(view.NewerCopy), false); notice != "" {
 					line += "  " + notice
 				}
@@ -134,10 +136,62 @@ func newShowCommand() *cobra.Command {
 }
 
 type topicListOutput struct {
-	Command string                 `json:"command"`
-	OK      bool                   `json:"ok"`
-	Data    []repository.TopicView `json:"data"`
-	Error   any                    `json:"error"`
+	Command string            `json:"command"`
+	OK      bool              `json:"ok"`
+	Data    []listedTopicView `json:"data"`
+	Error   any               `json:"error"`
+}
+
+// listedTopicView is a list row: the repository view plus the additive flag that
+// marks a row standing in for an identical mirrored pair. Embedding keeps every
+// existing JSON field and its position, so older consumers are unaffected.
+type listedTopicView struct {
+	repository.TopicView
+	Mirrored bool `json:"mirrored,omitempty"`
+}
+
+// collapseListCopies keeps both rows of a mirrored pair only when the copies
+// carry different freshness. Identical copies — including pre-v9 pairs that fall
+// back to the same calendar date — collapse to the open row, which holds the
+// active work, and only the additive Mirrored flag records the second copy.
+func collapseListCopies(views []repository.TopicView) []listedTopicView {
+	listed := make([]listedTopicView, len(views))
+	for index, view := range views {
+		listed[index] = listedTopicView{TopicView: view}
+	}
+	if len(listed) < 2 {
+		return listed
+	}
+	rows := make([]display.CopyRow, len(listed))
+	for index, view := range listed {
+		rows[index] = display.CopyRow{
+			Key:   view.ID,
+			Stamp: listCopyStamp(view.TopicView),
+			Open:  view.Storage == domain.StorageOpen.String(),
+		}
+	}
+	kept := display.CollapseIdenticalCopies(rows)
+	collapsed := make([]listedTopicView, 0, len(kept))
+	for _, row := range kept {
+		view := listed[row.Index]
+		view.Mirrored = row.Mirrored
+		collapsed = append(collapsed, view)
+	}
+	return collapsed
+}
+
+// listCopyStamp is the freshness value two copies are compared on: the
+// high-resolution manifest stamp, then the calendar `updated` date, then
+// `created`. It matches the ordering key so a pair that ties in sort order also
+// ties here.
+func listCopyStamp(view repository.TopicView) string {
+	if stamp := strings.TrimSpace(view.UpdatedAt); stamp != "" {
+		return stamp
+	}
+	if daily := strings.TrimSpace(view.Updated); daily != "" {
+		return daily
+	}
+	return view.Created
 }
 
 type topicShowOutput struct {
