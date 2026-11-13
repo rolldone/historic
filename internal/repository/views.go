@@ -20,6 +20,7 @@ type TopicView struct {
 	Description string     `json:"description"`
 	Created     string     `json:"created"`
 	Updated     string     `json:"updated,omitempty"`
+	UpdatedAt   string     `json:"updated_at,omitempty"`
 	Mtime       string     `json:"mtime,omitempty"`
 	Path        string     `json:"path"`
 	Storage     string     `json:"storage"`
@@ -27,6 +28,13 @@ type TopicView struct {
 	Files       []FileView `json:"files"`
 	Body        string     `json:"body,omitempty"`
 	Active      bool       `json:"active"`
+
+	// NewerCopy names the storage region holding the strictly newer copy when
+	// the same TopicID exists in both the open workdir and the closed mirror:
+	// "database" or "local". It stays empty for a single copy and when both
+	// copies carry the same freshness, so it doubles as the plain flag a
+	// programmatic consumer reads to detect a divergence.
+	NewerCopy string `json:"newer_copy,omitempty"`
 
 	// ComputedStatus is the derived topic status aggregated from managed
 	// files. It is read-only and never persisted to Markdown.
@@ -45,6 +53,11 @@ type FileView struct {
 	Description string `json:"description"`
 	Status      string `json:"status"`
 	ForwardedTo string `json:"forwarded_to,omitempty"`
+
+	// UpdatedAt is this file's own high-resolution manifest stamp. It is the
+	// value that lifts one edited file above its topic siblings, so it is
+	// exposed additively next to the existing fields.
+	UpdatedAt string `json:"updated_at,omitempty"`
 }
 
 // ListSort selects the ordering used by ListTopics.
@@ -81,9 +94,11 @@ func (store TopicStore) ListTopics(closedOnly bool) ([]TopicView, error) {
 	return store.ListTopicsSorted(closedOnly, ListSortUpdated)
 }
 
-// ListTopicsSorted returns deterministic topic views for one storage scope.
-// Both the open workdir and its closed mirror are listed independently, matching
-// find. Ordering is applied in memory: the primary key, then ID descending, then
+// ListTopicsSorted returns deterministic topic views. The open workdir and its
+// closed mirror under `.historic/.database/` are listed as independent rows —
+// a mirrored topic therefore appears twice on purpose, which is the signal
+// that a second copy exists. closedOnly narrows the listing to the mirror.
+// Ordering is applied in memory: the primary key, then ID descending, then
 // open-first, then path ascending.
 func (store TopicStore) ListTopicsSorted(closedOnly bool, sortKey ListSort) ([]TopicView, error) {
 	if _, err := ParseListSort(string(sortKey)); err != nil {
@@ -94,7 +109,7 @@ func (store TopicStore) ListTopicsSorted(closedOnly bool, sortKey ListSort) ([]T
 		path   string
 		active bool
 	}{{store.Workspace.Histories, true}, {store.Workspace.Database, false}} {
-		if closedOnly == root.active {
+		if closedOnly && root.active {
 			continue
 		}
 		entries, err := os.ReadDir(root.path)
@@ -132,6 +147,7 @@ func (store TopicStore) ListTopicsSorted(closedOnly bool, sortKey ListSort) ([]T
 			views = append(views, view)
 		}
 	}
+	annotateCopies(views)
 	sortViews(views, sortKey)
 	return views, nil
 }
@@ -181,10 +197,39 @@ func comparePrimary(left, right TopicView, sortKey ListSort) (int, bool) {
 }
 
 func effectiveActivityDate(view TopicView) string {
-	if strings.TrimSpace(view.Updated) != "" {
-		return view.Updated
+	if stamp := strings.TrimSpace(view.UpdatedAt); stamp != "" {
+		return stamp
+	}
+	if daily := strings.TrimSpace(view.Updated); daily != "" {
+		return daily
 	}
 	return view.Created
+}
+
+// annotateCopies pairs the mirrored copies of one topic. Both copies keep their
+// own row on purpose, so each row also learns whether the other storage holds a
+// strictly newer copy of the same topic.
+func annotateCopies(views []TopicView) {
+	indexes := make(map[string][]int, len(views))
+	for index := range views {
+		indexes[views[index].ID] = append(indexes[views[index].ID], index)
+	}
+	for _, group := range indexes {
+		if len(group) < 2 {
+			continue
+		}
+		for _, index := range group {
+			for _, other := range group {
+				if index == other {
+					continue
+				}
+				if effectiveActivityDate(views[index]) > effectiveActivityDate(views[other]) {
+					views[index].NewerCopy = domain.CopyRegionForStorage(views[index].Storage)
+					break
+				}
+			}
+		}
+	}
 }
 
 // ShowTopics returns all versions of a topic, open first; includeClosed filters to closed copies only.
@@ -225,6 +270,7 @@ func (store TopicStore) ShowTopics(id domain.ID, includeClosed bool) ([]TopicVie
 			views = append(views, view)
 		}
 	}
+	annotateCopies(views)
 	sort.SliceStable(views, func(i, j int) bool {
 		return views[i].Storage == "open" && views[j].Storage != "open"
 	})
@@ -255,13 +301,14 @@ func (store TopicStore) readTopicView(path string, active, includeBody bool) (To
 	}
 	view := TopicView{
 		ID: meta.ID.String(), Title: meta.Title, Description: meta.Description,
-		Created: meta.Created, Updated: meta.Updated, Mtime: info.ModTime().UTC().Format(time.RFC3339Nano),
-		Path: store.Workspace.RelativePath(path), Body: "", Active: active,
+		Created: meta.Created, Updated: meta.Updated, UpdatedAt: strings.TrimSpace(meta.UpdatedAt),
+		Mtime: info.ModTime().UTC().Format(time.RFC3339Nano),
+		Path:  store.Workspace.RelativePath(path), Body: "", Active: active,
 		Storage: map[bool]string{true: "open", false: "closed"}[active],
 		Extends: meta.Extends.String(),
 		Files:   []FileView{},
 	}
-	files, statuses, err := readFiles(path, store.Workspace.Root)
+	files, statuses, err := readFiles(path, store.Workspace.Root, topicFileStamps(meta))
 	if err != nil {
 		return TopicView{}, err
 	}
@@ -273,9 +320,21 @@ func (store TopicStore) readTopicView(path string, active, includeBody bool) (To
 	return view, nil
 }
 
+// topicFileStamps maps each manifest path to its per-file freshness stamp, so a
+// file view can report the same value the listing sorts on.
+func topicFileStamps(meta markdown.TopicMetadata) map[string]string {
+	stamps := make(map[string]string, len(meta.Files))
+	for _, file := range meta.Files {
+		if stamp := strings.TrimSpace(file.UpdatedAt); stamp != "" {
+			stamps[filepath.ToSlash(file.Path)] = stamp
+		}
+	}
+	return stamps
+}
+
 // readFiles collects managed file views and their statuses. Non-Historic
 // Markdown assets are ignored, matching the indexer classification.
-func readFiles(topicPath, root string) ([]FileView, []domain.Status, error) {
+func readFiles(topicPath, root string, stamps map[string]string) ([]FileView, []domain.Status, error) {
 	files := make([]FileView, 0)
 	statuses := make([]domain.Status, 0)
 	err := filepath.WalkDir(topicPath, func(path string, entry os.DirEntry, walkErr error) error {
@@ -309,7 +368,7 @@ func readFiles(topicPath, root string) ([]FileView, []domain.Status, error) {
 			return err
 		}
 		statuses = append(statuses, document.Frontmatter.Status)
-		files = append(files, FileView{Path: filepath.ToSlash(relative), Title: document.Frontmatter.Title, Description: document.Frontmatter.Description, Status: document.Frontmatter.Status.String(), ForwardedTo: document.Frontmatter.ForwardedTo.String()})
+		files = append(files, FileView{Path: filepath.ToSlash(relative), Title: document.Frontmatter.Title, Description: document.Frontmatter.Description, Status: document.Frontmatter.Status.String(), ForwardedTo: document.Frontmatter.ForwardedTo.String(), UpdatedAt: stamps[filepath.ToSlash(relative)]})
 		return nil
 	})
 	if err != nil && !errors.Is(err, os.ErrNotExist) {

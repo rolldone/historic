@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"historic/internal/config"
+	"historic/internal/display"
 	"historic/internal/domain"
 	"historic/internal/search"
 
@@ -18,10 +19,10 @@ import (
 
 const DefaultLimit = 20
 
-// Sort modes cycled by the `s` keybinding in the results view. Relevance is
-// the default and maps to an empty search sort option, which preserves the
-// pre-existing behaviour (FTS rank for queries, activity order for recent
-// topics).
+// Sort modes cycled by the `s` keybinding in the results view. Updated is the
+// default so browsing always reads newest-first, matching `list` and
+// `find --sort updated`; `s` still cycles through the other modes and
+// relevance keeps the pre-existing FTS rank ordering for keyword queries.
 const (
 	SortRelevance = "relevance"
 	SortUpdated   = "updated"
@@ -92,7 +93,7 @@ func newModel(workspace config.Workspace) model {
 	input.Placeholder = "type a query, or leave empty for recent topics"
 	input.CharLimit = 200
 	input.Width = 48
-	return model{workspace: workspace, input: input, limit: DefaultLimit, scope: "all", sortMode: SortRelevance, focus: focusResults}
+	return model{workspace: workspace, input: input, limit: DefaultLimit, scope: "all", sortMode: SortUpdated, focus: focusResults}
 }
 
 func (m model) Init() tea.Cmd { return m.refresh() }
@@ -324,18 +325,35 @@ func (m model) View() string {
 	}
 	previewBlock := m.visiblePreview(previewWidth, previewHeight)
 	left := "Results\n"
+	// A mirrored topic appears twice on purpose; the pair is separated by a
+	// rule and the newer side carries the warning notice.
+	copies := make(map[string]int, len(rows))
+	for _, result := range rows {
+		copies[search.CopyKey(result)]++
+	}
+	grouped := make(map[string]bool, len(rows))
+	warning := lipgloss.NewStyle().Foreground(lipgloss.Color("#D7AF00"))
 	for index := start; index < len(rows) && index < start+visible; index++ {
 		result := rows[index]
+		key := search.CopyKey(result)
+		if copies[key] > 1 && !grouped[key] {
+			grouped[key] = true
+			left += muted.Render(display.Divider(leftWidth)) + "\n"
+		}
 		marker := "  "
 		if index == m.selected {
 			marker = "> "
 		}
 		storage := strings.ToUpper(result.Storage)
-		updated := result.UpdatedAt
+		updated := display.FormatUpdatedStamp(result.UpdatedAt)
 		if updated == "" {
-			updated = result.Mtime
+			updated = display.FormatUpdatedStamp(result.Mtime)
 		}
-		left += truncate(fmt.Sprintf("%s[%s] %s %s · %s", marker, storage, result.ID, result.Title, updated), leftWidth) + "\n"
+		line := truncate(fmt.Sprintf("%s[%s] %s %s · %s", marker, storage, result.ID, result.Title, updated), leftWidth)
+		if caption := domain.CopyRegionCaption(result.NewerCopy); caption != "" {
+			line = truncate(line, leftWidth-display.Width(caption)-4) + " " + warning.Render(display.WarningIcon+" "+caption)
+		}
+		left += line + "\n"
 	}
 	if len(rows) == 0 {
 		left += muted.Render("No matches") + "\n"
@@ -441,7 +459,8 @@ func (m *model) cycleStatus() {
 	m.status = ""
 }
 
-// cycleSort advances the TUI sort mode: relevance → updated → created → title.
+// cycleSort advances the TUI sort mode: updated → created → title →
+// relevance → updated.
 func (m *model) cycleSort() {
 	current := m.sortName()
 	for index, mode := range sortModes {
@@ -450,13 +469,13 @@ func (m *model) cycleSort() {
 			return
 		}
 	}
-	m.sortMode = SortRelevance
+	m.sortMode = SortUpdated
 }
 
 // sortName normalizes the stored mode so an empty value reads as the default.
 func (m *model) sortName() string {
 	if m.sortMode == "" {
-		return SortRelevance
+		return SortUpdated
 	}
 	return m.sortMode
 }

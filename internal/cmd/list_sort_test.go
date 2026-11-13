@@ -77,13 +77,24 @@ func TestListDefaultSortIsNewestFirst(t *testing.T) {
 		t.Fatalf("list: %v (%s)", err, output)
 	}
 	items := decodeListOutput(t, output)
-	want := []string{"00002", "00003", "00001"}
+	// Both storage copies are listed: the mirror rows of 00010/00011 sort in
+	// with the open rows by their own freshness stamp.
+	want := []string{"00011", "00002", "00003", "00010", "00001"}
 	if got := listIDs(items); strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Fatalf("default order = %v, want %v", got, want)
 	}
+	storages := make(map[string]string, len(items))
 	for _, item := range items {
-		if item.Storage != "open" {
-			t.Fatalf("default list should be open scope only: %#v", item)
+		storages[item.ID] = item.Storage
+	}
+	for _, mirrored := range []string{"00010", "00011"} {
+		if storages[mirrored] != "closed" {
+			t.Fatalf("mirror row %s storage = %q, want closed (%v)", mirrored, storages[mirrored], items)
+		}
+	}
+	for _, open := range []string{"00001", "00002", "00003"} {
+		if storages[open] != "open" {
+			t.Fatalf("open row %s storage = %q, want open (%v)", open, storages[open], items)
 		}
 	}
 
@@ -103,7 +114,7 @@ func TestListSortCreatedTitleAndLegacyID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list --sort created: %v", err)
 	}
-	if got := listIDs(decodeListOutput(t, created)); strings.Join(got, ",") != "00003,00002,00001" {
+	if got := listIDs(decodeListOutput(t, created)); strings.Join(got, ",") != "00003,00011,00010,00002,00001" {
 		t.Fatalf("created order = %v", got)
 	}
 
@@ -111,7 +122,7 @@ func TestListSortCreatedTitleAndLegacyID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list --sort title: %v", err)
 	}
-	if got := listIDs(decodeListOutput(t, title)); strings.Join(got, ",") != "00003,00002,00001" {
+	if got := listIDs(decodeListOutput(t, title)); strings.Join(got, ",") != "00011,00010,00003,00002,00001" {
 		t.Fatalf("title order = %v", got)
 	}
 
@@ -119,7 +130,7 @@ func TestListSortCreatedTitleAndLegacyID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list --sort id: %v", err)
 	}
-	if got := listIDs(decodeListOutput(t, legacy)); strings.Join(got, ",") != "00001,00002,00003" {
+	if got := listIDs(decodeListOutput(t, legacy)); strings.Join(got, ",") != "00001,00002,00003,00010,00011" {
 		t.Fatalf("legacy id order = %v", got)
 	}
 }

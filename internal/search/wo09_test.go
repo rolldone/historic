@@ -93,8 +93,10 @@ func TestFindWO09SearchesTopicsAndFilesWithReadModelFilters(t *testing.T) {
 			copies[result.Storage] = true
 		}
 	}
-	if !copies[domain.StorageOpen.String()] || copies[domain.StorageClosed.String()] {
-		t.Fatalf("default find versions of topic 00001 = %v, want open only", copies)
+	// Mirrored copies are listed separately on purpose; the notice tells the
+	// reader which side is newer.
+	if !copies[domain.StorageOpen.String()] || !copies[domain.StorageClosed.String()] {
+		t.Fatalf("default find versions of topic 00001 = %v, want both open and closed", copies)
 	}
 
 	closedOnly, err := Find(workspace, Options{Keyword: "needle", ClosedOnly: true})

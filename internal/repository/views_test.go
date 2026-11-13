@@ -31,8 +31,16 @@ func TestListTopicsListsOpenAndClosedVersionsIndependently(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(views) != 1 || views[0].ID != "00020" || views[0].Storage != "open" || views[0].Path != ".historic/00020-current-slug" {
-		t.Fatalf("open views = %#v", views)
+	// A mirrored topic keeps two rows on purpose: the duplicate is the signal
+	// that a second copy exists. The closed copy is also listed by default.
+	if len(views) != 2 {
+		t.Fatalf("views = %#v, want both open and closed copies", views)
+	}
+	if views[0].Storage != "open" || views[0].Path != ".historic/00020-current-slug" || views[0].NewerCopy != "" {
+		t.Fatalf("open view = %#v", views[0])
+	}
+	if views[1].Storage != "closed" || views[1].Path != ".historic/.database/00020-old-slug" || views[1].NewerCopy != "" {
+		t.Fatalf("closed view = %#v", views[1])
 	}
 	closed, err := store.ListTopics(true)
 	if err != nil {
@@ -92,8 +100,13 @@ func TestListTopicsDefaultsToActiveAndSortsByLegacyIDWithFlag(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(views) != 2 || views[0].ID != "00001" || views[1].ID != "00002" {
+	// The archived mirror row is part of the default listing now; only its
+	// ordering relative to the open copies is what this test pins down.
+	if len(views) != 3 || views[0].ID != "00001" || views[1].ID != "00002" || views[2].ID != "00003" {
 		t.Fatalf("views = %#v", views)
+	}
+	if views[2].Storage != "closed" || views[2].Active {
+		t.Fatalf("mirror row = %#v, want closed and inactive", views[2])
 	}
 	closed, err := store.ListTopics(true)
 	if err != nil {

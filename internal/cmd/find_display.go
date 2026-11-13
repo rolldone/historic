@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"historic/internal/display"
+	"historic/internal/domain"
 	"historic/internal/search"
 )
 
@@ -31,11 +32,25 @@ func writeFindHuman(out io.Writer, page search.SearchPage, keyword string, width
 	}
 	blocks := make([][]string, 0, len(results))
 	for _, result := range results {
-		blocks = append(blocks, renderFindResult(result, keyword, width))
+		blocks = append(blocks, renderFindResult(out, result, keyword, width))
 	}
+	// A mirrored row is shown twice on purpose, so the pair is set apart by a
+	// thin rule above its first block rather than collapsed into one result.
+	copies := make(map[string]int, len(results))
+	for _, result := range results {
+		copies[search.CopyKey(result)]++
+	}
+	grouped := make(map[string]bool, len(results))
 	for index, block := range blocks {
 		if index > 0 {
 			if _, err := fmt.Fprintln(out); err != nil {
+				return err
+			}
+		}
+		key := search.CopyKey(results[index])
+		if copies[key] > 1 && !grouped[key] {
+			grouped[key] = true
+			if _, err := fmt.Fprintln(out, display.Divider(width)); err != nil {
 				return err
 			}
 		}
@@ -57,9 +72,13 @@ func writeFindHuman(out io.Writer, page search.SearchPage, keyword string, width
 	return err
 }
 
-func renderFindResult(result search.Result, keyword string, width int) []string {
+func renderFindResult(out io.Writer, result search.Result, keyword string, width int) []string {
 	lines := make([]string, 0, 8)
-	lines = append(lines, findHeader(result, width))
+	header := findHeader(result, width)
+	if notice := display.NewerCopyNotice(out, domain.CopyRegionCaption(result.NewerCopy), false); notice != "" {
+		header += "  " + notice
+	}
+	lines = append(lines, header)
 
 	lines = append(lines, findLabeled("path", []string{findPath(result.Path, width)}, width)...)
 	if timeLine := findTimeLine(result); timeLine != "" {

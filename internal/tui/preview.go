@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"historic/internal/display"
+	"historic/internal/domain"
 	"historic/internal/search"
 
 	"github.com/charmbracelet/lipgloss"
@@ -17,8 +18,9 @@ const previewLabelWidth = 7
 const previewIndent = 2 + previewLabelWidth + 1
 
 var (
-	previewTitleStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#7D56F4"))
-	previewMutedStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#777777"))
+	previewTitleStyle   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#7D56F4"))
+	previewMutedStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("#777777"))
+	previewWarningStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#D7AF00"))
 )
 
 // previewLines builds the structured preview block shared by every terminal
@@ -40,6 +42,9 @@ func (m model) previewLines(width int) []string {
 
 	statusLine := fmt.Sprintf("[%s] · %s", strings.ToUpper(result.Storage), resultStatus(result))
 	lines = append(lines, previewMutedStyle.Render(display.Truncate(statusLine, width)))
+	if caption := domain.CopyRegionCaption(result.NewerCopy); caption != "" {
+		lines = append(lines, previewWarningStyle.Render(display.Truncate(display.WarningIcon+" "+caption, width)))
+	}
 
 	lines = previewLabeled(lines, "time", previewTimeLine(result), width)
 	lines = previewLabeled(lines, "path", display.TruncateMiddle(result.Path, width-previewIndent), width)

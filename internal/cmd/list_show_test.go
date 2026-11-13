@@ -117,7 +117,9 @@ func TestListAndShowExposeComputedTopicStatus(t *testing.T) {
 	if err := json.Unmarshal([]byte(jsonList), &list); err != nil {
 		t.Fatalf("decode list: %v (%q)", err, jsonList)
 	}
-	if len(list.Data) != 2 || list.Data[0].ID != "00002" || list.Data[0].ComputedStatus != "" || list.Data[1].ComputedStatus != "progress" {
+	// 00001 was just touched by add/status, so its high-resolution stamp puts
+	// it ahead of the untouched 00002 whose only date is `created`.
+	if len(list.Data) != 2 || list.Data[0].ID != "00001" || list.Data[0].ComputedStatus != "progress" || list.Data[1].ID != "00002" || list.Data[1].ComputedStatus != "" {
 		t.Fatalf("list computed status = %#v", list.Data)
 	}
 

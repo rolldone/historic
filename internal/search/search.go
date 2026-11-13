@@ -104,9 +104,15 @@ type Result struct {
 	Topic       TopicContext `json:"topic"`
 	CreatedAt   string       `json:"created_at,omitempty"`
 	UpdatedAt   string       `json:"updated_at,omitempty"`
-	Mtime       string       `json:"mtime,omitempty"`
-	Hash        string       `json:"hash,omitempty"`
-	Size        int64        `json:"size,omitempty"`
+
+	// NewerCopy names the storage region holding the strictly newer mirror of
+	// this topic or file: "database" or "local". It is empty when the row has
+	// no counterpart or when both copies carry the same stamp, and it is a
+	// plain field so programmatic consumers never parse presentation text.
+	NewerCopy string `json:"newer_copy,omitempty"`
+	Mtime     string `json:"mtime,omitempty"`
+	Hash      string `json:"hash,omitempty"`
+	Size      int64  `json:"size,omitempty"`
 
 	// Legacy fields retained for TUI and package compatibility. They are not
 	// part of the stable AI JSON contract.
@@ -249,7 +255,11 @@ func RecentTopicsPage(workspace config.Workspace, options Options) (SearchPage, 
 	if err := rows.Err(); err != nil {
 		return SearchPage{}, err
 	}
-	return paginateSearchPage(dedupeTopics(results), pagination), nil
+	// Both storage copies keep their own row: seeing one topic twice is the
+	// visible signal that a mirror exists. Each row learns which copy is
+	// strictly newer so the listing can say so.
+	annotateResultCopies(results)
+	return paginateSearchPage(results, pagination), nil
 }
 
 // Find searches topics and files using the shared read model and weighted FTS5.
@@ -317,7 +327,6 @@ func FindPage(workspace config.Workspace, options Options) (SearchPage, error) {
 	}
 	defer rows.Close()
 	results := make([]Result, 0, pagination.PageSize+1)
-	seen := make(map[string]int)
 	for rows.Next() {
 		var result Result
 		var tagsJSON, topicTagsJSON, snippetText, filename string
@@ -329,15 +338,9 @@ func FindPage(workspace config.Workspace, options Options) (SearchPage, error) {
 		if err := rows.Scan(&result.Type, &result.ID, &result.TopicID, &result.Title, &result.Description, &result.Status, &result.Storage, &result.Path, &tagsJSON, &filename, &rank, &snippetText, &createdAt, &updatedAt, &mtime, &hash, &size, &topicTitle, &topicDescription, &topicStatus, &topicProgress, &topicStorage, &topicPath, &topicTagsJSON, &result.Extends, &result.ForwardedTo); err != nil {
 			return SearchPage{}, fmt.Errorf("read search result: %w", err)
 		}
-		logicalPath := filename
-		if result.Type == "historic_file" || result.Type == "asset" {
-			logicalPath = strings.TrimPrefix(result.Path, topicPath+"/")
-		}
-		// Dedupe key is the logical file identity, independent of storage: the
-		// same (TopicID, relative path) must produce a single result. Preference
-		// is by storage region, never by mtime/updated_at, because a mirror can
-		// be newer while the open copy remains authoritative.
-		key := result.TopicID + "\x00" + logicalPath
+		// Mirrored copies are intentionally not collapsed: the open and closed
+		// rows of one topic are two results, and annotateResultCopies marks the
+		// one whose stamp is strictly newer.
 		result.Tags = decodeStrings(tagsJSON)
 		result.Score = -rank
 		result.CreatedAt, result.UpdatedAt, result.Mtime, result.Hash, result.Size = createdAt, updatedAt, mtime, hash, size
@@ -364,44 +367,62 @@ func FindPage(workspace config.Workspace, options Options) (SearchPage, error) {
 			result.ID = result.TopicID
 		}
 		result.Active = result.Storage == domain.StorageOpen.String()
-		if index, exists := seen[key]; exists {
-			if results[index].Storage != domain.StorageOpen.String() && result.Storage == domain.StorageOpen.String() {
-				results[index] = result
-			}
-			continue
-		}
-		seen[key] = len(results)
 		results = append(results, result)
 	}
 	if err := rows.Err(); err != nil {
 		return SearchPage{}, fmt.Errorf("iterate search results: %w", err)
 	}
+	annotateResultCopies(results)
 	return paginateSearchPage(results, pagination), nil
 }
 
-// dedupeTopics keeps one recent-topic row per TopicID, preferring open storage.
-// Recent-topic browsing returns topics only, so TopicID is the logical identity.
-func dedupeTopics(results []Result) []Result {
-	if len(results) == 0 {
-		return results
+// CopyKey identifies the logical entity a result belongs to regardless of the
+// storage region it was read from. Two results sharing a key are mirrored
+// copies of the same topic or of the same file inside one topic.
+func CopyKey(result Result) string {
+	if result.Type == "topic" {
+		return "topic\x00" + result.TopicID
 	}
-	indexes := make(map[string]int, len(results))
-	deduped := make([]Result, 0, len(results))
-	for _, result := range results {
-		if index, exists := indexes[result.TopicID]; exists {
-			if deduped[index].Storage != domain.StorageOpen.String() && result.Storage == domain.StorageOpen.String() {
-				deduped[index] = result
-			}
-			continue
-		}
-		indexes[result.TopicID] = len(deduped)
-		deduped = append(deduped, result)
+	topicPath := strings.TrimSuffix(result.Topic.Path, "/")
+	if topicPath != "" {
+		return "file\x00" + result.TopicID + "\x00" + strings.TrimPrefix(result.Path, topicPath+"/")
 	}
-	return deduped
+	return "file\x00" + result.TopicID + "\x00" + result.Path
 }
 
-// paginateSearchPage applies offset/limit after dedupe so pagination metadata
-// reflects the deduped result set rather than raw read-model rows.
+// annotateResultCopies marks the newer copy of every mirrored pair. Both copies
+// keep their row — the deliberate duplicate is the signal that a mirror exists
+// — and the notice tells the reader which side a per-file guard will treat as
+// authoritative.
+func annotateResultCopies(results []Result) {
+	groups := make(map[string][]int, len(results))
+	for index := range results {
+		key := CopyKey(results[index])
+		groups[key] = append(groups[key], index)
+	}
+	for _, group := range groups {
+		if len(group) < 2 {
+			continue
+		}
+		for _, index := range group {
+			for _, other := range group {
+				if index == other {
+					continue
+				}
+				// The notice belongs to the row that is strictly newer, and it
+				// names that row's own region: "newer in database" / "newer
+				// locally". Identical stamps produce no notice at all.
+				if results[index].UpdatedAt > results[other].UpdatedAt {
+					results[index].NewerCopy = domain.CopyRegionForStorage(results[index].Storage)
+					break
+				}
+			}
+		}
+	}
+}
+
+// paginateSearchPage applies offset/limit after ordering so pagination
+// metadata reflects the real result set rather than raw read-model rows.
 func paginateSearchPage(results []Result, pagination Pagination) SearchPage {
 	offset := (pagination.Page - 1) * pagination.PageSize
 	if offset >= len(results) {
@@ -587,11 +608,11 @@ func topicPredicates(options Options) ([]string, []any) {
 		args = append(args, options.CreatedBefore)
 	}
 	if options.UpdatedAfter != "" {
-		where = append(where, "COALESCE(updated_at, created_at) >= ?")
+		where = append(where, "substr(COALESCE(updated_at, created_at), 1, 10) >= ?")
 		args = append(args, options.UpdatedAfter)
 	}
 	if options.UpdatedBefore != "" {
-		where = append(where, "COALESCE(updated_at, created_at) <= ?")
+		where = append(where, "substr(COALESCE(updated_at, created_at), 1, 10) <= ?")
 		args = append(args, options.UpdatedBefore)
 	}
 	return where, args
@@ -661,11 +682,11 @@ func resultPredicates(options Options) ([]string, []any) {
 		args = append(args, options.CreatedBefore, options.CreatedBefore)
 	}
 	if options.UpdatedAfter != "" {
-		where = append(where, "(historic_fts.entity_type = 'topic' AND COALESCE(t.updated_at, t.created_at) >= ? OR historic_fts.entity_type = 'file' AND COALESCE(f.updated_at, f.created_at, f.mtime) >= ?)")
+		where = append(where, "(historic_fts.entity_type = 'topic' AND substr(COALESCE(t.updated_at, t.created_at), 1, 10) >= ? OR historic_fts.entity_type = 'file' AND substr(COALESCE(f.updated_at, f.created_at, f.mtime), 1, 10) >= ?)")
 		args = append(args, options.UpdatedAfter, options.UpdatedAfter)
 	}
 	if options.UpdatedBefore != "" {
-		where = append(where, "(historic_fts.entity_type = 'topic' AND COALESCE(t.updated_at, t.created_at) <= ? OR historic_fts.entity_type = 'file' AND COALESCE(f.updated_at, f.created_at, f.mtime) <= ?)")
+		where = append(where, "(historic_fts.entity_type = 'topic' AND substr(COALESCE(t.updated_at, t.created_at), 1, 10) <= ? OR historic_fts.entity_type = 'file' AND substr(COALESCE(f.updated_at, f.created_at, f.mtime), 1, 10) <= ?)")
 		args = append(args, options.UpdatedBefore, options.UpdatedBefore)
 	}
 	for _, tag := range options.Tags {

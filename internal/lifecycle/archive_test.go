@@ -124,8 +124,17 @@ func TestOpenCopyBasedIsolatedSmoke(t *testing.T) {
 		t.Fatalf("closed snapshot was removed: %v", err)
 	}
 	results, err := search.Find(workspace, search.Options{Keyword: "manual"})
-	if err != nil || len(results) != 1 || results[0].Storage != domain.StorageOpen.String() {
-		t.Fatalf("search results = %#v err=%v, want one deduped open row", results, err)
+	if err != nil || len(results) != 2 {
+		t.Fatalf("search results = %#v err=%v, want both storage copies", results, err)
+	}
+	// The open copy was just produced by Open, so both rows exist and the
+	// notice names whichever side moved last.
+	storages := map[string]bool{}
+	for _, result := range results {
+		storages[result.Storage] = true
+	}
+	if !storages[domain.StorageOpen.String()] || !storages[domain.StorageClosed.String()] {
+		t.Fatalf("search storage coverage = %v, want open and closed", storages)
 	}
 }
 

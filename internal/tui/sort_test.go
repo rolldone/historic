@@ -14,11 +14,10 @@ import (
 )
 
 func TestCycleSortWrapsThroughEveryMode(t *testing.T) {
-	if got := CycleSortForTest(""); got != SortUpdated {
-		t.Fatalf("cycle from default = %q, want %q", got, SortUpdated)
-	}
-	if got := CycleSortForTest(SortRelevance); got != SortUpdated {
-		t.Fatalf("cycle from relevance = %q, want %q", got, SortUpdated)
+	// Updated is the default, so an unset mode starts there and the cycle then
+	// walks created → title → relevance → updated.
+	if got := CycleSortForTest(""); got != SortCreated {
+		t.Fatalf("cycle from default = %q, want %q", got, SortCreated)
 	}
 	if got := CycleSortForTest(SortUpdated); got != SortCreated {
 		t.Fatalf("cycle from updated = %q, want %q", got, SortCreated)
@@ -29,15 +28,18 @@ func TestCycleSortWrapsThroughEveryMode(t *testing.T) {
 	if got := CycleSortForTest(SortTitle); got != SortRelevance {
 		t.Fatalf("cycle from title = %q, want %q", got, SortRelevance)
 	}
+	if got := CycleSortForTest(SortRelevance); got != SortUpdated {
+		t.Fatalf("cycle from relevance = %q, want %q", got, SortUpdated)
+	}
 }
 
-func TestSortOptionMapsRelevanceToSearchDefault(t *testing.T) {
+func TestSortOptionMapsModesToSearchSort(t *testing.T) {
 	cases := map[string]string{
-		"":            "",
-		SortRelevance: "",
+		"":            "updated",
 		SortUpdated:   "updated",
 		SortCreated:   "created",
 		SortTitle:     "title",
+		SortRelevance: "",
 	}
 	for mode, want := range cases {
 		model := model{sortMode: mode}
@@ -47,9 +49,9 @@ func TestSortOptionMapsRelevanceToSearchDefault(t *testing.T) {
 	}
 }
 
-func TestSortNameDefaultsToRelevance(t *testing.T) {
-	if got := (&model{}).sortName(); got != SortRelevance {
-		t.Fatalf("empty sortName = %q, want %q", got, SortRelevance)
+func TestSortNameDefaultsToUpdated(t *testing.T) {
+	if got := (&model{}).sortName(); got != SortUpdated {
+		t.Fatalf("empty sortName = %q, want %q", got, SortUpdated)
 	}
 }
 
@@ -124,8 +126,8 @@ func TestSortModeChangesResultOrder(t *testing.T) {
 func TestViewShowsActiveSortMode(t *testing.T) {
 	model := newModel(config.Workspace{})
 	model.width, model.height = 120, 30
-	if !strings.Contains(model.View(), "sort=relevance") {
-		t.Fatalf("default view does not show sort indicator")
+	if !strings.Contains(model.View(), "sort=updated") {
+		t.Fatalf("default view does not show the updated sort indicator: %q", model.View())
 	}
 	model.sortMode = SortTitle
 	view := model.View()
