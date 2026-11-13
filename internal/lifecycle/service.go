@@ -49,6 +49,13 @@ type Service struct {
 	FileIDGenerator identifier.Generator
 }
 
+// WriteOptions tunes the safety checks that guard writes into closed storage.
+// Force skips the per-file conflict guard, which rejects a save/close when the
+// closed mirror already holds strictly newer content for a managed file.
+type WriteOptions struct {
+	Force bool
+}
+
 // NewService creates a lifecycle service for a workspace.
 func NewService(workspace config.Workspace) Service {
 	return Service{Workspace: workspace, FileIDGenerator: identifier.Default}

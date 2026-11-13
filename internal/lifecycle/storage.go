@@ -30,17 +30,35 @@ func resolveTopic(workspace config.Workspace, id domain.ID) (topicLocation, erro
 }
 
 func (service Service) MirrorTopic(id domain.ID) (Change, error) {
-	return mirrorTopic(service.Workspace, id)
+	return mirrorTopic(service.Workspace, id, WriteOptions{})
+}
+
+// MirrorTopicWithOptions mirrors one open topic, optionally bypassing the
+// per-file conflict guard with --force.
+func (service Service) MirrorTopicWithOptions(id domain.ID, options WriteOptions) (Change, error) {
+	return mirrorTopic(service.Workspace, id, options)
 }
 
 func (service Service) Close(id domain.ID) (Change, error) {
-	return closeTopic(service.Workspace, id)
+	return closeTopic(service.Workspace, id, WriteOptions{})
+}
+
+// CloseWithOptions closes one open topic, optionally bypassing the per-file
+// conflict guard with --force.
+func (service Service) CloseWithOptions(id domain.ID, options WriteOptions) (Change, error) {
+	return closeTopic(service.Workspace, id, options)
 }
 
 // CloseAll closes the open topics discovered in one initial filesystem snapshot.
 // Each target is passed through Close so single-topic validation and rollback
 // guarantees remain unchanged.
 func (service Service) CloseAll() (CloseAllResult, error) {
+	return service.CloseAllWithOptions(WriteOptions{})
+}
+
+// CloseAllWithOptions closes every open topic. A rejected topic counts as a
+// per-topic failure and never blocks the remaining topics.
+func (service Service) CloseAllWithOptions(options WriteOptions) (CloseAllResult, error) {
 	result := CloseAllResult{
 		Succeeded: make([]CloseAllSuccess, 0),
 		Failed:    make([]CloseAllFailure, 0),
@@ -67,7 +85,7 @@ func (service Service) CloseAll() (CloseAllResult, error) {
 			})
 			continue
 		}
-		change, closeErr := service.Close(target.id)
+		change, closeErr := service.CloseWithOptions(target.id, options)
 		if closeErr != nil {
 			result.Failed = append(result.Failed, CloseAllFailure{
 				ID: target.id.String(), Path: service.Workspace.RelativePath(target.path), Error: closeErr.Error(),
@@ -171,7 +189,7 @@ func openTopicTargets(workspace config.Workspace) ([]closeTarget, []CloseAllFail
 	return targets, failures, nil
 }
 
-func closeTopic(workspace config.Workspace, id domain.ID) (Change, error) {
+func closeTopic(workspace config.Workspace, id domain.ID, options WriteOptions) (Change, error) {
 	if !id.Valid() {
 		return Change{}, fmt.Errorf("%w: %q", domain.ErrInvalidID, id)
 	}
@@ -182,10 +200,15 @@ func closeTopic(workspace config.Workspace, id domain.ID) (Change, error) {
 	if storage != domain.StorageOpen {
 		return Change{}, fmt.Errorf("%w: topic %s is already closed", domain.ErrConflict, id)
 	}
+	if !options.Force {
+		if err := ensureNoNewerMirror(workspace, id); err != nil {
+			return Change{}, err
+		}
+	}
 	return closeTopicAt(workspace, id, path)
 }
 
-func mirrorTopic(workspace config.Workspace, id domain.ID) (Change, error) {
+func mirrorTopic(workspace config.Workspace, id domain.ID, options WriteOptions) (Change, error) {
 	if !id.Valid() {
 		return Change{}, fmt.Errorf("%w: %q", domain.ErrInvalidID, id)
 	}
@@ -195,6 +218,11 @@ func mirrorTopic(workspace config.Workspace, id domain.ID) (Change, error) {
 	}
 	if storage != domain.StorageOpen {
 		return Change{}, fmt.Errorf("%w: topic %s is not open", domain.ErrConflict, id)
+	}
+	if !options.Force {
+		if err := ensureNoNewerMirror(workspace, id); err != nil {
+			return Change{}, err
+		}
 	}
 	return mirrorTopicAt(workspace, id, path)
 }

@@ -197,7 +197,8 @@ Possible diagnosis statuses are `compatible`, `upgrade required`, `rebuild requi
 ## Lifecycle and versioning
 
 ```sh
-historic save [id] [--json]
+historic save [id] [--all] [--no-bump] [--force] [--json]
+historic close [id] [--all] [--force] [--json]
 historic log <id> [--json]
 historic diff <id> [--json]
 historic restore <id> --snapshot <commit> [--force] [--json]
@@ -214,6 +215,19 @@ historic git diff --stat
 All Git subcommands and flags are passed through as requested, including `push`, `pull`, `commit`, and `init`; the passthrough itself runs nothing automatically. An explicit `historic git init` is passed to Git normally. The proxy does not otherwise initialize the repository or alter Git configuration. With no Git arguments it prints usage. `historic log`, `historic diff`, and `historic save` remain separate Historic commands.
 
 Snapshots are local-only and include both open and closed topic storage under `.historic`. `save` refreshes the closed snapshot while leaving the open topic intact; `close` mirrors then removes the open workdir. Both are filesystem operations plus one automatic internal commit; storage movement never changes work status. The open copy is authoritative for writes. Search/show can display both versions; compare `updated_at` (frontmatter) and file `mtime` to identify which snapshot is newer.
+
+### Per-file conflict guard (`save` / `close`)
+
+Before `save` or `close` writes into `.historic/.database` closed storage it compares the **open** copy with the existing **closed** mirror, file by file. The write is rejected only when the mirror copy of a managed path is **strictly newer** than the open copy *and* the bytes differ:
+
+- Newer mirror + different content -> reject, exit non-zero, and name every offending path (for example `wos/02-auto-sambung-produk-biasa.md`). The mirror stays byte-identical.
+- Identical content -> allowed (it is a no-op, not a conflict).
+- Open copy newer or equal -> allowed (local work wins).
+- No per-file stamp -> the file's own calendar `updated`/`created` date is used; with no stamp at all the topic stamp is used; with no freshness information the write proceeds rather than guess, so a missing stamp never produces a false positive.
+
+The comparison reads `_meta.yaml` and hashes files on the fly. It never touches SQLite, so the guard keeps working even when `.historic/.index.sqlite` is deleted. Rejection reports the reason once, with guidance to inspect via `historic read .historic/.database/<id>-<slug>/<path>` or `historic git show`, then re-run with `--force`.
+
+`--force` is available on `save` (`id` or `--all`) and `close` (`id` or `--all`) and bypasses the guard. With `--all`, a rejected topic is recorded as a per-topic failure (`failed`, `failed_count`) and the remaining topics still proceed. A mirror that passes the guard is stamped: the per-file and topic stamps from the open `_meta.yaml` travel with the snapshot.
 
 ### Auto-bump `updated` on content change
 

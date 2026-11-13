@@ -31,6 +31,13 @@ type MirrorFailure struct {
 // MirrorAllOpen snapshots the topics discovered in one initial filesystem snapshot.
 // Each target is validated against its discovered path, and failures do not stop later topics.
 func (service Service) MirrorAllOpen() (MirrorAllResult, error) {
+	return service.MirrorAllOpenWithOptions(WriteOptions{})
+}
+
+// MirrorAllOpenWithOptions mirrors every open topic. A topic rejected by the
+// per-file conflict guard counts as a per-topic failure and does not stop the
+// remaining topics.
+func (service Service) MirrorAllOpenWithOptions(options WriteOptions) (MirrorAllResult, error) {
 	result := MirrorAllResult{Succeeded: make([]MirrorSuccess, 0), Failed: make([]MirrorFailure, 0)}
 	targets, discoveryFailures, err := openTopicTargets(service.Workspace)
 	if err != nil {
@@ -52,7 +59,7 @@ func (service Service) MirrorAllOpen() (MirrorAllResult, error) {
 			result.Failed = append(result.Failed, MirrorFailure{ID: target.id.String(), Path: service.Workspace.RelativePath(target.path), Error: conflict.Error()})
 			continue
 		}
-		change, mirrorErr := mirrorTopicAt(service.Workspace, target.id, target.path)
+		change, mirrorErr := mirrorTopic(service.Workspace, target.id, options)
 		if mirrorErr != nil {
 			result.Failed = append(result.Failed, MirrorFailure{ID: target.id.String(), Path: service.Workspace.RelativePath(target.path), Error: mirrorErr.Error()})
 			continue

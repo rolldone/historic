@@ -12,18 +12,20 @@ import (
 )
 
 func newCloseCommand() *cobra.Command {
-	var jsonOutput, all bool
+	var jsonOutput, all, force bool
 	command := &cobra.Command{
 		Use:   "close [id] [--all]",
 		Short: "Close one or all open topics",
+		Long:  "Close one open topic, or every open topic with --all. Use --force to close even when the closed copy holds newer content for a managed file.",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if all && len(args) > 0 {
 				return writeCommandError(cmd, "close", jsonOutput, fmt.Errorf("--all cannot be combined with a topic ID"))
 			}
+			options := lifecycle.WriteOptions{Force: force}
 			if len(args) == 1 && args[0] != "all" {
 				return runStorageCommand(cmd, "close", args[0], jsonOutput, true, func(service lifecycle.Service, id domain.ID) (lifecycle.Change, error) {
-					return service.Close(id)
+					return service.CloseWithOptions(id, options)
 				})
 			}
 			if len(args) == 1 && args[0] == "all" {
@@ -46,10 +48,10 @@ func newCloseCommand() *cobra.Command {
 					return nil
 				}
 				return runStorageCommand(cmd, "close", selected.ID, false, true, func(service lifecycle.Service, id domain.ID) (lifecycle.Change, error) {
-					return service.Close(id)
+					return service.CloseWithOptions(id, options)
 				})
 			}
-			result, closeErr := service.CloseAll()
+			result, closeErr := service.CloseAllWithOptions(options)
 			var commit *lifecycle.AutoCommitResult
 			if closeErr == nil {
 				change := lifecycle.AutoCommitAll(workspace, "close")
@@ -84,6 +86,7 @@ func newCloseCommand() *cobra.Command {
 	}
 	command.Flags().BoolVar(&jsonOutput, "json", false, "output stable JSON")
 	command.Flags().BoolVar(&all, "all", false, "close all open topics")
+	command.Flags().BoolVar(&force, "force", false, "close even when the closed copy is newer for a managed file")
 	return command
 }
 

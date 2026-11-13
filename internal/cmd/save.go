@@ -12,11 +12,11 @@ import (
 )
 
 func newSaveCommand() *cobra.Command {
-	var jsonOutput, all, noBump bool
+	var jsonOutput, all, noBump, force bool
 	command := &cobra.Command{
 		Use:   "save [id]",
 		Short: "Mirror one or all open topics to closed storage",
-		Long:  "Without an ID, interactively select one open topic. Use --all to mirror every open topic. Use --no-bump to mirror without advancing the frontmatter updated date of content-changed files.",
+		Long:  "Without an ID, interactively select one open topic. Use --all to mirror every open topic. Use --no-bump to mirror without advancing the frontmatter updated date of content-changed files. Use --force to mirror even when the closed copy holds newer content for a managed file.",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if all && len(args) > 0 {
@@ -27,6 +27,7 @@ func newSaveCommand() *cobra.Command {
 				return writeCommandError(cmd, "save", jsonOutput, err)
 			}
 			service := lifecycle.NewService(workspace)
+			options := lifecycle.WriteOptions{Force: force}
 			var result lifecycle.MirrorAllResult
 			var bump lifecycle.BumpResult
 			var saveErr error
@@ -35,7 +36,7 @@ func newSaveCommand() *cobra.Command {
 				if id, idErr := domain.ParseTopicIdentity(args[0]); idErr == nil && !noBump {
 					bump = lifecycle.BumpChangedFiles(workspace, []domain.ID{id})
 				}
-				result, saveErr = mirrorOne(service, args[0])
+				result, saveErr = mirrorOne(service, args[0], options)
 				if saveErr == nil {
 					if id, idErr := domain.ParseTopicIdentity(args[0]); idErr == nil {
 						change := lifecycle.AutoCommitTopic(workspace, "save", id)
@@ -46,7 +47,7 @@ func newSaveCommand() *cobra.Command {
 				if !noBump {
 					bump = lifecycle.BumpAllChangedFiles(workspace)
 				}
-				result, saveErr = service.MirrorAllOpen()
+				result, saveErr = service.MirrorAllOpenWithOptions(options)
 				if saveErr == nil {
 					change := lifecycle.AutoCommitAll(workspace, "save")
 					commit = &change
@@ -64,7 +65,7 @@ func newSaveCommand() *cobra.Command {
 				if id, idErr := domain.ParseTopicIdentity(selected.ID); idErr == nil && !noBump {
 					bump = lifecycle.BumpChangedFiles(workspace, []domain.ID{id})
 				}
-				result, saveErr = mirrorOne(service, selected.ID)
+				result, saveErr = mirrorOne(service, selected.ID, options)
 				if saveErr == nil {
 					if id, idErr := domain.ParseTopicIdentity(selected.ID); idErr == nil {
 						change := lifecycle.AutoCommitTopic(workspace, "save", id)
@@ -101,10 +102,11 @@ func newSaveCommand() *cobra.Command {
 	command.Flags().BoolVar(&jsonOutput, "json", false, "output stable JSON")
 	command.Flags().BoolVar(&all, "all", false, "mirror all open topics")
 	command.Flags().BoolVar(&noBump, "no-bump", false, "skip advancing the frontmatter updated date of content-changed files")
+	command.Flags().BoolVar(&force, "force", false, "mirror even when the closed copy is newer for a managed file")
 	return command
 }
 
-func mirrorOne(service lifecycle.Service, value string) (lifecycle.MirrorAllResult, error) {
+func mirrorOne(service lifecycle.Service, value string, options lifecycle.WriteOptions) (lifecycle.MirrorAllResult, error) {
 	result := lifecycle.MirrorAllResult{Succeeded: make([]lifecycle.MirrorSuccess, 0), Failed: make([]lifecycle.MirrorFailure, 0), Total: 1}
 	id, err := domain.ParseTopicIdentity(value)
 	if err != nil {
@@ -112,7 +114,7 @@ func mirrorOne(service lifecycle.Service, value string) (lifecycle.MirrorAllResu
 		result.Failed = append(result.Failed, lifecycle.MirrorFailure{ID: value, Error: err.Error()})
 		return result, err
 	}
-	change, err := service.MirrorTopic(id)
+	change, err := service.MirrorTopicWithOptions(id, options)
 	if err != nil {
 		result.FailedCount = 1
 		result.Failed = append(result.Failed, lifecycle.MirrorFailure{ID: id.String(), Error: err.Error()})
